@@ -69,7 +69,7 @@ addEventListener('beforeunload', e => { if (game.state === 'play') { e.preventDe
 document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
   game.audio.init(); game.audio.setVolumes(S.sfx, S.music); game.audio.ui();
   const a = b.dataset.act;
-  if (a === 'arena' || a === 'practice') startMode(a);
+  if (a === 'arena' || a === 'practice' || a === 'duel' || a === 'ffa') startMode(a);
   else if (a === 'settings') { returnTo = game.state === 'paused' ? 'pause' : 'menu'; openSettings(); show('settings'); }
   else if (a === 'controls') { returnTo = game.state === 'paused' ? 'pause' : 'menu'; buildControls(); show('controls'); }
   else if (a === 'back') show(returnTo);
@@ -79,7 +79,11 @@ document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click',
 }));
 
 // difficulty
-function renderDifficulty() { document.querySelectorAll('#difficulty button').forEach(b => b.classList.toggle('on', b.dataset.df === S.difficulty)); }
+function renderDifficulty() {
+  document.querySelectorAll('#difficulty button').forEach(b => b.classList.toggle('on', b.dataset.df === S.difficulty));
+  document.querySelectorAll('#botskill button').forEach(b => b.classList.toggle('on', b.dataset.bs === S.botSkill));
+}
+document.querySelectorAll('#botskill button').forEach(b => b.addEventListener('click', () => { S.botSkill = b.dataset.bs; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 document.querySelectorAll('#difficulty button').forEach(b => b.addEventListener('click', () => { S.difficulty = b.dataset.df; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 renderDifficulty();
 
@@ -141,6 +145,8 @@ function renderBest() {
   const r = game.records;
   const parts = [];
   if (r.score) parts.push(`최고 ${r.score.toLocaleString()}점 · WAVE ${r.wave}`);
+  if (r.duelWin || r.duelLose) parts.push(`1V1 ${r.duelWin || 0}승 ${r.duelLose || 0}패`);
+  if (r.ffaBest) parts.push(`FFA 최고 ${r.ffaBest}위${r.ffaWin ? ` · 1위 ${r.ffaWin}번` : ''}`);
   if (r.combo) parts.push(`최고 콤보 ${r.combo}`);
   if (r.speed) parts.push(`최고 속도 ${Math.round(r.speed * 3.6)} KM/H`);
   $('best').innerHTML = parts.join(' &nbsp;·&nbsp; ');

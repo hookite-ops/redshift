@@ -1,4 +1,4 @@
-// REDSHIFT 3.0 — white arena + THE DISC.
+// REDSHIFT 3.1 — white arena + THE DISC. Modes: arena waves, practice, 1V1 and FFA against bots.
 // One weapon, six inputs: WASD · Space · Shift · LMB (throw / recall) · RMB (blink to the disc).
 import * as THREE from 'three';
 import { Arena } from './arena.js';
@@ -6,7 +6,9 @@ import { Player, T } from './player.js';
 import { Foe, FOE } from './foes.js';
 import { Disc, DISC } from './disc.js';
 import { Hand } from './hand.js';
-import { Particles, Rings, Ribbon, SpeedLines } from './fx.js';
+import { Particles, Rings, SpeedLines } from './fx.js';
+import { Fighter, BOT_ROSTER } from './fighter.js';
+import { BotBrain, SKILL } from './bot.js';
 import { Audio } from './audio.js';
 import { QUALITY, keyName } from './settings.js';
 
@@ -39,6 +41,30 @@ function segParam(a, b, p) {
   const t = ((p.x - a.x) * abx + (p.y - a.y) * aby + (p.z - a.z) * abz) / l2;
   return t < 0 ? 0 : t > 1 ? 1 : t;
 }
+// closest distance between segments a-b and c-d (disc sweep vs a fighter's capsule axis)
+const _ss = { d: 0, s: 0 };
+const c01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+function segSeg(a, b, c, d, out) {
+  const d1x = b.x - a.x, d1y = b.y - a.y, d1z = b.z - a.z, d2x = d.x - c.x, d2y = d.y - c.y, d2z = d.z - c.z;
+  const rx = a.x - c.x, ry = a.y - c.y, rz = a.z - c.z;
+  const A = d1x * d1x + d1y * d1y + d1z * d1z, E = d2x * d2x + d2y * d2y + d2z * d2z, F = d2x * rx + d2y * ry + d2z * rz;
+  let s = 0, t = 0;
+  if (A < 1e-9 && E < 1e-9) { s = t = 0; }
+  else if (A < 1e-9) { t = c01(F / E); }
+  else {
+    const C = d1x * rx + d1y * ry + d1z * rz;
+    if (E < 1e-9) { s = c01(-C / A); }
+    else {
+      const Bd = d1x * d2x + d1y * d2y + d1z * d2z, den = A * E - Bd * Bd;
+      s = den > 1e-9 ? c01((Bd * F - C * E) / den) : 0;
+      t = (Bd * s + F) / E;
+      if (t < 0) { t = 0; s = c01(-C / A); } else if (t > 1) { t = 1; s = c01((Bd - C) / A); }
+    }
+  }
+  const x = rx + d1x * s - d2x * t, y = ry + d1y * s - d2y * t, z = rz + d1z * s - d2z * t;
+  out.d = Math.sqrt(x * x + y * y + z * z); out.s = s; return out;
+}
+const _c1 = new THREE.Vector3(), _c2 = new THREE.Vector3();
 function segDist(a, b, p, t) {
   const x = a.x + (b.x - a.x) * t - p.x, y = a.y + (b.y - a.y) * t - p.y, z = a.z + (b.z - a.z) * t - p.z;
   return Math.sqrt(x * x + y * y + z * z);
@@ -79,12 +105,14 @@ export class Game {
     this.hand = new Hand();
     this.parts = new Particles(sc, this.Q.particles);
     this.rings = new Rings(sc);
-    this.trail = new Ribbon(sc, 22, 0xff5a1f, 0.25);
     this.lines = new SpeedLines(sc, 90);
     this.player = new Player(this.arena, this.playerEvents());
     this.player.easy = true; this.player.noWall = true;
     this.pctx = {};
     this.disc = new Disc(this);
+    this.me = new Fighter(this, { name: '나', color: 0xff5a1f, isBot: false, body: this.player, disc: this.disc });
+    this.fighters = [this.me];
+    this.versus = false; this.match = { limit: 0, timeLeft: 0, over: true };
     this.foes = []; this.orbs = []; this.debris = []; this.respawns = []; this.dnums = [];
 
     // enemy orb visuals + aim lasers
@@ -112,6 +140,11 @@ export class Game {
     addEventListener('resize', () => this.resize());
   }
 
+  // the human's health lives on their fighter
+  get hp() { return this.me ? this.me.hp : 100; }
+  set hp(v) { if (this.me) this.me.hp = v; }
+  get trail() { return this.disc.trail; }
+
   // ======================= small DOM helpers =======================
   el(id) { let e = this._el[id]; if (e === undefined) { e = document.getElementById(id); this._el[id] = e; } return e || DUMMY_EL; }
   txt(id, s) { if (this._txt[id] !== s) { this._txt[id] = s; this.el(id).textContent = s; } }
@@ -129,7 +162,7 @@ export class Game {
   resetRun() {
     this.hp = 100; this.score = 0; this.kills = 0; this.wave = 0;
     this.combo = 0; this.comboT = 0; this.bestCombo = 0;
-    this.maxSpeed = 0; this.gameTime = 0; this.regenT = 0; this.invulnT = 0;
+    this.maxSpeed = 0; this.gameTime = 0; this.regenT = 0;
     this.waveState = 'break'; this.breakT = 3; this.queue = []; this.spawnT = 0;
     this.chain = 0; this.chainT = 0; this.throwBuf = 0;
     this.dmgFx = 0; this.flashFx = 0; this.hitT = 0; this.bannerT = 0; this.popT = 0; this.hintT = 0; this.dirT = 0;
@@ -138,17 +171,24 @@ export class Game {
   }
 
   start(mode) {
-    this.mode = mode === 'practice' ? 'practice' : 'arena';
+    this.mode = ['practice', 'duel', 'ffa'].includes(mode) ? mode : 'arena';
+    this.versus = this.mode === 'duel' || this.mode === 'ffa';
     this.D = DIFF[this.S.difficulty] || DIFF.easy;
     this.clear(); this.resetRun();
     const P = this.player; P.easy = true; P.noWall = true;
     P.reset(SPAWN.clone(), 0);
+    const me = this.me;
+    me.st = { throws: 0, hits: 0, blinks: 0, slams: 0, dodges: 0, bank: 0, ret: 0 };
+    Object.assign(me, { kills: 0, deaths: 0, alive: true, protT: 0, invulnT: 0, regenT: 0, streak: 0, lastHitBy: null, respawnT: 0 });
+    this.deathInfo = null; this.match = { limit: 0, timeLeft: 0, over: true };
     this.disc.caught(); this.disc.catchCd = 0; this.trail.reset();
     this.state = 'play'; this.acc = 0; this.last = performance.now(); this.timeScale = 1; this.slowT = this.stopT = 0;
     Object.assign(this.camState, { dip: 0, dipV: 0, tilt: 0, fov: this.S.fov, kick: 0, trauma: 0 });
     this.buildDashPips();
     if (this.mode === 'practice') { this.setupPractice(); this.banner('연습장', '체크리스트를 따라 해보세요 · 맞아도 안 죽어요', 2.6); }
+    else if (this.versus) this.setupVersus();
     else { this.banner('아레나', '원반 하나로 끝까지 버티기', 2.4); }
+    this.cls('deathMsg', 'show', false); this.cls('board', 'hidden', !this.versus); this._boardT = 0;
     this.el('feed').innerHTML = ''; this.el('dnums').innerHTML = '';
     this.renderTut();
     this.txt('hint', ''); this.cls('hint', 'show', false);
@@ -163,6 +203,7 @@ export class Game {
     for (const l of this.lasers) l.visible = false;
     this.blinkGhost.visible = false;
     if (this.disc) { this.disc.caught(); this.trail.reset(); }
+    if (this.fighters) { for (const f of this.fighters) if (f !== this.me) f.dispose(); this.fighters = [this.me]; }
   }
   clearWorld() { this.clear(); }
 
@@ -251,8 +292,24 @@ export class Game {
       wallStart() { }, climb() { },
       mantle() { g.audio.mantle(); g.camState.dipV -= 1.5; },
       hookFire() { }, hookMiss() { }, hookAttach() { }, hookRelease() { }, pad() { }, boost() { },
-      fell() { g.player.reset(SPAWN.clone(), 0); },
+      fell() { if (g.versus) g.respawn(g.me); else g.player.reset(SPAWN.clone(), 0); },
     };
+  }
+  botEvents(f) {
+    const g = this;
+    const nop = () => { };
+    return {
+      jump: nop, land: nop, slide: nop, wallStart: nop, climb: nop, mantle: nop, hookFire: nop, hookMiss: nop, hookAttach: nop, hookRelease: nop, pad: nop, boost: nop,
+      dash() { g.spatial(f.body.pos, () => g.audio.dash()); },
+      fell() { g.respawn(f); },
+    };
+  }
+  // play a sound as if it came from pos (quieter with distance)
+  spatial(pos, fn) {
+    const d = pos.distanceTo(this.camera.position);
+    if (d > 70) return;
+    this.audio.vol = Math.pow(Math.max(0.06, 1 - d / 70), 1.5);
+    try { fn(); } finally { this.audio.vol = 1; }
   }
 
   // ======================= main loop =======================
@@ -301,65 +358,99 @@ export class Game {
     return inp;
   }
 
+  clampBounds(B) {
+    const L = this.arena.half - 0.45;
+    if (Math.abs(B.pos.x) > L) { B.pos.x = Math.sign(B.pos.x) * L; if (B.vel.x * Math.sign(B.pos.x) > 0) B.vel.x = 0; }
+    if (Math.abs(B.pos.z) > L) { B.pos.z = Math.sign(B.pos.z) * L; if (B.vel.z * Math.sign(B.pos.z) > 0) B.vel.z = 0; }
+    if (B.pos.y > this.arena.ceiling) { B.pos.y = this.arena.ceiling; B.vel.y = Math.min(B.vel.y, 0); }
+  }
+
   tick(dt) {
     this.gameTime += dt;
-    const P = this.player, d = this.disc;
-    const inp = this.readInput();
-    P.tick(dt, inp, this.pctx);
-    // arena bounds (the walls already stop you; this catches the sky above them)
-    const B = this.arena.half - 0.45;
-    if (Math.abs(P.pos.x) > B) { P.pos.x = Math.sign(P.pos.x) * B; if (P.vel.x * Math.sign(P.pos.x) > 0) P.vel.x = 0; }
-    if (Math.abs(P.pos.z) > B) { P.pos.z = Math.sign(P.pos.z) * B; if (P.vel.z * Math.sign(P.pos.z) > 0) P.vel.z = 0; }
-    if (P.pos.y > this.arena.ceiling) { P.pos.y = this.arena.ceiling; P.vel.y = Math.min(P.vel.y, 0); }
-    this.maxSpeed = Math.max(this.maxSpeed, P.hSpeed);
-
-    // ---------- the disc ----------
-    this.throwBuf -= dt;
-    if (inp.throwPressed) {
-      if (d.state === 'hand') { if (d.catchCd > 0) this.throwBuf = 0.4; else this.throwDisc(); }
-      else if (d.state === 'out') { d.recall(); this.audio.discBounce(0); this.train('recall'); }
-      else this.throwBuf = 0.4; // still flying home: throw again the moment it lands in your hand
+    const P = this.player, d = this.disc, me = this.me;
+    let inp = this.readInput();
+    if (me.brain) inp = me.brain.tick(dt); // autopilot (used by the automated tests)
+    if (me.alive) {
+      P.tick(dt, inp, this.pctx);
+      this.clampBounds(P);
+      this.maxSpeed = Math.max(this.maxSpeed, P.hSpeed);
+      // ---------- the disc ----------
+      if (!me.brain) {
+        this.throwBuf -= dt;
+        if (inp.throwPressed) {
+          if (d.state === 'hand') { if (d.catchCd > 0) this.throwBuf = 0.4; else this.throwDisc(); }
+          else if (d.state === 'out') this.recallFor(me);
+          else this.throwBuf = 0.4; // still flying home: throw again the moment it lands in your hand
+        }
+        if (this.throwBuf > 0 && d.state === 'hand' && d.catchCd <= 0) { this.throwBuf = 0; this.throwDisc(); }
+        if (inp.blinkPressed) this.blink();
+      }
     }
-    if (this.throwBuf > 0 && d.state === 'hand' && d.catchCd <= 0) { this.throwBuf = 0; this.throwDisc(); }
-    if (inp.blinkPressed) this.blink();
-    d.tick(dt);
+    // ---------- bots ----------
+    for (const f of this.fighters) {
+      if (f === me || !f.alive) continue;
+      const bi = this.match.over && this.versus ? f.brain.inp : f.brain.tick(dt);
+      f.body.tick(dt, bi, this.pctx);
+      this.clampBounds(f.body);
+    }
+    for (const f of this.fighters) f.disc.tick(dt);
 
     // ---------- vitals ----------
-    this.invulnT -= dt;
-    this.regenT -= dt;
-    if (this.regenT <= 0 && this.hp < 100) this.hp = Math.min(100, this.hp + this.D.regen * dt);
+    for (const f of this.fighters) {
+      f.invulnT -= dt; f.protT = Math.max(0, f.protT - dt);
+      if (!this.versus) continue;
+      if (!f.alive) { if (!this.match.over) { f.respawnT -= dt; if (f.respawnT <= 0) this.respawn(f); } continue; }
+      f.regenT -= dt;
+      if (f.regenT <= 0 && f.hp < 100) f.hp = Math.min(100, f.hp + 12 * dt);
+    }
+    if (!this.versus) {
+      this.regenT -= dt;
+      if (this.regenT <= 0 && this.hp < 100) this.hp = Math.min(100, this.hp + this.D.regen * dt);
+    }
     if (this.comboT > 0) { this.comboT -= dt; if (this.comboT <= 0) this.combo = 0; }
     if (this.chainT > 0) { this.chainT -= dt; if (this.chainT <= 0) this.chain = 0; }
 
     // ---------- world ----------
+    this.tickDebris(dt);
+    if (this.versus) { this.tickMatch(dt); return; }
     const ctx = this.ctx();
     for (const f of this.foes) if (f.alive) { if (f.dummy) this.tickDummy(f, dt, ctx); else f.update(dt, ctx); }
     this.foes = this.foes.filter(f => f.alive);
     this.tickOrbs(dt);
-    this.tickDebris(dt);
     if (this.mode === 'arena') this.tickWaves(dt); else this.tickPractice(dt);
   }
 
   // ======================= the disc =======================
   throwDisc() {
-    const P = this.player, d = this.disc;
+    const P = this.player;
     const dir = P.lookDir(new THREE.Vector3());
-    const origin = new THREE.Vector3().copy(P.eye);
-    origin.y -= 0.15;
+    const origin = new THREE.Vector3().copy(P.eye); origin.y -= 0.15;
     this.aimAssist(origin, dir);
-    origin.addScaledVector(dir, 0.3);
-    if (!d.throw(origin, dir, P.vel)) return;
-    d.kills = 0;
-    this.trail.width = 0.25;
-    this.stats.throws++;
-    this.audio.discThrow(1); this.hand.throwAnim();
-    this.camState.kick = Math.max(this.camState.kick, 0.25);
-    this.train('throw');
+    this.throwFor(this.me, dir);
+  }
+  throwFor(f, dir) {
+    const B = f.body, d = f.disc;
+    const origin = new THREE.Vector3().copy(B.eye); origin.y -= 0.15; origin.addScaledVector(dir, 0.3);
+    if (!d.throw(origin, dir, B.vel)) return false;
+    f.st.throws++;
+    if (f === this.me) {
+      this.stats.throws++;
+      this.audio.discThrow(1); this.hand.throwAnim();
+      this.camState.kick = Math.max(this.camState.kick, 0.25);
+      this.train('throw');
+    } else { f.throwT = 0.25; this.spatial(origin, () => this.audio.discThrow(0.8)); }
+    return true;
+  }
+  recallFor(f) {
+    if (!f.disc.recall()) return false;
+    if (f === this.me) { this.audio.discBounce(0); this.train('recall'); }
+    return true;
   }
   // gentle magnetism toward an enemy right under the crosshair
   aimAssist(origin, dir) {
-    let best = null, bestA = this.D.assist;
-    for (const f of this.foes) {
+    let best = null, bestA = this.D.assist * (this.versus ? 0.7 : 1);
+    const list = this.versus ? this.fighters.filter(f => f !== this.me && f.alive).map(f => { f.updateCenter(); return f; }) : this.foes;
+    for (const f of list) {
       if (!f.alive) continue;
       _a.subVectors(f.center, origin); const dist = _a.length();
       if (dist < 1.5 || dist > 70) continue;
@@ -370,20 +461,23 @@ export class Game {
     if (best) dir.lerp(best, 0.85).normalize();
   }
   onDiscBounce(d, p, n) {
-    this.audio.discBounce(d.bounces);
-    this.trail.width = 0.25 + Math.min(4, d.bounces) * 0.07;
-    this.parts.emit(p, 10, { color: [[1, 0.35, 0.12], [0.15, 0.15, 0.17]], speed: 7, dir: n, spread: 0.8, life: 0.35, gravity: 10 });
-    this.rings.add(p.clone().addScaledVector(n, 0.04), 0xff5a1f, 1.1 + d.bounces * 0.35, 0.3, n);
+    if (d.owner === this.me) this.audio.discBounce(d.bounces);
+    else this.spatial(p, () => this.audio.discBounce(d.bounces));
+    d.trail.width = 0.25 + Math.min(4, d.bounces) * 0.07;
+    const c = new THREE.Color(d.color);
+    this.parts.emit(p, 10, { color: [[c.r, c.g, c.b], [0.15, 0.15, 0.17]], speed: 7, dir: n, spread: 0.8, life: 0.35, gravity: 10 });
+    this.rings.add(p.clone().addScaledVector(n, 0.04), d.color, 1.1 + d.bounces * 0.35, 0.3, n);
   }
   onDiscCatch(d) {
     if (d.state === 'hand') return;
     d.caught();
-    this.audio.discCatch(); this.hand.catchAnim();
+    if (d.owner === this.me) { this.audio.discCatch(); this.hand.catchAnim(); }
   }
   // everything the disc touches between a and b
   discSweep(d, a, b, leg) {
     const len = a.distanceTo(b); if (len < 1e-6) return null;
     const dir = new THREE.Vector3().subVectors(b, a).divideScalar(len);
+    if (this.versus) { this.sweepFighters(d, a, b, dir, leg); return null; }
     const hits = [];
     for (const f of this.foes) {
       if (!f.alive || d.hit.has(f) || f.spawnT > 0.25) continue;
@@ -440,57 +534,76 @@ export class Game {
   }
 
   // RMB: teleport to the disc, keep your speed (and then some), shock everything nearby
-  blink() {
-    const d = this.disc, P = this.player;
+  blink() { return this.blinkFor(this.me); }
+  blinkFor(f) {
+    const d = f.disc, B = f.body, isMe = f === this.me;
     if (d.state === 'hand') {
-      this.audio.empty();
-      this.hint(`순간이동은 원반이 날아가는 동안만 — 먼저 ${keyName(this.S.binds.throw[0])}로 던지세요`, 'blinkEmpty');
-      return;
+      if (isMe) { this.audio.empty(); this.hint(`순간이동은 원반이 날아가는 동안만 — 먼저 ${keyName(this.S.binds.throw[0])}로 던지세요`, 'blinkEmpty'); }
+      return false;
     }
     const spot = d.blinkSpot(this.arena.col);
-    if (!spot) { this.audio.empty(); return; }
+    if (!spot) { if (isMe) this.audio.empty(); return false; }
     const lim = this.arena.half - 1;
     spot.x = THREE.MathUtils.clamp(spot.x, -lim, lim); spot.z = THREE.MathUtils.clamp(spot.z, -lim, lim);
     spot.y = Math.min(spot.y, this.arena.ceiling - 2);
-    const from = P.pos.clone();
-    P.pos.copy(spot); P.prevPos.copy(spot);
+    const from = B.pos.clone();
+    B.pos.copy(spot); B.prevPos.copy(spot);
     // momentum: carry what you had (min 16 m/s) +3, in the direction you are looking
-    const hs = P.hSpeedNow();
+    const hs = B.hSpeedNow();
     const sp = Math.min(42, Math.max(hs, 16) + 3);
-    const f = P.flatFwd(_a);
-    P.vel.set(f.x * sp, Math.max(P.vel.y, 4), f.z * sp);
-    P.grounded = false; P.airJumps = T.airJumps;
-    P.dashCharges = Math.min(P.dashMax, P.dashCharges + 1);
-    this.invulnT = 0.3;
+    const fw = B.flatFwd(new THREE.Vector3());
+    B.vel.set(fw.x * sp, Math.max(B.vel.y, 4), fw.z * sp);
+    B.grounded = false; B.airJumps = T.airJumps;
+    B.dashCharges = Math.min(B.dashMax, B.dashCharges + 1);
+    f.invulnT = 0.3; f.st.blinks++;
     // shockwave
-    const c = _b.set(spot.x, spot.y + 0.9, spot.z);
+    const c = new THREE.Vector3(spot.x, spot.y + 0.9, spot.z);
     let slammed = 0;
-    for (const e of this.foes) {
-      if (!e.alive) continue;
-      if (e.center.distanceTo(c) < DISC.blinkRadius + e.cfg.r) {
-        const out = new THREE.Vector3().subVectors(e.pos, spot).setY(0);
-        if (out.lengthSq() < 1e-4) out.set(1, 0, 0);
-        out.normalize();
-        slammed++;
-        this.hitFoe(e, DISC.blinkSlam * (1 + 0.15 * d.bounces), out, 'slam', d.bounces);
-        if (e.alive) { e.vel.addScaledVector(out, 9); e.vel.y = 5; }
+    if (this.versus) {
+      for (const o of this.fighters) {
+        if (o === f || !o.alive) continue;
+        if (o.updateCenter().distanceTo(c) < DISC.blinkRadius + T.radius) {
+          const out = new THREE.Vector3().subVectors(o.body.pos, spot).setY(0);
+          if (out.lengthSq() < 1e-4) out.set(1, 0, 0);
+          out.normalize();
+          if (this.damageFighter(o, DISC.blinkSlam * (1 + 0.15 * d.bounces), f, 'slam', out, d.bounces)) { slammed++; f.st.slams++; }
+        }
       }
+    } else {
+      for (const e of this.foes) {
+        if (!e.alive) continue;
+        if (e.center.distanceTo(c) < DISC.blinkRadius + e.cfg.r) {
+          const out = new THREE.Vector3().subVectors(e.pos, spot).setY(0);
+          if (out.lengthSq() < 1e-4) out.set(1, 0, 0);
+          out.normalize();
+          slammed++;
+          this.hitFoe(e, DISC.blinkSlam * (1 + 0.15 * d.bounces), out, 'slam', d.bounces);
+          if (e.alive) { e.vel.addScaledVector(out, 9); e.vel.y = 5; }
+        }
+      }
+      for (let i = this.orbs.length - 1; i >= 0; i--) if (this.orbs[i].pos.distanceTo(c) < DISC.blinkRadius) this.killOrb(this.orbs[i], true);
     }
-    for (let i = this.orbs.length - 1; i >= 0; i--) if (this.orbs[i].pos.distanceTo(c) < DISC.blinkRadius) this.killOrb(this.orbs[i], true);
     // fx
-    this.audio.blink(); this.hand.blinkAnim();
-    this.camState.kick = Math.max(this.camState.kick, 1.3); this.flashFx = Math.max(this.flashFx, 0.6);
+    const col = new THREE.Color(f.color);
     const n = Math.min(24, Math.ceil(from.distanceTo(spot) / 1.5));
     for (let i = 0; i <= n; i++) {
       const p = _c.lerpVectors(from, spot, i / n); p.y += 1;
-      this.parts.emit(p, 2, { color: [[1, 0.35, 0.12], [0.12, 0.12, 0.14]], speed: 1.5, life: 0.45, gravity: 0, size: 0.14 });
+      this.parts.emit(p, 2, { color: [[col.r, col.g, col.b], [0.12, 0.12, 0.14]], speed: 1.5, life: 0.45, gravity: 0, size: 0.14 });
     }
-    this.rings.add(new THREE.Vector3(spot.x, spot.y + 0.06, spot.z), slammed ? 0x16161a : 0xff5a1f, slammed ? DISC.blinkRadius * 1.3 : 2.2, 0.45);
-    if (slammed) { this.audio.slam(); this.shake(0.25); this.stats.slams++; this.train('slam'); if (slammed >= 2) this.slowT = Math.max(this.slowT, 0.25); }
+    this.rings.add(new THREE.Vector3(spot.x, spot.y + 0.06, spot.z), slammed ? 0x16161a : f.color, slammed ? DISC.blinkRadius * 1.3 : 2.2, 0.45);
+    if (isMe) {
+      this.audio.blink(); this.hand.blinkAnim();
+      this.camState.kick = Math.max(this.camState.kick, 1.3); this.flashFx = Math.max(this.flashFx, 0.6);
+      if (slammed) { this.audio.slam(); this.shake(0.25); this.stats.slams++; this.train('slam'); if (slammed >= 2) this.slowT = Math.max(this.slowT, 0.25); }
+      this.chain++; this.chainT = 2.5;
+      if (this.chain >= 2) this.popup(`순간이동 ×${this.chain}`);
+      this.stats.blinks++; this.train('blink');
+    } else {
+      this.spatial(spot, () => { this.audio.blink(); if (slammed) this.audio.slam(); });
+      if (slammed && spot.distanceTo(this.player.pos) < 8) this.shake(0.15);
+    }
     this.onDiscCatch(d);
-    this.chain++; this.chainT = 2.5;
-    if (this.chain >= 2) this.popup(`순간이동 ×${this.chain}`);
-    this.stats.blinks++; this.train('blink');
+    return true;
   }
 
   // ======================= enemies =======================
@@ -540,7 +653,7 @@ export class Game {
       const cy = THREE.MathUtils.clamp(o.pos.y, yb, yt);
       const dd = Math.hypot(o.pos.x - P.pos.x, o.pos.y - cy, o.pos.z - P.pos.z);
       if (dd < 0.3 + T.radius) {
-        if (P.invuln || this.invulnT > 0) {
+        if (this.me.invuln) {
           if (!o.dodged) { o.dodged = true; this.addScore(25); this.popup('회피!'); }
         } else { this.hurt(o.dmg, o.pos); this.killOrb(o, false); continue; }
       }
@@ -555,7 +668,7 @@ export class Game {
   }
   foeContact(f) {
     const P = this.player;
-    if (P.invuln || this.invulnT > 0 || f.cd > 0) return;
+    if (this.me.invuln || f.cd > 0) return;
     f.cd = 1.2;
     this.hurt(14 * this.D.dmg, f.center);
     const away = _a.subVectors(P.pos, f.pos).setY(0); if (away.lengthSq() < 1e-4) away.set(0, 0, 1); away.normalize();
@@ -567,7 +680,7 @@ export class Game {
     const to = _a.subVectors(P.pos, f.pos); const dy = to.y; to.y = 0; const dist = to.length();
     this.audio.shieldClang();
     this.rings.add(new THREE.Vector3().copy(f.center).addScaledVector(fw, 1.1), 0xe8202f, 2.4, 0.3, fw);
-    if (dist < 3.4 && Math.abs(dy) < 2 && to.dot(fw) / (dist || 1) > 0.35 && !(P.invuln || this.invulnT > 0)) {
+    if (dist < 3.4 && Math.abs(dy) < 2 && to.dot(fw) / (dist || 1) > 0.35 && !this.me.invuln) {
       this.hurt(16 * this.D.dmg, f.center);
       P.vel.addScaledVector(fw, 14); P.vel.y = Math.max(P.vel.y, 6); P.grounded = false;
     }
@@ -700,6 +813,183 @@ export class Game {
     }
   }
 
+  // drive the human fighter with a bot brain (automated tests / bot-vs-bot measurements)
+  autopilot(skill) { this.me.brain = skill ? new BotBrain(this, this.me, skill) : null; }
+
+  // ======================= VERSUS: 1V1 / FFA against bots =======================
+  setupVersus() {
+    const duel = this.mode === 'duel';
+    const skill = SKILL[this.S.botSkill] ? this.S.botSkill : 'max';
+    this.botSkill = skill;
+    const roster = BOT_ROSTER.slice().sort(() => Math.random() - 0.5);
+    for (let i = 0; i < (duel ? 1 : 5); i++) {
+      const r = roster[i];
+      const f = new Fighter(this, { name: r.name, color: r.color, isBot: true });
+      f.brain = new BotBrain(this, f, skill);
+      this.fighters.push(f);
+    }
+    for (const f of this.fighters) f.alive = false;
+    for (const f of this.fighters) this.respawn(f, true);
+    this.match = { limit: duel ? 5 : 15, timeLeft: duel ? 0 : 240, over: false };
+    const bot = this.fighters[1];
+    if (duel) this.banner('1 V 1', `${bot.name} · 봇 실력 ${SKILL[skill].name} · 5킬 먼저`, 2.6);
+    else this.banner('FFA', `봇 5명 · ${SKILL[skill].name} · 15킬 먼저 (4분)`, 2.6);
+    this._boardHtml = '';
+    // compile the bots' materials now, not on the first frame they appear
+    try { this.renderer.compile(this.scene, this.camera); } catch { }
+  }
+  spawnPoints() {
+    if (!this._spawns) {
+      const A = this.arena, all = [...A.spawnGround, ...A.spawnHigh];
+      for (const [x, z] of [[-24, 8], [24, -8], [8, 24], [-8, -24], [0, 15], [0, -15], [15, 0], [-15, 0]]) all.push(new THREE.Vector3(x, 0, z));
+      this._spawns = all.filter(p => A.col.capsuleFree(p.x, p.y + 0.05, p.z, 0.42, 1.8));
+    }
+    return this._spawns;
+  }
+  pickSpawn(f) {
+    let best = null, bs = -1;
+    for (const p of this.spawnPoints()) {
+      let m = 200;
+      for (const o of this.fighters) if (o !== f && o.alive) m = Math.min(m, o.body.pos.distanceTo(p));
+      const s = m + Math.random() * 8;
+      if (s > bs) { bs = s; best = p; }
+    }
+    return best.clone();
+  }
+  respawn(f, initial = false) {
+    const p = this.pickSpawn(f), B = f.body;
+    B.reset(p, Math.atan2(p.x, p.z));
+    f.hp = 100; f.alive = true; f.protT = initial ? 0.6 : 1.5; f.invulnT = 0; f.regenT = 0; f.respawnT = 0;
+    if (f.disc.state !== 'hand') f.disc.caught();
+    f.disc.catchCd = 0; f.disc.trail.reset();
+    if (f.brain) f.brain.reset();
+    if (f === this.me) { this.deathInfo = null; this.cls('deathMsg', 'show', false); this.camState.fov = this.S.fov; this.throwBuf = 0; }
+    if (!initial) this.rings.add(new THREE.Vector3(p.x, p.y + 0.06, p.z), f.color, 2.6, 0.5);
+  }
+  sweepFighters(d, a, b, dir, leg) {
+    for (const t of this.fighters) {
+      if (t === d.owner || !t.alive || d.hit.has(t)) continue;
+      const B = t.body;
+      _c1.set(B.pos.x, B.pos.y + 0.4, B.pos.z); _c2.set(B.pos.x, B.pos.y + Math.max(0.6, B.h - 0.4), B.pos.z);
+      if (segSeg(a, b, _c1, _c2, _ss).d >= T.radius + DISC.radius) continue;
+      d.hit.add(t);
+      if (t.invuln) {
+        t.st.dodges++;
+        if (t === this.me) this.popup('회피!');
+        else if (d.owner === this.me) this.popupWorld(t.updateCenter(), '회피');
+        continue;
+      }
+      const dmg = leg === 'out'
+        ? DISC.dmg * (1 + 0.35 * d.bounces) * (0.75 + 0.25 * d.speedMul())
+        : DISC.returnDmg * (1 + 0.2 * d.bounces);
+      this.damageFighter(t, dmg, d.owner, leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', dir, d.bounces);
+    }
+  }
+  damageFighter(t, dmg, by, kind, dir, bounces = 0) {
+    if (!t.alive || t.invuln) return null;
+    dmg = Math.round(dmg);
+    t.hp -= dmg; t.regenT = 4; t.lastHitBy = by; t.lastHitT = this.gameTime;
+    const B = t.body, push = kind === 'slam' ? 9 : 5;
+    B.vel.x += dir.x * push; B.vel.z += dir.z * push; B.vel.y = Math.max(B.vel.y, kind === 'slam' ? 5 : 2.5); B.grounded = false;
+    const c = t.updateCenter().clone(), col = new THREE.Color(t.color);
+    this.parts.emit(c, 14, { color: [[0.1, 0.1, 0.12], [col.r, col.g, col.b]], speed: 8, dir, spread: 0.9, life: 0.4 });
+    const killed = t.hp <= 0;
+    if (by) { by.st.hits++; if (kind === 'bank') by.st.bank++; if (kind === 'return') by.st.ret++; }
+    if (t === this.me) { this.dmgFx = 1; this.shake(0.22); this.audio.hurt(); if (by) this.hurtDir(by.updateCenter()); }
+    if (by === this.me) {
+      this.audio.discHit(bounces + 1); this.stats.hits++;
+      this.dmgNumber(c, dmg, kind === 'bank' || kind === 'slam');
+      this.hitmarker(killed);
+      this.stopT = Math.max(this.stopT, killed ? 0.05 : 0.02);
+    } else if (t !== this.me) this.spatial(c, () => this.audio.discHit(1));
+    if (killed) this.killFighter(t, by, kind, bounces, dir);
+    return killed ? 'kill' : 'hit';
+  }
+  hurtDir(from) {
+    _c.copy(from).applyMatrix4(this.camera.matrixWorldInverse);
+    this.dirAng = Math.atan2(_c.x, -_c.z); this.dirT = 1;
+  }
+  killFighter(v, k, kind, n, dir) {
+    v.alive = false; v.hp = 0; v.deaths++; v.streak = 0;
+    v.respawnT = this.mode === 'duel' ? 2.2 : 2.8;
+    if (v.disc.state !== 'hand') v.disc.caught();
+    v.disc.trail.reset();
+    const fl = new THREE.Vector3(dir.x, Math.max(0.2, dir.y), dir.z).normalize();
+    if (v.isBot) this.debris.push(...v.shatter(fl));
+    const c = v.updateCenter().clone(), col = new THREE.Color(v.color);
+    this.parts.emit(c, 28, { color: [[0.08, 0.08, 0.1], [col.r, col.g, col.b], [1, 1, 1]], speed: 10, life: 0.6 });
+    this.rings.add(new THREE.Vector3(v.body.pos.x, v.body.pos.y + 0.06, v.body.pos.z), v.color, 3, 0.45);
+    let tag = kind === 'bank' ? (n >= 2 ? `${n}쿠션 뱅크샷` : '뱅크샷') : kind === 'return' ? '회수 타격' : kind === 'slam' ? '순간이동 충격' : '';
+    if (k && !k.body.grounded && k.body.airTime > 0.3) tag = tag ? tag + ' · 공중' : '공중';
+    const counts = !this.match.over;
+    if (k && k !== v && counts) {
+      k.kills++; k.streak++;
+      k.hp = Math.min(100, k.hp + 25);
+      k.body.dashCharges = Math.min(k.body.dashMax, k.body.dashCharges + 1);
+    }
+    this.feedKill(k, v, tag);
+    if (k === this.me) {
+      this.popup(k.streak >= 3 ? `${k.streak}연속 처치!` : (tag || '처치!'));
+      this.audio.kill(Math.min(k.streak, 8)); this.shake(0.12); this.kills++;
+      if (kind === 'bank') this.stats.banks++;
+    } else this.spatial(c, () => this.audio.kill(1));
+    if (v === this.me) { this.deathInfo = { by: k, pos: this.player.pos.clone(), t: 0 }; this.throwBuf = 0; }
+    if (counts && k && k.kills >= this.match.limit) this.endMatch();
+  }
+  feedKill(k, v, tag) {
+    const box = this.el('feed'); if (box === DUMMY_EL) return;
+    const row = document.createElement('div'); row.className = 'kf';
+    const nm = f => { const e = document.createElement('span'); e.textContent = f ? f.name : '?'; if (f) e.style.color = f.css; return e; };
+    const arrow = document.createElement('em'); arrow.textContent = '→';
+    row.append(nm(k), arrow, nm(v));
+    if (tag) { const t = document.createElement('small'); t.textContent = tag; row.append(t); }
+    if (k === this.me || v === this.me) row.classList.add('mine');
+    box.prepend(row);
+    while (box.children.length > 6) box.lastChild.remove();
+    setTimeout(() => row.classList.add('out'), 3800);
+    setTimeout(() => row.remove(), 4300);
+  }
+  ranking() {
+    const me = this.me;
+    return [...this.fighters].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths || (a === me ? -1 : b === me ? 1 : 0));
+  }
+  tickMatch(dt) {
+    const M = this.match;
+    if (this.deathInfo) this.deathInfo.t += dt;
+    if (M.over) return;
+    if (M.timeLeft > 0) { M.timeLeft -= dt; if (M.timeLeft <= 0) { M.timeLeft = 0; this.endMatch(); } }
+  }
+  endMatch() {
+    const M = this.match; if (M.over) return; M.over = true;
+    this.slowT = Math.max(this.slowT, 1.0);
+    const me = this.me, rank = this.ranking(), myRank = rank.indexOf(me) + 1, rec = this.records;
+    let title, sub;
+    if (this.mode === 'duel') {
+      const bot = this.fighters[1];
+      title = me.kills > bot.kills ? '승리!' : me.kills === bot.kills ? '무승부' : '패배';
+      sub = `${me.kills} : ${bot.kills}`;
+      if (me.kills > bot.kills) rec.duelWin = (rec.duelWin || 0) + 1;
+      else if (me.kills < bot.kills) rec.duelLose = (rec.duelLose || 0) + 1;
+    } else {
+      title = myRank === 1 ? '1위!' : `${myRank}위`;
+      sub = `${me.kills}킬 · ${me.deaths}데스`;
+      if (myRank === 1) rec.ffaWin = (rec.ffaWin || 0) + 1;
+      rec.ffaBest = Math.min(rec.ffaBest || 99, myRank);
+    }
+    rec.speed = Math.max(rec.speed || 0, this.maxSpeed);
+    this.saveRecords && this.saveRecords();
+    this.banner(title, sub, 1.8);
+    if (myRank === 1) this.audio.checkpoint(true); else this.audio.wave();
+    const stats = rank.map((f, i) => [`${i + 1}. ${f.name}`, `${f.kills} 킬 · ${f.deaths} 데스`]);
+    stats.push(['봇 실력', SKILL[this.botSkill].name], ['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H']);
+    this.result = { title, stats, rank: myRank };
+    setTimeout(() => {
+      if (this.state !== 'play' || this.match !== M) return;
+      this.state = 'dead'; this.input.unlock();
+      this.onEnd && this.onEnd(title, stats);
+    }, 1700);
+  }
+
   // ======================= feedback helpers =======================
   addScore(base) {
     const mult = 1 + Math.min(4, Math.max(0, this.combo - 1) * 0.25);
@@ -749,7 +1039,17 @@ export class Game {
   render(rawDt) {
     const P = this.player, S = this.S, cs = this.camState;
     const inGame = this.state === 'play' || this.state === 'paused' || this.state === 'dead';
-    if (!inGame) {
+    const deathCam = this.versus && !this.me.alive && this.deathInfo && this.state === 'play';
+    if (deathCam) {
+      // killed: rise over your body and watch whoever did it
+      const di = this.deathInfo, k = di.by, look = k && k.alive ? k.body.pos : di.pos;
+      const u = Math.min(1, di.t);
+      _a.subVectors(di.pos, look).setY(0); if (_a.lengthSq() < 1e-3) _a.set(0, 0, 1); _a.normalize();
+      _d.set(di.pos.x, di.pos.y + 3 + u * 3, di.pos.z).addScaledVector(_a, 3 + u * 4);
+      this.camera.position.lerp(_d, Math.min(1, rawDt * 5));
+      this.camera.lookAt(look.x, look.y + 1, look.z);
+      this.camera.fov = 62; this.camera.updateProjectionMatrix();
+    } else if (!inGame) {
       // menu: slow orbit over the arena
       const a = this.clockT * 0.06;
       this.camera.position.set(Math.sin(a) * 58, 24 + Math.sin(this.clockT * 0.2) * 3, Math.cos(a) * 58);
@@ -787,20 +1087,24 @@ export class Game {
     this.camera.updateMatrixWorld();
 
     const fxDt = this.state === 'paused' ? 0 : this.state === 'play' ? rawDt * this.timeScale : rawDt * 0.4;
-    this.disc.render(fxDt);
-    this.trail.update(this.disc.pos, this.camera.position, this.disc.out && this.state !== 'menu');
+    const alphaR = this.state === 'play' ? THREE.MathUtils.clamp(this.acc / TICK, 0, 1) : 1;
+    for (const f of this.fighters) {
+      f.disc.render(fxDt);
+      f.disc.trail.update(f.disc.pos, this.camera.position, f.disc.out && this.state !== 'menu');
+      if (f.isBot) f.renderModel(rawDt, alphaR, this.clockT);
+    }
     this.parts.update(fxDt);
     this.rings.update(fxDt);
     this.arena.update(this.clockT, fxDt);
     for (const o of this.orbs) o.halo.scale.setScalar(1.7 + Math.sin(o.t * 18) * 0.25);
     this.updateLasers();
     this.updateBlinkGhost();
-    this.lines.update(this.camera.position, P.vel, this.state === 'play' ? THREE.MathUtils.clamp((P.speed - 17) / 20, 0, 1) : 0);
+    this.lines.update(this.camera.position, P.vel, this.state === 'play' && this.me.alive ? THREE.MathUtils.clamp((P.speed - 17) / 20, 0, 1) : 0);
 
     this.hand.update(this.state === 'play' ? rawDt * Math.max(this.timeScale, 0.4) : rawDt, {
       mx: this.mouseDX || 0, my: this.mouseDY || 0, hs: P.hSpeed, vy: P.vel.y, grounded: P.grounded, discOut: this.disc.out,
     });
-    const intensity = this.mode === 'arena' && this.state === 'play' ? Math.min(1, 0.25 + this.foes.length * 0.07 + Math.min(this.combo, 10) * 0.04) : 0.2;
+    const intensity = this.state !== 'play' ? 0.2 : this.versus ? 0.65 : this.mode === 'arena' ? Math.min(1, 0.25 + this.foes.length * 0.07 + Math.min(this.combo, 10) * 0.04) : 0.2;
     this.audio.update(this.state === 'play' ? P.speed : 0, false, rawDt, intensity);
 
     if (inGame) this.updateHud(rawDt);
@@ -808,7 +1112,7 @@ export class Game {
     const r = this.renderer;
     r.clear();
     r.render(this.scene, this.camera);
-    if (this.state === 'play' || this.state === 'paused') { r.clearDepth(); r.render(this.hand.scene, this.hand.camera); }
+    if ((this.state === 'play' || this.state === 'paused') && this.me.alive) { r.clearDepth(); r.render(this.hand.scene, this.hand.camera); }
   }
 
   updateLasers() {
@@ -844,9 +1148,12 @@ export class Game {
     this.css('hpFill', 'width', hp + '%');
     this.txt('hpNum', String(hp));
     this.cls('hpBar', 'low', hp < 35);
-    this.txt('scoreTxt', this.score.toLocaleString());
-    const mult = 1 + Math.min(4, Math.max(0, this.combo - 1) * 0.25);
-    this.txt('comboTxt', this.combo >= 2 ? `${this.combo} 콤보 · ×${mult.toFixed(2)}` : '');
+    if (this.versus) this.updateVersusHud(dt);
+    else {
+      this.txt('scoreTxt', this.score.toLocaleString());
+      const mult = 1 + Math.min(4, Math.max(0, this.combo - 1) * 0.25);
+      this.txt('comboTxt', this.combo >= 2 ? `${this.combo} 콤보 · ×${mult.toFixed(2)}` : '');
+    }
     this.txt('speedNum', String(Math.round(P.hSpeed * 3.6)));
     // dash pips
     const pips = this.el('dashPips').children;
@@ -858,7 +1165,7 @@ export class Game {
     const power = d.out ? Math.round((1 + 0.35 * d.bounces) * 100) : 100;
     this.txt('discTxt', st === 'hand' ? `${kn('throw')} 던지기` : st === 'out' ? `${kn('throw')} 회수 · ${kn('blink')} 순간이동` : `돌아오는 중 · ${kn('blink')} 순간이동`);
     this.txt('discPow', d.out && d.bounces > 0 ? `튕김 ${d.bounces} · 피해 ${power}%` : '');
-    this.cls('cross', 'out', d.out);
+    this.cls('cross', 'out', d.out); this.cls('cross', 'hidden', !this.me.alive);
     // disc marker on screen (where a blink would take you)
     const mk = this.el('discMark');
     if (d.out && this.state === 'play') {
@@ -891,11 +1198,12 @@ export class Game {
     this.dirT = Math.max(0, this.dirT - dt * 1.2);
     this.css('hurt', 'opacity', this.dmgFx.toFixed(2));
     this.css('flash', 'opacity', this.flashFx.toFixed(2));
-    this.css('lowhp', 'opacity', (this.mode === 'arena' ? Math.max(0, 0.4 - this.hp / 100) / 0.4 : 0).toFixed(2));
+    this.css('lowhp', 'opacity', (this.mode !== 'practice' && this.me.alive ? Math.max(0, 0.4 - this.hp / 100) / 0.4 : 0).toFixed(2));
     this.css('dmgDir', 'opacity', this.dirT.toFixed(2));
     if (this.dirT > 0) this.css('dmgDir', 'transform', `rotate(${(this.dirAng || 0).toFixed(3)}rad)`);
     // mode / wave text
-    if (this.mode === 'arena') {
+    if (this.versus) { /* handled in updateVersusHud */ }
+    else if (this.mode === 'arena') {
       this.txt('modeTxt', this.wave ? `WAVE ${this.wave}` : 'WAVE —');
       this.txt('subTxt', this.waveState === 'break' ? `다음 웨이브 ${Math.max(0, Math.ceil(this.breakT))}초` : `남은 적 ${this.queue.length + this.foes.length}`);
     } else {
@@ -906,10 +1214,59 @@ export class Game {
     if (this.hintT > 0) { this.hintT -= dt; if (this.hintT <= 0) this.cls('hint', 'show', false); }
   }
 
+  updateVersusHud(dt) {
+    const me = this.me, M = this.match, skill = SKILL[this.botSkill] ? SKILL[this.botSkill].name : '';
+    if (this.mode === 'duel') {
+      const bot = this.fighters[1];
+      this.txt('modeTxt', '1V1');
+      this.txt('subTxt', `${M.limit}킬 먼저 · ${bot ? bot.name : ''} (${skill})`);
+      this.txt('scoreTxt', `${me.kills} : ${bot ? bot.kills : 0}`);
+      this.txt('comboTxt', me.streak >= 2 ? `${me.streak}연속 처치` : '');
+    } else {
+      const t = Math.max(0, Math.ceil(M.timeLeft));
+      this.txt('modeTxt', 'FFA');
+      this.txt('subTxt', `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} · ${M.limit}킬 먼저 · 봇 ${skill}`);
+      this.txt('scoreTxt', `${me.kills} 킬`);
+      this.txt('comboTxt', `현재 ${this.ranking().indexOf(me) + 1}위`);
+    }
+    this._boardT -= dt;
+    if (this._boardT <= 0) {
+      this._boardT = 0.2;
+      const html = this.ranking().map(f => `<div class="${f === me ? 'me' : ''}${f.alive ? '' : ' dead'}"><i style="background:${f.css}"></i><span>${f.name}</span><b>${f.kills}</b><small>${f.deaths}</small></div>`).join('');
+      if (html !== this._boardHtml) { this._boardHtml = html; this.el('board').innerHTML = html; }
+    }
+    const dead = !me.alive && !M.over;
+    this.cls('deathMsg', 'show', dead);
+    if (dead) {
+      const k = this.deathInfo && this.deathInfo.by;
+      this.txt('deathBy', k ? `${k.name}에게 당함` : '쓰러짐');
+      this.css('deathBy', 'color', k ? k.css : '');
+      this.txt('deathT', `부활까지 ${Math.max(0, me.respawnT).toFixed(1)}초`);
+    }
+  }
+
   updateThreats() {
     const box = this.el('threats'); if (box === DUMMY_EL) return;
     if (!this._thr) { this._thr = []; for (let i = 0; i < 6; i++) { const e = document.createElement('i'); box.appendChild(e); this._thr.push(e); } }
     let k = 0;
+    // enemy discs about to hit you (dash through them!)
+    if (this.versus && this.me.alive) {
+      const B = this.player, cx = B.pos.x, cy = B.pos.y + 0.9, cz = B.pos.z;
+      for (const f of this.fighters) {
+        if (f === this.me || k >= this._thr.length) continue;
+        const d = f.disc; if (d.state === 'hand' || d.hit.has(this.me)) continue;
+        const rx = d.pos.x - cx, ry = d.pos.y - cy, rz = d.pos.z - cz;
+        const vx = d.vel.x - B.vel.x, vy = d.vel.y - B.vel.y, vz = d.vel.z - B.vel.z;
+        const v2 = vx * vx + vy * vy + vz * vz; if (v2 < 1) continue;
+        const tca = -(rx * vx + ry * vy + rz * vz) / v2;
+        if (tca < 0 || tca > 0.7) continue;
+        if (Math.hypot(rx + vx * tca, ry + vy * tca, rz + vz * tca) > 2.4) continue;
+        _a.copy(d.pos).applyMatrix4(this.camera.matrixWorldInverse);
+        const e = this._thr[k++];
+        e.style.transform = `rotate(${Math.atan2(_a.x, -_a.z).toFixed(3)}rad) translateY(-86px) scale(${tca < 0.25 ? 1.5 : 1})`;
+        e.style.opacity = '1'; e.className = tca < 0.25 ? '' : 'near';
+      }
+    }
     for (const f of this.foes) {
       if (k >= this._thr.length) break;
       if (!f.alive || f.windup <= 0 || f.dummy) continue;

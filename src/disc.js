@@ -1,5 +1,6 @@
 // THE DISC — our one weapon. Throw it, bank it off walls, pull it back, or blink to wherever it is.
 import * as THREE from 'three';
+import { Ribbon } from './fx.js';
 
 export const DISC = {
   speed: 46,          // base throw speed (m/s); your own forward speed is added on top
@@ -18,17 +19,18 @@ const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 const _hit = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
 
 export class Disc {
-  constructor(game) {
-    this.game = game;
+  constructor(game, owner = null, color = 0xff5a1f) {
+    this.game = game; this.owner = owner; this.color = color;
     this.state = 'hand';          // hand | out | return
     this.pos = new THREE.Vector3(); this.vel = new THREE.Vector3();
-    this.t = 0; this.bounces = 0; this.hit = new Set(); this.blinked = false; this.catchCd = 0;
+    this.t = 0; this.bounces = 0; this.hit = new Set(); this.blinked = false; this.catchCd = 0; this.kills = 0;
+    this.id = Disc.nextId = (Disc.nextId || 0) + 1; this.leg = 0;
     // world model
     const g = this.mesh = new THREE.Group();
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.06, 10, 40), new THREE.MeshStandardMaterial({ color: 0xff5a1f, roughness: 0.35, emissive: 0x401000 }));
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.06, 10, 40), new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: new THREE.Color(color).multiplyScalar(0.25) }));
     const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 32), new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.4 }));
     face.rotation.x = Math.PI / 2;
-    const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 16), new THREE.MeshStandardMaterial({ color: 0xff5a1f }));
+    const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 16), new THREE.MeshStandardMaterial({ color }));
     dot.rotation.x = Math.PI / 2;
     for (let i = 0; i < 3; i++) {
       const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.16, 0.04), new THREE.MeshStandardMaterial({ color: 0xffffff }));
@@ -38,22 +40,25 @@ export class Disc {
     this.spinner = g;
     this.holder = new THREE.Group(); this.holder.add(g); this.holder.visible = false;
     game.scene.add(this.holder);
+    this.trail = new Ribbon(game.scene, 22, color, 0.25);
   }
+  get body() { return this.owner ? this.owner.body : this.game.player; }
+  dispose() { this.game.scene.remove(this.holder); this.game.scene.remove(this.trail.mesh); }
 
   get out() { return this.state !== 'hand'; }
 
   throw(origin, dir, playerVel) {
     if (this.state !== 'hand' || this.catchCd > 0) return false;
-    this.state = 'out'; this.t = 0; this.bounces = 0; this.hit.clear(); this.blinked = false;
+    this.state = 'out'; this.t = 0; this.bounces = 0; this.hit.clear(); this.blinked = false; this.kills = 0; this.leg++;
     const carry = Math.max(0, playerVel.dot(dir)) * DISC.carry;
     this.pos.copy(origin); this.vel.copy(dir).multiplyScalar(DISC.speed + carry);
-    this.holder.visible = true; this.game.trail.reset();
+    this.holder.visible = true; this.trail.reset(); this.trail.width = 0.25;
     return true;
   }
 
   recall() {
     if (this.state !== 'out') return false;
-    this.state = 'return'; this.hit.clear();
+    this.state = 'return'; this.hit.clear(); this.leg++;
     return true;
   }
 
@@ -105,10 +110,11 @@ export class Disc {
       if (this.state === 'out' && this.t > DISC.outTime + this.bounces * 0.12) this.recall();
     }
     if (this.state === 'return') {
-      const target = v1.copy(G.player.eye).addScaledVector(G.player.vel, 0.04);
+      const B = this.body;
+      const target = v1.copy(B.eye).addScaledVector(B.vel, 0.04);
       const to = v2.subVectors(target, this.pos); const d = to.length();
       if (d < DISC.catchDist) { G.onDiscCatch(this); return; }
-      const want = to.divideScalar(d).multiplyScalar(DISC.returnSpeed + G.player.speed);
+      const want = to.divideScalar(d).multiplyScalar(DISC.returnSpeed + B.speed);
       this.vel.lerp(want, Math.min(1, dt * 9));
       const next = v2.copy(this.pos).addScaledVector(this.vel, dt);
       G.discSweep(this, this.pos, next, 'return');

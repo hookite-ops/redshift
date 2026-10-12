@@ -5,6 +5,7 @@ export class Audio {
     this.master = null;
     this.sfxVol = 0.8;
     this.musicVol = 0.45;
+    this.vol = 1; // per-sound distance attenuation (set around a call by Game.spatial)
   }
 
   init() {
@@ -67,6 +68,7 @@ export class Audio {
   _noise(dur, { type = 'bandpass', freq = 1000, q = 1, gain = 0.5, attack = 0.002, sweepTo = null, rev = 0.3 } = {}) {
     if (!this.ctx) return;
     const ctx = this.ctx, t = this.t;
+    gain = Math.max(0.0002, gain * this.vol);
     const src = ctx.createBufferSource(); src.buffer = this.noiseBuf;
     src.playbackRate.value = 0.8 + Math.random() * 0.4;
     const f = ctx.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
@@ -83,6 +85,7 @@ export class Audio {
   _tone(freq, dur, { type = 'sine', gain = 0.3, attack = 0.002, slideTo = null, rev = 0.3, delay = 0 } = {}) {
     if (!this.ctx) return;
     const ctx = this.ctx, t = this.t + delay;
+    gain = Math.max(0.0002, gain * this.vol);
     const o = ctx.createOscillator(); o.type = type; o.frequency.setValueAtTime(freq, t);
     if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
     const g = ctx.createGain();

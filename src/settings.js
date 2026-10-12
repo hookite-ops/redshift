@@ -12,7 +12,7 @@ export const DEFAULT_BINDS = {
 export const DEFAULTS = {
   sens: 0.8, fov: 103, fovFx: 14, shake: 0.5, tilt: 0.5, bob: 0.4,
   sfx: 0.8, music: 0.4, quality: 'high', fps: 0, full: 1, autoHop: 1,
-  difficulty: 'easy', keyHints: 1,
+  difficulty: 'easy', botSkill: 'max', keyHints: 1,
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {
@@ -30,7 +30,7 @@ export function loadSettings() {
   } catch { return JSON.parse(JSON.stringify(DEFAULTS)); }
 }
 export function saveSettings(S) { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch { } }
-export function loadRecords() { const d = { score: 0, wave: 0, speed: 0, combo: 0 }; try { return { ...d, ...JSON.parse(localStorage.getItem(REC) || '{}') }; } catch { return d; } }
+export function loadRecords() { const d = { score: 0, wave: 0, speed: 0, combo: 0, duelWin: 0, duelLose: 0, ffaWin: 0, ffaBest: 0 }; try { return { ...d, ...JSON.parse(localStorage.getItem(REC) || '{}') }; } catch { return d; } }
 export function saveRecords(r) { try { localStorage.setItem(REC, JSON.stringify(r)); } catch { } }
 
 export function keyName(c) {

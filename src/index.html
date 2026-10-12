@@ -61,6 +61,21 @@ b{font-weight:700}
 #feed div{background:var(--card);border:1px solid var(--line);padding:4px 10px;font-size:13px;display:flex;gap:10px;align-items:center;transition:opacity .45s,transform .45s;animation:fin .18s ease-out}
 #feed div b{font-family:'Space Grotesk';color:var(--or)}
 #feed div.out{opacity:0;transform:translateX(20px)}
+#feed div.kf{gap:7px;font-weight:700}
+#feed div.kf em{font-style:normal;color:var(--dim);font-weight:400}
+#feed div.kf small{font-weight:500;color:var(--or)}
+#feed div.kf.mine{border-color:var(--ink)}
+#board{position:absolute;left:28px;top:96px;width:210px;background:var(--card);border:1px solid var(--line);padding:6px 10px}
+#board div{display:grid;grid-template-columns:12px 1fr 30px 26px;gap:8px;align-items:center;font-size:13px;padding:3px 0;font-weight:700}
+#board div i{width:10px;height:10px;border-radius:50%}
+#board div b{font-family:'Space Grotesk';text-align:right;font-size:15px}
+#board div small{font-family:'Space Grotesk';color:var(--dim);text-align:right}
+#board div.me span{color:var(--or)}
+#board div.dead{opacity:.4}
+#deathMsg{position:absolute;left:0;right:0;top:38%;text-align:center;opacity:0;transition:opacity .2s}
+#deathMsg.show{opacity:1}
+#deathBy{font-size:34px;font-weight:900;text-shadow:0 0 6px #fff,0 0 6px #fff}
+#deathT{font-size:15px;color:var(--ink2);margin-top:6px;font-weight:700}
 @keyframes fin{from{opacity:0;transform:translateX(30px)}}
 
 /* center messages */
@@ -127,6 +142,9 @@ b{font-weight:700}
 .lo button{font:inherit;font-weight:700;font-size:15px;padding:9px 6px;background:#fff;border:1.5px solid var(--line);cursor:pointer;color:var(--ink)}
 .lo button small{display:block;font-size:11px;font-weight:400;color:var(--dim);margin-top:2px}
 .lo button.on{border-color:var(--or);background:#fff4ee}
+.lo.four{grid-template-columns:repeat(4,1fr)}
+.btn.vs{border-color:var(--ink);background:#fff}
+.btn.vs:hover{background:var(--ink)}
 .menuGrid{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;width:min(980px,96vw);padding:36px 40px}
 .logo{font-family:'Space Grotesk';font-weight:700;font-size:86px;line-height:.86;letter-spacing:-2px}
 .logo span{color:var(--or)}
@@ -172,6 +190,8 @@ b{font-weight:700}
   <div id="topL"><div id="modeTxt">WAVE —</div><div id="subTxt"></div></div>
   <div id="topR"><div id="scoreTxt" class="num">0</div><div id="comboTxt"></div></div>
   <div id="feed"></div>
+  <div id="board" class="hidden"></div>
+  <div id="deathMsg"><div id="deathBy"></div><div id="deathT"></div></div>
   <div id="tut" class="hidden"></div>
   <div id="banner"><div id="bannerBig"></div><div id="bannerSmall"></div></div>
   <div id="popup"></div>
@@ -200,8 +220,19 @@ b{font-weight:700}
     </div>
     <div>
       <button class="btn main" data-act="arena">아레나<small>포탑 · 추적자 · 방패병 웨이브 생존</small></button>
-      <button class="btn" data-act="practice">연습장<small>처음이면 여기부터 · 체크리스트 7개 · 안 죽음</small></button>
-      <h3>난이도</h3>
+      <div class="row2">
+        <button class="btn vs" data-act="duel">1V1<small>봇 1명과 맞대결 · 5킬 먼저</small></button>
+        <button class="btn vs" data-act="ffa">FFA<small>봇 5명 개인전 · 15킬 / 4분</small></button>
+      </div>
+      <button class="btn" data-act="practice">연습장<small>처음이면 여기부터 · 체크리스트 8개 · 안 죽음</small></button>
+      <h3>봇 실력 (1V1 · FFA)</h3>
+      <div class="lo four" id="botskill">
+        <button data-bs="easy">쉬움</button>
+        <button data-bs="normal">보통</button>
+        <button data-bs="hard">어려움</button>
+        <button data-bs="max">최강<small>예측·뱅크샷·회피</small></button>
+      </div>
+      <h3>아레나 난이도</h3>
       <div class="lo" id="difficulty">
         <button data-df="easy">쉬움<small>처음이면 이걸로</small></button>
         <button data-df="normal">보통<small>적당한 압박</small></button>
@@ -213,7 +244,7 @@ b{font-weight:700}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 3.0 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 3.1 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="pause" class="screen clear hidden">
@@ -268,7 +299,14 @@ b{font-weight:700}
     <div class="tips">
       처치 → 대시 1회 충전 · 순간이동 → 대시 1회 + 2단 점프 다시 충전. 계속 움직일수록 강해져요.
     </div>
-    <h3>적</h3>
+    <h3>1V1 · FFA (봇 대전)</h3>
+    <div class="tips">
+      봇도 나와 <em>똑같은 조작</em>만 써요 — 던지기·회수·순간이동·대시·2단 점프. 체력 100, 맞으면 4초 뒤부터 회복, 처치하면 체력 +25 · 대시 +1.<br>
+      <b>최강 봇</b>은 움직임을 예측해서 던지고, 숨으면 벽에 튕겨서 맞히고, 원반이 옆을 지나가는 순간 <em>순간이동 충격파</em>로 덮쳐요.<br>
+      <b>살아남는 법</b> — 빨간 화살표(원반 접근 경고)가 크게 뜨면 <em>대시</em>: 대시 중엔 원반도 충격파도 안 맞아요. 적 원반 근처에 오래 서 있지 마세요.<br>
+      이름표는 벽 너머로도 보여요(봇도 내 위치를 알아요). 너무 어려우면 메뉴에서 봇 실력을 낮추세요.
+    </div>
+    <h3>적 (아레나)</h3>
     <div class="tips">
       <b>포탑</b> — 빨간 선으로 조준한 뒤 느린 빨간 구체를 쏴요. 옆으로 움직이거나 대시로 피하기. 원반으로 구체를 쳐서 없앨 수도 있어요.<br>
       <b>추적자</b> — 굴러와서 부딪혀요. 대시로 뚫고 지나가면 안 맞아요.<br>
