@@ -1,0 +1,21 @@
+REDSHIFT — Google Cloud Run 자동 배포
+======================================
+
+[A] GitHub 자동 배포 (한 번만 설정하면 main 에 올라올 때마다 저절로 새 버전 배포)
+ 저장소: https://github.com/hookite-ops/REDSHIFT
+ 1) console.cloud.google.com → Cloud Run → 위쪽 [저장소 연결]
+    (서비스 이름 redshift, 리전 asia-northeast3 서울, "인증되지 않은 호출 허용" 체크)
+ 2) 저장소 제공업체 GitHub → Google Cloud Build 앱에 hookite-ops/REDSHIFT 권한 추가 → 저장소 선택 → [다음]
+ 3) 브랜치 ^main$ · 빌드 유형 Dockerfile · 소스 위치 /Dockerfile → [저장]
+ 4) 3~5분 뒤 화면에 나오는 https://redshift-....run.app 주소가 게임 주소
+ ※ 'storage.objects.get denied' 403 이 나오면 Cloud Shell 에서 deploy.sh 를 한 번 돌리면 권한이 자동으로 들어갑니다.
+
+[B] 직접 한 번 올리기 (Cloud Shell)
+ 1) console.cloud.google.com → 오른쪽 위 [>_] Cloud Shell
+ 2) 한 줄 실행:
+    rm -rf ~/REDSHIFT && git clone https://github.com/hookite-ops/REDSHIFT && bash REDSHIFT/deploy.sh
+    (zip으로 올릴 때: Cloud Shell ⋮ → [업로드] → REDSHIFT-deploy.zip →  unzip -o REDSHIFT-deploy.zip && bash REDSHIFT/deploy.sh )
+
+알아둘 점
+- 정적 게임이라 서버는 파일만 보내 줍니다. 아무도 안 들어오면 꺼져서 요금이 거의 안 나옵니다.
+- 게임 코드는 src/, 실제로 배포되는 파일은 public/ (npm install && npm run build 로 다시 만듦).

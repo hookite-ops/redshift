@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REDSHIFT — 고속 근접 FPS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@700;900&family=Noto+Sans+KR:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root { --red:#ff2a48; --red2:#ff6070; --cyan:#30e0ff; --gold:#ffb030; --ink:#f2eef2; --dim:#9a8f9c; --bg:rgba(10,6,10,.78); }
+  * { box-sizing:border-box; margin:0; padding:0; user-select:none; -webkit-user-select:none; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#000; color:var(--ink); font-family:'Rajdhani','Noto Sans KR',sans-serif; }
+  canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; cursor:crosshair; }
+  .hidden { display:none !important; }
+
+  /* ---------- HUD ---------- */
+  #hud { position:fixed; inset:0; pointer-events:none; }
+  #cross { position:absolute; left:50%; top:50%; width:44px; height:44px; transform:translate(-50%,-50%); }
+  #cross .dot { position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px; background:#fff; border-radius:50%; box-shadow:0 0 6px var(--red); }
+  #cross .arm { position:absolute; background:rgba(255,255,255,.85); }
+  #cross .a1 { left:50%; top:4px; width:2px; height:9px; margin-left:-1px; }
+  #cross .a2 { left:50%; bottom:4px; width:2px; height:9px; margin-left:-1px; }
+  #cross .a3 { top:50%; left:4px; height:2px; width:9px; margin-top:-1px; }
+  #cross .a4 { top:50%; right:4px; height:2px; width:9px; margin-top:-1px; }
+  #hit { position:absolute; left:50%; top:50%; width:34px; height:34px; transform:translate(-50%,-50%) rotate(45deg); opacity:0; }
+  #hit::before,#hit::after { content:''; position:absolute; background:#fff; }
+  #hit::before { left:50%; top:0; width:2px; height:100%; margin-left:-1px; -webkit-mask:linear-gradient(#000 0 35%,transparent 35% 65%,#000 65%); mask:linear-gradient(#000 0 35%,transparent 35% 65%,#000 65%); }
+  #hit::after { top:50%; left:0; height:2px; width:100%; margin-top:-1px; -webkit-mask:linear-gradient(90deg,#000 0 35%,transparent 35% 65%,#000 65%); mask:linear-gradient(90deg,#000 0 35%,transparent 35% 65%,#000 65%); }
+  #hit.head::before,#hit.head::after { background:var(--red); }
+  #parryRing { position:absolute; left:50%; top:50%; width:70px; height:70px; margin:-35px; border-radius:50%; border:2px solid var(--cyan); opacity:0; }
+  #threats { position:absolute; left:50%; top:50%; width:0; height:0; }
+  .threat { position:absolute; width:0; height:0; border-left:11px solid transparent; border-right:11px solid transparent; border-bottom:18px solid var(--gold); filter:drop-shadow(0 0 6px var(--gold)); }
+  .dmgdir { position:absolute; width:120px; height:30px; margin:-15px -60px; background:radial-gradient(ellipse at 50% 100%, rgba(255,30,50,.9), transparent 70%); }
+
+  #speedo { position:absolute; left:50%; bottom:38px; transform:translateX(-50%); text-align:center; }
+  #speedNum { font-family:'Orbitron',sans-serif; font-weight:900; font-size:46px; line-height:1; letter-spacing:2px; text-shadow:0 0 18px rgba(255,42,72,.6); }
+  #speedUnit { font-size:13px; letter-spacing:4px; color:var(--dim); }
+  #speedBar { width:340px; height:6px; margin:8px auto 0; background:rgba(255,255,255,.08); position:relative; overflow:hidden; clip-path:polygon(4% 0,100% 0,96% 100%,0 100%); }
+  #speedFill { position:absolute; inset:0; width:0%; background:linear-gradient(90deg,var(--cyan),#fff 50%,var(--red)); }
+  #momentum { margin-top:6px; font-size:14px; letter-spacing:3px; color:var(--red2); font-weight:700; height:18px; }
+  #pips { display:flex; gap:6px; justify-content:center; margin-top:10px; }
+  .pip { width:34px; height:7px; background:rgba(255,255,255,.12); transform:skewX(-25deg); position:relative; overflow:hidden; }
+  .pip i { position:absolute; inset:0; background:var(--cyan); transform-origin:left; box-shadow:0 0 10px var(--cyan); }
+  .pipLbl { font-size:11px; letter-spacing:3px; color:var(--dim); margin-top:4px; }
+
+  #hpBox { position:absolute; left:42px; bottom:40px; width:300px; }
+  #hpLbl { font-size:13px; letter-spacing:4px; color:var(--dim); display:flex; justify-content:space-between; }
+  #hpNum { font-family:'Orbitron'; font-size:30px; font-weight:900; }
+  #hpBar { height:12px; background:rgba(255,255,255,.08); margin-top:6px; transform:skewX(-20deg); overflow:hidden; position:relative; }
+  #hpFill { position:absolute; inset:0; background:linear-gradient(90deg,#ff1038,#ff6a7a); box-shadow:0 0 14px var(--red); transform-origin:left; }
+  #hpGhost { position:absolute; inset:0; background:#fff; opacity:.5; transform-origin:left; }
+  #grap { margin-top:14px; display:flex; align-items:center; gap:10px; font-size:13px; letter-spacing:3px; color:var(--dim); }
+  #grapIcon { width:26px; height:26px; border-radius:50%; border:2px solid var(--cyan); display:grid; place-items:center; font-size:12px; color:var(--cyan); background:conic-gradient(rgba(48,224,255,.35) var(--p,100%), transparent 0); }
+
+  #ammoBox { position:absolute; right:42px; bottom:40px; text-align:right; }
+  #ammoNum { font-family:'Orbitron'; font-size:44px; font-weight:900; line-height:1; }
+  #ammoNum small { font-size:18px; color:var(--dim); }
+  #ammoLbl { font-size:13px; letter-spacing:4px; color:var(--dim); }
+  #rounds { display:flex; gap:5px; justify-content:flex-end; margin-top:8px; }
+  .rd { width:9px; height:22px; background:var(--gold); border-radius:4px 4px 1px 1px; box-shadow:0 0 6px rgba(255,176,48,.6); }
+  .rd.off { background:rgba(255,255,255,.12); box-shadow:none; }
+  #reloadTxt { font-size:14px; letter-spacing:3px; color:var(--gold); height:18px; margin-top:4px; }
+
+  #topBar { position:absolute; top:22px; left:50%; transform:translateX(-50%); text-align:center; }
+  #waveTxt { font-family:'Orbitron'; font-size:16px; letter-spacing:6px; color:var(--red2); }
+  #enemyTxt { font-size:14px; letter-spacing:3px; color:var(--dim); margin-top:2px; }
+  #scoreTxt { font-family:'Orbitron'; font-size:26px; font-weight:900; margin-top:6px; }
+
+  #style { position:absolute; right:42px; top:120px; text-align:right; width:240px; }
+  #rank { font-family:'Orbitron'; font-weight:900; font-size:76px; line-height:1; color:#fff; text-shadow:0 0 24px var(--red); transition:transform .1s; }
+  #rankName { font-size:14px; letter-spacing:5px; color:var(--red2); margin-top:2px; }
+  #rankBar { height:4px; background:rgba(255,255,255,.1); margin-top:8px; }
+  #rankFill { height:100%; background:var(--red); width:0; box-shadow:0 0 10px var(--red); }
+  #mult { font-family:'Orbitron'; font-size:15px; color:var(--gold); margin-top:6px; }
+  #feed { margin-top:14px; display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+  .feedItem { font-size:16px; font-weight:700; letter-spacing:2px; color:#fff; animation:feedIn .25s ease-out, feedOut .5s ease-in 1.6s forwards; }
+  .feedItem b { color:var(--gold); margin-left:8px; }
+  @keyframes feedIn { from { transform:translateX(30px); opacity:0 } }
+  @keyframes feedOut { to { opacity:0; transform:translateX(20px) } }
+
+  #banner { position:absolute; left:0; right:0; top:28%; text-align:center; pointer-events:none; }
+  #bannerBig { font-family:'Orbitron'; font-weight:900; font-size:64px; letter-spacing:12px; color:#fff; text-shadow:0 0 30px var(--red), 0 0 60px var(--red); }
+  #bannerSmall { font-size:20px; letter-spacing:6px; color:var(--red2); margin-top:6px; }
+  .bannerAnim { animation:bannerIn 2.4s ease-out forwards; }
+  @keyframes bannerIn { 0%{opacity:0; transform:scale(1.4); letter-spacing:40px} 12%{opacity:1; transform:scale(1)} 80%{opacity:1} 100%{opacity:0} }
+
+  #popup { position:absolute; left:50%; top:58%; transform:translateX(-50%); font-family:'Orbitron'; font-size:22px; font-weight:900; letter-spacing:6px; opacity:0; }
+  .dnum { position:absolute; font-family:'Orbitron'; font-weight:900; font-size:18px; color:#fff; text-shadow:0 0 8px #000; transform:translate(-50%,-50%); pointer-events:none; }
+  .dnum.head { color:var(--red2); font-size:24px; }
+  #lowhp { position:absolute; inset:0; box-shadow:inset 0 0 160px rgba(255,0,30,.0); transition:box-shadow .3s; }
+
+  /* ---------- Menus ---------- */
+  .screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 30% 50%, rgba(80,0,20,.55), rgba(0,0,0,.92)); z-index:10; }
+  .screen.clear { background:rgba(5,2,6,.72); backdrop-filter:blur(6px); }
+  .panel { width:min(560px,92vw); }
+  .logo { font-family:'Orbitron'; font-weight:900; font-size:clamp(54px,9vw,112px); letter-spacing:10px; line-height:.9; color:#fff; text-shadow:0 0 30px var(--red), 4px 0 0 rgba(255,42,72,.6), -4px 0 0 rgba(48,224,255,.4); font-style:italic; }
+  .tag { font-size:18px; letter-spacing:8px; color:var(--red2); margin:14px 0 36px; }
+  .btn { display:block; width:100%; text-align:left; padding:14px 22px; margin:8px 0; font-family:'Noto Sans KR','Rajdhani'; font-weight:700; font-size:20px; letter-spacing:2px; color:var(--ink); background:linear-gradient(90deg,rgba(255,42,72,.14),rgba(255,255,255,.02)); border:none; border-left:3px solid var(--red); cursor:pointer; clip-path:polygon(0 0,100% 0,97% 100%,0 100%); transition:all .12s; }
+  .btn:hover { background:linear-gradient(90deg,rgba(255,42,72,.45),rgba(255,255,255,.04)); padding-left:32px; color:#fff; }
+  .btn small { display:block; font-size:13px; font-weight:500; color:var(--dim); letter-spacing:1px; margin-top:2px; }
+  h2 { font-family:'Orbitron'; font-size:30px; letter-spacing:6px; margin-bottom:18px; color:#fff; }
+  .row { display:flex; align-items:center; justify-content:space-between; padding:9px 0; border-bottom:1px solid rgba(255,255,255,.07); font-size:17px; font-family:'Noto Sans KR'; font-weight:500; }
+  .row input[type=range] { width:220px; accent-color:var(--red); }
+  .row select { background:#1a1018; color:#fff; border:1px solid #442; padding:4px 8px; font-size:15px; }
+  .row .val { width:50px; text-align:right; color:var(--gold); font-family:'Orbitron'; font-size:14px; }
+  .key { min-width:110px; padding:6px 10px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15); color:#fff; font-family:'Rajdhani'; font-weight:700; font-size:15px; cursor:pointer; }
+  .key.listen { border-color:var(--gold); color:var(--gold); }
+  .scroll { max-height:58vh; overflow-y:auto; padding-right:8px; }
+  .scroll::-webkit-scrollbar { width:6px } .scroll::-webkit-scrollbar-thumb { background:var(--red) }
+  .ctrlGrid { display:grid; grid-template-columns:1fr 1fr; gap:6px 22px; font-family:'Noto Sans KR'; font-size:15px; }
+  .ctrlGrid div { display:flex; justify-content:space-between; border-bottom:1px solid rgba(255,255,255,.06); padding:5px 0; }
+  .ctrlGrid b { color:var(--gold); font-family:'Rajdhani'; font-size:16px; }
+  .tips { margin-top:16px; font-family:'Noto Sans KR'; font-size:14px; color:#cbbfcc; line-height:1.75; }
+  .tips b { color:var(--red2); }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:20px 0; }
+  .stat { background:rgba(255,255,255,.04); padding:14px; border-left:3px solid var(--red); }
+  .stat span { display:block; font-size:13px; color:var(--dim); letter-spacing:3px; font-family:'Noto Sans KR'; }
+  .stat b { font-family:'Orbitron'; font-size:26px; }
+  #clickTo { position:fixed; left:50%; top:60%; transform:translateX(-50%); font-family:'Noto Sans KR'; font-size:18px; letter-spacing:3px; color:#fff; background:rgba(0,0,0,.6); padding:10px 22px; border:1px solid var(--red); z-index:5; }
+  #loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#000; z-index:20; font-family:'Orbitron'; letter-spacing:8px; color:var(--red); }
+  #fps { position:fixed; top:6px; left:8px; font-size:12px; color:#7a7; font-family:monospace; z-index:3; }
+  .credits { position:absolute; bottom:18px; left:0; right:0; text-align:center; font-size:12px; color:#665; letter-spacing:2px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading">LOADING</div>
+<div id="fps" class="hidden"></div>
+
+<div id="hud" class="hidden">
+  <div id="lowhp"></div>
+  <div id="threats"></div>
+  <div id="cross"><div class="dot"></div><div class="arm a1"></div><div class="arm a2"></div><div class="arm a3"></div><div class="arm a4"></div></div>
+  <div id="hit"></div>
+  <div id="parryRing"></div>
+  <div id="topBar"><div id="waveTxt">WAVE 1</div><div id="enemyTxt"></div><div id="scoreTxt">0</div></div>
+  <div id="style"><div id="rank">D</div><div id="rankName">DULL</div><div id="rankBar"><div id="rankFill"></div></div><div id="mult">x1.0</div><div id="feed"></div></div>
+  <div id="speedo">
+    <div id="speedNum">0</div><div id="speedUnit">KM/H</div>
+    <div id="speedBar"><div id="speedFill"></div></div>
+    <div id="momentum"></div>
+    <div id="pips"></div><div class="pipLbl">DASH</div>
+  </div>
+  <div id="hpBox">
+    <div id="hpLbl"><span>VITAL</span><span id="hpNum">100</span></div>
+    <div id="hpBar"><div id="hpGhost"></div><div id="hpFill"></div></div>
+    <div id="grap"><div id="grapIcon">G</div><span>GRAPPLE</span></div>
+  </div>
+  <div id="ammoBox">
+    <div id="ammoLbl">REVOLVER</div>
+    <div id="ammoNum">6<small> / 6</small></div>
+    <div id="rounds"></div>
+    <div id="reloadTxt"></div>
+  </div>
+  <div id="banner"><div id="bannerBig"></div><div id="bannerSmall"></div></div>
+  <div id="popup"></div>
+  <div id="dnums"></div>
+</div>
+
+<div id="clickTo" class="hidden">클릭해서 계속</div>
+
+<!-- TITLE -->
+<div id="menu" class="screen hidden">
+  <div class="panel">
+    <div class="logo">RED<br>SHIFT</div>
+    <div class="tag">속도가 곧 칼날이다</div>
+    <button class="btn" data-act="arena">아레나<small>몰려오는 적을 상대로 끝까지 버텨라</small></button>
+    <button class="btn" data-act="freerun">프리런<small>적 없이 이동기만 연습</small></button>
+    <button class="btn" data-act="controls">조작법</button>
+    <button class="btn" data-act="settings">설정</button>
+    <div id="bestTxt" style="margin-top:18px;font-family:'Noto Sans KR';color:var(--dim);font-size:14px;letter-spacing:2px"></div>
+  </div>
+  <div class="credits">REDSHIFT · 오리지널 웹게임 · three.js</div>
+</div>
+
+<!-- PAUSE -->
+<div id="pause" class="screen clear hidden">
+  <div class="panel">
+    <h2>PAUSED</h2>
+    <button class="btn" data-act="resume">계속하기</button>
+    <button class="btn" data-act="restart">재시작</button>
+    <button class="btn" data-act="controls">조작법</button>
+    <button class="btn" data-act="settings">설정</button>
+    <button class="btn" data-act="quit">타이틀로</button>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="settings" class="screen clear hidden">
+  <div class="panel" style="width:min(640px,94vw)">
+    <h2>SETTINGS</h2>
+    <div class="scroll">
+      <div class="row">마우스 감도<input type="range" id="sSens" min="0.1" max="5" step="0.05"><span class="val" id="vSens"></span></div>
+      <div class="row">시야각 (FOV)<input type="range" id="sFov" min="80" max="120" step="1"><span class="val" id="vFov"></span></div>
+      <div class="row">속도 FOV 효과<input type="range" id="sFovFx" min="0" max="30" step="1"><span class="val" id="vFovFx"></span></div>
+      <div class="row">화면 흔들림<input type="range" id="sShake" min="0" max="1.5" step="0.05"><span class="val" id="vShake"></span></div>
+      <div class="row">효과음<input type="range" id="sSfx" min="0" max="1" step="0.05"><span class="val" id="vSfx"></span></div>
+      <div class="row">음악<input type="range" id="sMusic" min="0" max="1" step="0.05"><span class="val" id="vMusic"></span></div>
+      <div class="row">그래픽 품질 <select id="sQuality"><option value="low">낮음</option><option value="high">높음</option><option value="ultra">울트라</option></select></div>
+      <div class="row">FPS 표시 <select id="sFps"><option value="0">끄기</option><option value="1">켜기</option></select></div>
+      <div class="row">시작할 때 전체화면 <select id="sFull"><option value="1">켜기</option><option value="0">끄기</option></select></div>
+      <div style="margin:18px 0 6px;font-family:'Orbitron';letter-spacing:4px;color:var(--red2)">KEYBINDS</div>
+      <div id="binds"></div>
+    </div>
+    <button class="btn" data-act="back" style="margin-top:16px">닫기</button>
+  </div>
+</div>
+
+<!-- CONTROLS -->
+<div id="controls" class="screen clear hidden">
+  <div class="panel" style="width:min(720px,94vw)">
+    <h2>CONTROLS</h2>
+    <div class="ctrlGrid" id="ctrlGrid"></div>
+    <div class="tips">
+      <b>버니합</b> — 착지 순간 점프하면 마찰 없이 속도 유지. 공중에서 A/D + 마우스를 같은 방향으로 돌리면 가속.<br>
+      <b>슬라이드</b> — 달리다 웅크리기. 높은 곳에서 떨어지며 웅크린 채 착지하면 낙하 속도가 앞으로 전환.<br>
+      <b>벽타기</b> — 공중에서 벽을 따라 비스듬히 붙기. 벽에서 점프하면 가속하며 튕겨나감.<br>
+      <b>그래플</b> — 키를 누르고 있는 동안 당겨짐. 적을 조준하면 적에게 날아가 바로 베기.<br>
+      <b>패링</b> — 적 칼이 <span style="color:var(--gold)">금색으로 깜빡일 때</span> 또는 총알 직전에 누르면 반사. 성공 시 슬로모션 + 대시 충전.<br>
+      <b>모멘텀</b> — 빠를수록 칼 데미지 상승(최대 x2.5). 멈추면 약해진다.
+    </div>
+    <button class="btn" data-act="back" style="margin-top:16px">닫기</button>
+  </div>
+</div>
+
+<!-- DEATH -->
+<div id="death" class="screen hidden">
+  <div class="panel">
+    <div class="logo" style="font-size:72px">FLATLINED</div>
+    <div class="stats" id="deathStats"></div>
+    <button class="btn" data-act="restart">다시 하기</button>
+    <button class="btn" data-act="quit">타이틀로</button>
+  </div>
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>
