@@ -212,6 +212,16 @@ export class GameMap {
 
   pillar(x, z, h, key = 'concrete', w = 1.4) { this.bbox(x, 0, z, w, h, w, key, { flags: SURF.GRAPPLE }); }
 
+  laneBlock(x, z) {
+    // kicker approach lanes run tangentially at r≈34 toward each slab pair; trial start at (-26, 34)
+    for (let k = 0; k < 4; k++) {
+      const a2 = (k + 1) * Math.PI / 2, tang = a2 + Math.PI / 2;
+      const kx = Math.cos(a2) * 34 + Math.cos(tang) * 17, kz = Math.sin(a2) * 34 + Math.sin(tang) * 17;
+      if (Math.hypot(x - kx, z - kz) < 14) return true;
+    }
+    return Math.hypot(x + 26, z - 34) < 10;
+  }
+
   // ---------------- LAYOUT ----------------
   build() {
     const R = this.R, H = this.half;
@@ -298,11 +308,12 @@ export class GameMap {
       // kicker ramps toward the slabs
       const kx = Math.cos(a2) * 34 + Math.cos(tang) * 17, kz = Math.sin(a2) * 34 + Math.sin(tang) * 17;
       this.wedgeAt(kx, kz, Math.atan2(-Math.cos(tang), -Math.sin(tang)), 5, 7, 2.4);
-      // cover blocks
+      // cover blocks (kept out of kicker lanes and the trial start)
       for (let i = 0; i < 3; i++) {
         const aa = a + (R() - 0.5) * 0.9, rr = 28 + R() * 16;
         const x = Math.cos(aa) * rr, z = Math.sin(aa) * rr;
         if (Math.abs(rr - 34) < 6) continue;
+        if (this.laneBlock(x, z)) continue;
         this.bbox(x, 0, z, 2 + R() * 3, 1.2 + R() * 1.8, 2 + R() * 3, R() < 0.5 ? 'panel' : 'red', { ry: R() * 3, flags: SURF.GRAPPLE });
       }
       this.spawnGround.push(new THREE.Vector3(Math.cos(a) * 40, 0, Math.sin(a) * 40));
@@ -314,6 +325,38 @@ export class GameMap {
     this.districtEastPort();
     this.districtWestMarket();
     this.districtCorners();
+
+    // ===== landmarks: spire sky-beam, sweeping searchlights, plaza emblem =====
+    const beamMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      uniforms: { color: { value: new THREE.Color(1.6, 0.12, 0.25) }, time: { value: 0 } },
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+      fragmentShader: `varying vec2 vUv; uniform vec3 color; uniform float time; void main(){ float a = (1.0 - vUv.y) * (0.6 + 0.4*sin(vUv.y*40.0 - time*6.0)); a *= smoothstep(0.0, 0.25, vUv.x) * smoothstep(1.0, 0.75, vUv.x); gl_FragColor = vec4(color, a * 0.5); }`
+    });
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.6, 400, 24, 1, true), beamMat);
+    beam.position.y = 62 + 200; this.scene.add(beam);
+    const lights = [];
+    for (let k = 0; k < 4; k++) {
+      const m = beamMat.clone(); m.uniforms.color.value = new THREE.Color(k % 2 ? 0.25 : 0.9, k % 2 ? 0.8 : 0.15, k % 2 ? 1.1 : 0.3);
+      const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 9, 260, 20, 1, true), m);
+      cone.geometry.translate(0, 130, 0);
+      const piv = new THREE.Group(); piv.position.set((k < 2 ? -1 : 1) * 132, 52, (k % 2 ? -1 : 1) * 132); piv.add(cone); this.scene.add(piv);
+      lights.push({ piv, ph: k * 1.7 });
+    }
+    this.animated.push(t => { beamMat.uniforms.time.value = t; lights.forEach(l => { l.piv.rotation.set(0.5 + Math.sin(t * 0.21 + l.ph) * 0.25, t * 0.13 + l.ph, Math.sin(t * 0.17 + l.ph) * 0.3); l.piv.children[0].material.uniforms.time.value = t; }); });
+    // emblem painted around the spire base
+    {
+      const c = document.createElement('canvas'); c.width = c.height = 1024; const g = c.getContext('2d');
+      g.translate(512, 512); g.strokeStyle = 'rgba(255,42,72,0.85)'; g.lineWidth = 14; g.beginPath(); g.arc(0, 0, 480, 0, Math.PI * 2); g.stroke();
+      g.lineWidth = 4; g.beginPath(); g.arc(0, 0, 440, 0, Math.PI * 2); g.stroke();
+      g.font = '900 64px Orbitron, sans-serif'; g.fillStyle = 'rgba(255,42,72,0.8)'; g.textAlign = 'center';
+      const txt = 'REDSHIFT · VELOCITY IS THE BLADE · 赤線 · ';
+      for (let i = 0; i < txt.length; i++) { g.save(); g.rotate(i / txt.length * Math.PI * 2); g.fillText(txt[i], 0, -365); g.restore(); }
+      for (let i = 0; i < 24; i++) { g.save(); g.rotate(i / 24 * Math.PI * 2); g.fillStyle = 'rgba(48,224,255,0.6)'; g.fillRect(-6, -300, 12, 40); g.restore(); }
+      const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+      const em = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: new THREE.Color(1.3, 1.3, 1.3), polygonOffset: true, polygonOffsetFactor: -2 }));
+      em.rotation.x = -Math.PI / 2; em.position.y = 0.03; this.scene.add(em);
+    }
 
     // ===== hologram rings around the spire top =====
     const ring1 = new THREE.Mesh(new THREE.TorusGeometry(9, 0.18, 10, 128), new THREE.MeshBasicMaterial({ color: new THREE.Color(C.RED).multiplyScalar(3) }));

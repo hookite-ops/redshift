@@ -92,11 +92,11 @@ function openSettings() {
     el.value = S[key]; vl.textContent = fmt(S[key]);
     el.oninput = () => { S[key] = parseFloat(el.value); vl.textContent = fmt(S[key]); saveSettings(S); applySettings(); };
   };
-  sl('Sens', 'sens', v => (+v).toFixed(2)); sl('Fov', 'fov'); sl('FovFx', 'fovFx'); sl('Shake', 'shake', v => (+v).toFixed(2));
+  sl('Sens', 'sens', v => { const cm = (2 * Math.PI / (v * 0.0012) / 800 * 2.54); $('cm360').textContent = `(800DPI 기준 360° = ${cm.toFixed(1)}cm)`; return (+v).toFixed(2); }); sl('Fov', 'fov'); sl('FovFx', 'fovFx'); sl('Shake', 'shake', v => (+v).toFixed(2));
   sl('Tilt', 'tilt', v => (+v).toFixed(2)); sl('Bob', 'bob', v => (+v).toFixed(2)); sl('Blur', 'blur', v => (+v).toFixed(2));
   sl('Sfx', 'sfx', v => Math.round(v * 100)); sl('Music', 'music', v => Math.round(v * 100));
   const sel = (id, key, num = true, after) => { const el = $('s' + id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(S); applySettings(); after && after(); }; };
-  sel('AutoHop', 'autoHop'); sel('Fps', 'fps'); sel('Full', 'full'); sel('Cross', 'crosshair', false);
+  sel('AutoHop', 'autoHop'); sel('CrouchToggle', 'crouchToggle'); sel('Fps', 'fps'); sel('Full', 'full'); sel('Cross', 'crosshair', false);
   sel('Quality', 'quality', false, () => { if (confirm('그래픽 품질을 바꾸려면 새로고침이 필요해요. 지금 새로고침할까요?')) { game.state = 'menu'; location.reload(); } });
   renderBinds();
 }

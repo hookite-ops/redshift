@@ -22,6 +22,9 @@ canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
 #cross .tk{position:absolute;background:var(--xc,#fff);opacity:.9;transition:transform .08s}
 #cross .t1{left:-1px;top:-16px;width:2px;height:8px}#cross .t2{left:-1px;top:8px;width:2px;height:8px}
 #cross .t3{left:-16px;top:-1px;width:8px;height:2px}#cross .t4{left:8px;top:-1px;width:8px;height:2px}
+#cross::after{content:'';position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--cyan);opacity:0;transform:scale(.6);transition:all .12s}
+#cross.grap::after{opacity:.75;transform:scale(1)}
+#cross.lunge .dot,#cross.lunge .tk{background:var(--red)!important;box-shadow:0 0 8px var(--red)}
 #chargeRing{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px;border-radius:50%;background:conic-gradient(var(--gold) var(--p,0%),transparent 0);-webkit-mask:radial-gradient(circle,transparent 24px,#000 25px);mask:radial-gradient(circle,transparent 24px,#000 25px);opacity:0}
 #parryRing{position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px;border-radius:50%;border:2px solid var(--cyan);opacity:0}
 #hit{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px;transform:rotate(45deg);opacity:0}
@@ -220,8 +223,9 @@ h3{font-family:'Orbitron';font-size:13px;letter-spacing:5px;color:var(--red2);ma
   <div class="panel" style="width:min(660px,94vw)">
     <h2>SETTINGS</h2>
     <h3>CONTROL</h3>
-    <div class="row">마우스 감도<input type="range" id="sSens" min="0.05" max="5" step="0.01"><span class="val" id="vSens"></span></div>
+    <div class="row"><span>마우스 감도<br><small id="cm360" style="color:var(--dim);font-size:11px"></small></span><input type="range" id="sSens" min="0.05" max="5" step="0.01"><span class="val" id="vSens"></span></div>
     <div class="row">점프 꾹 = 자동 버니합 <select id="sAutoHop"><option value="1">켜기</option><option value="0">끄기</option></select></div>
+    <div class="row">웅크리기/슬라이드 방식 <select id="sCrouchToggle"><option value="0">누르고 있기</option><option value="1">토글</option></select></div>
     <h3>CAMERA</h3>
     <div class="row">시야각 (FOV)<input type="range" id="sFov" min="80" max="120" step="1"><span class="val" id="vFov"></span></div>
     <div class="row">속도에 따른 FOV<input type="range" id="sFovFx" min="0" max="30" step="1"><span class="val" id="vFovFx"></span></div>

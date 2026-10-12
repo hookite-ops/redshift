@@ -146,7 +146,10 @@ export class Game {
     this.audio.init(); this.audio.setVolumes(this.S.sfx, this.S.music);
     this.clearWorld();
     this.resetRun();
+    this.slowmoT = 0; this.hitstop = 0; this.timeScale = 1; this.crouchLatched = false;
+    Object.assign(this.camState, { dip: 0, dipV: 0, tilt: 0, kick: 0, trauma: 0 });
     this.vm.setLoadout(this.S.loadout);
+    this.vm.anim.sword = null; this.vm.anim.left = null; this.vm.charge = 0;
     const P = this.player;
     if (mode === 'trial') { P.reset(this.map.trialStart.pos, this.map.trialStart.yaw); this.setupTrial(); }
     else if (mode === 'training') { P.reset(new THREE.Vector3(0, 0.05, 40), Math.PI); this.setupTraining(); }
@@ -155,7 +158,7 @@ export class Game {
     document.getElementById('style').style.visibility = mode === 'arena' ? 'visible' : 'hidden';
     document.getElementById('modeTxt').textContent = mode === 'arena' ? 'GET READY' : mode === 'trial' ? 'TIME ATTACK' : 'TRAINING';
     document.getElementById('subTxt').textContent = mode === 'trial' ? `T 키로 재시작 · 최고 ${this.records && this.records.trial ? fmtTime(this.records.trial) : '-'}` : mode === 'training' ? '기술을 하나씩 해보세요 · 피해 없음' : '';
-    if (mode === 'arena') this.hud.banner('REDSHIFT', '멈추지 마라. 베어라.');
+    if (mode === 'arena') { this.hud.banner('REDSHIFT', '멈추지 마라. 베어라.'); setTimeout(() => this.state === 'play' && this.hud.hint('Shift 대시 · C 슬라이드 · E 그래플 · F 패링 · 좌클릭 꾹 = 발도술', 5500), 2600); }
     else if (mode === 'trial') this.hud.banner('TIME ATTACK', '체크포인트를 순서대로 통과');
     else this.hud.banner('TRAINING', '왼쪽 체크리스트를 채워보세요');
     this.state = 'play';
@@ -314,7 +317,7 @@ export class Game {
       fwd: (I.is('forward') ? 1 : 0) - (I.is('back') ? 1 : 0),
       right: (I.is('right') ? 1 : 0) - (I.is('left') ? 1 : 0),
       jumpPressed: I.pressed('jump'), jumpHeld: I.is('jump'),
-      crouch: I.is('crouch'), dashPressed: I.pressed('dash'),
+      crouch: I.is('crouch'), crouchPressed: I.pressed('crouch'), dashPressed: I.pressed('dash'),
       grapplePressed: I.pressed('grapple'), grappleHeld: I.is('grapple'),
       autoHop: !!this.S.autoHop,
       slashPressed: I.pressed('slash'), slashHeld: I.is('slash'), slashReleased: I.released('slash'),
@@ -332,7 +335,13 @@ export class Game {
     const stunned = P.stagger > 0;
     if (inp.restartPressed && this.mode === 'trial') { this.restartTrial(); return; }
 
+    // crouch toggle option
+    if (this.S.crouchToggle) { if (inp.crouchPressed) this.crouchLatched = !this.crouchLatched; if (inp.jumpPressed && this.crouchLatched && P.sliding) this.crouchLatched = false; inp.crouch = this.crouchLatched; }
     P.tick(dt, inp, this.playerCtx || (this.playerCtx = { hookEnemy: (pos, dir, step) => this.hookEnemy(pos, dir, step) }));
+    // soft world bounds (roofs of the boundary blocks are reachable, the void beyond is not)
+    const B = this.map.half + 11;
+    if (Math.abs(P.pos.x) > B) { P.pos.x = Math.sign(P.pos.x) * B; if (P.vel.x * Math.sign(P.pos.x) > 0) P.vel.x = 0; }
+    if (Math.abs(P.pos.z) > B) { P.pos.z = Math.sign(P.pos.z) * B; if (P.vel.z * Math.sign(P.pos.z) > 0) P.vel.z = 0; }
     this.maxSpeed = Math.max(this.maxSpeed, P.hSpeed);
     if (P.sliding && P.groundN.y < 0.985 && P.hSpeed * 3.6 > 60) this.train('ramp');
     if (P.hSpeed * 3.6 > 90) this.train('speed');
@@ -799,7 +808,7 @@ export class Game {
     const ctx = this._ectx = {
       player: this.player, enemies: this.enemies, camera: this.camera,
       los(a, b) { v1.subVectors(b, a); const len = v1.length(); v1.divideScalar(len); return !g.map.col.raycast(a.x, a.y, a.z, v1.x, v1.y, v1.z, len - 0.3, _hit); },
-      telegraph(e, parryable) { g.audio.telegraph(parryable); },
+      telegraph(e, parryable) { g.audio.telegraph(parryable); g.once(parryable ? 'yellow' : 'red', parryable ? '노란 깜빡임 = 패링 타이밍 (F)' : '빨간 공격은 패링 불가 — 대시(Shift)로 피하기'); },
       enemyDash(e) { g.fx.sparks.emit(e.chest, 12, { color: [0.3, 0.9, 1], speed: 5, life: 0.3, gravity: 0, size: 0.1 }); g.audio._noise(0.2, { type: 'bandpass', freq: 600, sweepTo: 1800, gain: 0.12 }); },
       relocate(e) {
         const spots = g.map.spawnHigh.filter(p => p.distanceTo(g.player.pos) > 40);
@@ -848,6 +857,11 @@ export class Game {
       },
     };
     return ctx;
+  }
+  once(key, text) {
+    this._seen = this._seen || new Set();
+    if (this._seen.has(key)) return; this._seen.add(key);
+    this.hud.hint(text, 3200);
   }
   waveDmg() { return this.mode === 'arena' ? Math.min(1.35, 0.8 + this.wave * 0.05) : 1; }
 
@@ -1065,7 +1079,7 @@ export class Game {
     this.atmo.update(this.clockT, fxDt, this.camera.position, playingish ? P.vel : null);
     for (const k of ['sparks', 'tracers', 'bursts', 'arcs']) this.fx[k].update(fxDt);
     this.fx.streaks.update(rawDt, this.camera.position, P.vel, playingish ? THREE.MathUtils.clamp((P.speed - 18) / 25, 0, 1) : 0);
-    this.audio.update(this.state === 'play' ? P.speed : 0, this.state === 'play' && !!P.wall, rawDt);
+    this.audio.update(this.state === 'play' ? P.speed : 0, this.state === 'play' && !!P.wall, rawDt, this.mode === 'arena' ? this.rankIdx() / 6 : Math.min(1, P.speed / 40));
 
     // post
     this.damageFx = Math.max(0, this.damageFx - rawDt * 1.4);
@@ -1077,8 +1091,27 @@ export class Game {
     u.flash.value = this.flashFx; u.blurAmt.value = S.blur;
     u.slowmo.value += ((this.slowmoT > 0 ? 1 : 0) - u.slowmo.value) * Math.min(1, rawDt * 8);
 
-    if (playingish) this.hud.update(rawDt, this);
+    if (playingish) { this.updateCrosshair(); this.hud.update(rawDt, this); }
     this.composer.render();
+  }
+
+  updateCrosshair() {
+    // red = an enemy is inside slash-lunge range, cyan ring = grapple target in reach
+    const P = this.player, eye = this.camera.position, f = this.lookDir(v2);
+    let lunge = false;
+    for (const e of this.enemies) {
+      if (!e.alive) continue; v1.subVectors(e.chest, eye); const d = v1.length();
+      if (d < 3.8 + this.momentum() * 1.8 || (d < 8.5 && v1.normalize().dot(f) > 0.93)) { v1.subVectors(e.chest, eye).normalize(); if (v1.dot(f) > 0.6) { lunge = true; break; } }
+    }
+    let grap = false;
+    if (P.grappleCharges > 0 && !P.grapple && !P.hook) {
+      const h = this.map.col.raycast(eye.x, eye.y, eye.z, f.x, f.y, f.z, T.grappleRange, _hit, SURF.GRAPPLE);
+      grap = !!h;
+      if (!grap) for (const e of this.enemies) { if (e.alive && e.rayHit(eye.x, eye.y, eye.z, f.x, f.y, f.z, T.grappleRange)) { grap = true; break; } }
+    }
+    const el = document.getElementById('cross');
+    if (this._xl !== lunge) { this._xl = lunge; el.classList.toggle('lunge', lunge); }
+    if (this._xg !== grap) { this._xg = grap; el.classList.toggle('grap', grap); }
   }
 
   updateRope(dt) {
@@ -1108,7 +1141,7 @@ export class Game {
       if (e.type !== 'sniper' || !e.alive || e.state !== 'aim' || !e.aimPoint) continue;
       live.add(e);
       let l = this._lasers.get(e);
-      if (!l) { l = new THREE.Mesh(this.laserGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.6, 5), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })); this.scene.add(l); this._lasers.set(e, l); this.audio.sniperCharge(e.pos.distanceTo(this.player.pos)); }
+      if (!l) { this.once('sniper', '보라색 레이저 = 저격 — 깜빡일 때 F로 반사하거나 엄폐'); l = new THREE.Mesh(this.laserGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.6, 5), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })); this.scene.add(l); this._lasers.set(e, l); this.audio.sniperCharge(e.pos.distanceTo(this.player.pos)); }
       const m = new THREE.Vector3(); e.gunTip.getWorldPosition(m);
       const d = m.distanceTo(e.aimPoint);
       l.position.copy(m); l.lookAt(e.aimPoint); const w = 1 + (1.4 - e.windup) * 1.5; l.scale.set(w, w, d);

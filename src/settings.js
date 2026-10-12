@@ -12,7 +12,7 @@ export const DEFAULT_BINDS = {
 };
 export const DEFAULTS = {
   sens: 1.0, fov: 100, fovFx: 18, shake: 1, tilt: 1, bob: 1, blur: 1,
-  sfx: 0.8, music: 0.4, quality: 'high', fps: 0, full: 1, autoHop: 1, loadout: 'revolver', crosshair: '#ffffff',
+  sfx: 0.8, music: 0.4, crouchToggle: 0, quality: 'high', fps: 0, full: 1, autoHop: 1, loadout: 'revolver', crosshair: '#ffffff',
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {

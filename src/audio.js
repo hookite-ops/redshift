@@ -190,8 +190,9 @@ export class Audio {
   checkpoint(final) { [0, 0.07, 0.14].forEach((d, i) => this._tone(880 * Math.pow(1.26, i), 0.25, { type: 'triangle', gain: 0.12, delay: d })); if (final) [0, 0.1, 0.2, 0.3].forEach((d, i) => this._tone(660 * Math.pow(1.5, i % 3), 0.5, { type: 'square', gain: 0.06, delay: 0.25 + d })); }
   boost() { this._tone(300, 0.3, { type: 'sawtooth', gain: 0.1, slideTo: 1200, rev: 0.3 }); }
 
-  update(speed, wallrunning, dt) {
+  update(speed, wallrunning, dt, intensity = 0) {
     if (!this.ctx) return;
+    this.intensity = (this.intensity || 0) + (intensity - (this.intensity || 0)) * Math.min(1, dt * 2);
     const s = Math.min(speed / 40, 1);
     this.windGain.gain.setTargetAtTime(Math.max(0, s - 0.15) * 0.35, this.t, 0.1);
     this.windFilter.frequency.setTargetAtTime(300 + s * 1600, this.t, 0.1);
@@ -238,7 +239,7 @@ export class Audio {
     if (s % 2 === 1) {
       const n = ctx.createBufferSource(); n.buffer = this.noiseBuf;
       const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 8000;
-      const g = ctx.createGain(); env(g, s % 4 === 3 ? 0.12 : 0.06, 0.05);
+      const I = this.intensity || 0; const g = ctx.createGain(); env(g, (s % 4 === 3 ? 0.12 : 0.06) * (0.6 + I * 0.8), 0.05);
       n.connect(f); f.connect(g); g.connect(out); n.start(t, Math.random()); n.stop(t + 0.06);
     }
     // bass (offbeat 16ths)
@@ -250,13 +251,23 @@ export class Audio {
       const g = ctx.createGain(); env(g, 0.22, 0.12);
       o.connect(f); f.connect(g); g.connect(out); o.start(t); o.stop(t + 0.14);
     }
+    // lead stabs when the style rank is high
+    if ((this.intensity || 0) > 0.55 && (s === 0 || s === 6 || s === 10)) {
+      for (const det of [-7, 7]) {
+        const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(root + 48 + (s === 10 ? 3 : 0)); o.detune.value = det;
+        const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(3200, t); f.frequency.exponentialRampToValueAtTime(600, t + 0.25);
+        const g = ctx.createGain(); env(g, 0.035 * this.intensity, 0.3);
+        o.connect(f); f.connect(g); g.connect(out); const rg = ctx.createGain(); rg.gain.value = 0.6; g.connect(rg); rg.connect(this.reverb);
+        o.start(t); o.stop(t + 0.32);
+      }
+    }
     // arp
     if (s % 2 === 0) {
       const chord = [0, 3, 7, 10, 12, 7];
       const o = ctx.createOscillator(); o.type = 'square';
       o.frequency.value = mtof(root + 36 + chord[(i / 2) % chord.length | 0]);
       const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 2400;
-      const g = ctx.createGain(); env(g, 0.035, 0.18);
+      const g = ctx.createGain(); env(g, 0.03 + (this.intensity || 0) * 0.035, 0.18);
       o.connect(f); f.connect(g); g.connect(out);
       const rg = ctx.createGain(); rg.gain.value = 0.5; g.connect(rg); rg.connect(this.reverb);
       o.start(t); o.stop(t + 0.2);
