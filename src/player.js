@@ -206,9 +206,11 @@ export class Player {
     if (this.grapple) this.tickGrapple(dt, inp, ctx);
 
     // ---------- walls ----------
-    this.scanWall();
-    if (this.wall) this.tickWall(dt, inp, wish);
-    else if (!this.grounded && !this.grapple && this.dashT <= 0) this.tryWall(inp, wish);
+    if (!this.noWall) {
+      this.scanWall();
+      if (this.wall) this.tickWall(dt, inp, wish);
+      else if (!this.grounded && !this.grapple && this.dashT <= 0) this.tryWall(inp, wish);
+    }
 
     // ---------- jump ----------
     if (this.bufferT > 0 && !stunned) {

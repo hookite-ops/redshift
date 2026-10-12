@@ -3,229 +3,217 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>REDSHIFT 2.0 — 고속 근접 FPS</title>
+<title>REDSHIFT — 원반 아레나</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Orbitron:wght@600;800;900&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
-:root{--red:#ff2a48;--red2:#ff6a7c;--cyan:#30e0ff;--gold:#ffc23a;--violet:#b066ff;--ink:#f3eef3;--dim:#9a8f9c;--panel:rgba(12,6,12,.72)}
+:root{--ink:#16161a;--ink2:#3a3a40;--dim:#8b8b86;--line:#d9d9d4;--paper:#f3f3f1;--card:rgba(255,255,255,.9);--or:#ff5a1f;--red:#e8202f}
 *{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;color:var(--ink);font-family:'Rajdhani','Noto Sans KR',sans-serif}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'Noto Sans KR',sans-serif}
 canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
 .hidden{display:none!important}
-.num{font-family:'Orbitron',sans-serif;font-variant-numeric:tabular-nums}
+.num{font-family:'Space Grotesk',sans-serif;font-variant-numeric:tabular-nums}
+b{font-weight:700}
 
 /* ================= HUD ================= */
 #hud{position:fixed;inset:0;pointer-events:none}
-#lowhp{position:absolute;inset:0}
+#lowhp{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(232,32,47,.45));animation:pulse 1s infinite}
+#hurt{position:absolute;inset:0;opacity:0;background:radial-gradient(ellipse at center,transparent 40%,rgba(232,32,47,.55))}
+#flash{position:absolute;inset:0;opacity:0;background:radial-gradient(circle at center,transparent 35%,rgba(255,90,31,.25))}
+@keyframes pulse{50%{filter:brightness(1.4)}}
+#dmgDir{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0}
+#dmgDir::before{content:'';position:absolute;left:-60px;top:-150px;width:120px;height:26px;border-radius:50%;background:radial-gradient(ellipse at 50% 100%,rgba(232,32,47,.9),transparent 70%)}
+
+/* crosshair: ring = disc in hand, dot only = disc is out */
 #cross{position:absolute;left:50%;top:50%;width:0;height:0}
-#cross .dot{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;background:var(--xc,#fff);box-shadow:0 0 6px rgba(255,42,72,.9)}
-#cross .tk{position:absolute;background:var(--xc,#fff);opacity:.9;transition:transform .08s}
-#cross .t1{left:-1px;top:-16px;width:2px;height:8px}#cross .t2{left:-1px;top:8px;width:2px;height:8px}
-#cross .t3{left:-16px;top:-1px;width:8px;height:2px}#cross .t4{left:8px;top:-1px;width:8px;height:2px}
-#cross::after{content:'';position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;border:1.5px solid var(--cyan);opacity:0;transform:scale(.6);transition:all .12s}
-#cross.grap::after{opacity:.75;transform:scale(1)}
-#cross.lunge .dot,#cross.lunge .tk{background:var(--red)!important;box-shadow:0 0 8px var(--red)}
-#chargeRing{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px;border-radius:50%;background:conic-gradient(var(--gold) var(--p,0%),transparent 0);-webkit-mask:radial-gradient(circle,transparent 24px,#000 25px);mask:radial-gradient(circle,transparent 24px,#000 25px);opacity:0}
-#parryRing{position:absolute;left:50%;top:50%;width:76px;height:76px;margin:-38px;border-radius:50%;border:2px solid var(--cyan);opacity:0}
-#hit{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px;transform:rotate(45deg);opacity:0}
-#hit i{position:absolute;background:#fff}
-#hit i:nth-child(1){left:14px;top:0;width:2px;height:9px}#hit i:nth-child(2){left:14px;bottom:0;width:2px;height:9px}
-#hit i:nth-child(3){top:14px;left:0;height:2px;width:9px}#hit i:nth-child(4){top:14px;right:0;height:2px;width:9px}
-#hit.head i{background:var(--red)}
+#cross .ring{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;border:2px solid var(--ink);transition:all .12s}
+#cross .dot{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;background:var(--or);box-shadow:0 0 0 1.5px #fff}
+#cross.out .ring{transform:scale(.55);border-color:var(--or);border-style:dashed;opacity:.8}
+#hit{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px;transform:rotate(45deg);opacity:0}
+#hit i{position:absolute;background:var(--ink)}
+#hit i:nth-child(1){left:16px;top:0;width:2px;height:9px}#hit i:nth-child(2){left:16px;bottom:0;width:2px;height:9px}
+#hit i:nth-child(3){top:16px;left:0;height:2px;width:9px}#hit i:nth-child(4){top:16px;right:0;height:2px;width:9px}
+#hit.kill i{background:var(--red)}
+#hit.show{animation:hitA .22s ease-out forwards}#hit.kill.show{animation:hitK .32s ease-out forwards}
+@keyframes hitA{from{opacity:1;transform:rotate(45deg) scale(.8)}to{opacity:0;transform:rotate(45deg) scale(1.15)}}
+@keyframes hitK{from{opacity:1;transform:rotate(45deg) scale(1.4)}to{opacity:0;transform:rotate(45deg) scale(1)}}
 #threats{position:absolute;left:50%;top:50%;width:0;height:0}
-.threat{position:absolute;width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:20px solid var(--gold);filter:drop-shadow(0 0 8px currentColor)}
-.dmgdir{position:absolute;width:140px;height:34px;margin:-17px -70px;background:radial-gradient(ellipse at 50% 100%,rgba(255,30,50,.95),transparent 70%)}
-#speedo{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);text-align:center;width:420px}
-#speedNum{font-family:'Orbitron';font-weight:900;font-size:50px;line-height:1;letter-spacing:1px;text-shadow:0 0 22px rgba(255,42,72,.55)}
-#speedUnit{font-size:12px;letter-spacing:6px;color:var(--dim);margin-top:2px}
-#speedBar{height:5px;margin:8px auto 0;width:360px;background:rgba(255,255,255,.08);position:relative;overflow:hidden;clip-path:polygon(3% 0,100% 0,97% 100%,0 100%)}
-#speedFill{position:absolute;inset:0;width:0;background:linear-gradient(90deg,var(--cyan),#fff 55%,var(--red))}
-#momentum{margin-top:5px;font-size:14px;letter-spacing:4px;color:var(--red2);font-weight:700;height:18px}
-#abil{display:flex;gap:18px;justify-content:center;margin-top:8px}
-.ab{display:flex;flex-direction:column;align-items:center;gap:4px}
-.ab .pips{display:flex;gap:4px}
-.pip{width:30px;height:6px;background:rgba(255,255,255,.12);transform:skewX(-25deg);position:relative;overflow:hidden}
-.pip i{position:absolute;inset:0;transform-origin:left}
-.ab span{font-size:10px;letter-spacing:3px;color:var(--dim)}
-#hpBox{position:absolute;left:40px;bottom:36px;width:320px}
-#hpRow{display:flex;justify-content:space-between;align-items:flex-end;font-size:12px;letter-spacing:4px;color:var(--dim)}
-#hpNum{font-family:'Orbitron';font-size:32px;font-weight:900;color:#fff;letter-spacing:0}
-.bar{height:12px;background:rgba(255,255,255,.08);margin-top:6px;transform:skewX(-20deg);overflow:hidden;position:relative}
-.bar i{position:absolute;inset:0;transform-origin:left}
-#hpFill{background:linear-gradient(90deg,#ff1038,#ff7080);box-shadow:0 0 14px var(--red)}
-#hpGhost{background:#fff;opacity:.45}
-#instBar{height:5px;margin-top:5px}
-#instFill{background:linear-gradient(90deg,#c88a10,var(--gold))}
-#instLbl{font-size:10px;letter-spacing:3px;color:var(--dim);margin-top:3px}
-#ammoBox{position:absolute;right:40px;bottom:36px;text-align:right}
-#ammoLbl{font-size:12px;letter-spacing:4px;color:var(--dim)}
-#ammoNum{font-family:'Orbitron';font-size:46px;font-weight:900;line-height:1}
-#ammoNum small{font-size:18px;color:var(--dim)}
-#rounds{display:flex;gap:5px;justify-content:flex-end;margin-top:8px}
-.rd{width:9px;height:22px;background:var(--gold);border-radius:4px 4px 1px 1px;box-shadow:0 0 6px rgba(255,194,58,.6)}
-.rd.sh{width:14px;height:26px;background:#ff5a3a;border-radius:3px}
-.rd.off{background:rgba(255,255,255,.12);box-shadow:none}
-#reloadTxt{font-size:13px;letter-spacing:3px;color:var(--gold);height:18px;margin-top:4px}
-#topBar{position:absolute;top:18px;left:50%;transform:translateX(-50%);text-align:center}
-#modeTxt{font-family:'Orbitron';font-size:15px;letter-spacing:7px;color:var(--red2)}
-#subTxt{font-size:14px;letter-spacing:2px;color:var(--dim);margin-top:2px;font-family:'Noto Sans KR'}
-#scoreTxt{font-family:'Orbitron';font-size:28px;font-weight:900;margin-top:4px}
-#style{position:absolute;right:40px;top:110px;text-align:right;width:260px}
-#rank{font-family:'Orbitron';font-weight:900;font-size:82px;line-height:1;color:#fff;text-shadow:0 0 26px var(--red)}
-#rankName{font-size:14px;letter-spacing:6px;color:var(--red2)}
-#rankBar{height:4px;background:rgba(255,255,255,.1);margin-top:8px}#rankFill{height:100%;width:0;background:var(--red);box-shadow:0 0 10px var(--red)}
-#mult{font-family:'Orbitron';font-size:15px;color:var(--gold);margin-top:6px}
-#feed{margin-top:14px;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
-.feedItem{font-size:16px;font-weight:700;letter-spacing:2px;animation:feedIn .22s ease-out,feedOut .5s ease-in 1.7s forwards;white-space:nowrap}
-.feedItem b{color:var(--gold);margin-left:8px}
-@keyframes feedIn{from{transform:translateX(30px);opacity:0}}@keyframes feedOut{to{opacity:0;transform:translateX(20px)}}
-#banner{position:absolute;left:0;right:0;top:26%;text-align:center}
-#bannerBig{font-family:'Orbitron';font-weight:900;font-size:66px;letter-spacing:12px;color:#fff;text-shadow:0 0 30px var(--red),0 0 70px var(--red)}
-#bannerSmall{font-size:20px;letter-spacing:5px;color:var(--red2);margin-top:6px;font-family:'Noto Sans KR'}
-.bannerAnim{animation:bannerIn 2.6s ease-out forwards}
-@keyframes bannerIn{0%{opacity:0;transform:scale(1.35);letter-spacing:40px}12%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:0}}
-#popup{position:absolute;left:50%;top:60%;transform:translateX(-50%);font-family:'Orbitron';font-size:24px;font-weight:900;letter-spacing:7px;opacity:0;white-space:nowrap}
-.dnum{position:absolute;font-family:'Orbitron';font-weight:800;font-size:17px;color:#fff;text-shadow:0 0 6px #000,0 0 2px #000;transform:translate(-50%,-50%);white-space:nowrap}
-.dnum.head{color:var(--red2);font-size:23px}.dnum.big{color:var(--gold);font-size:28px}
-#objective{position:absolute;left:36px;top:96px;width:270px;font-family:'Noto Sans KR';font-size:12.5px;background:rgba(0,0,0,.25);padding:10px 12px}
-#objective h4{font-family:'Orbitron';font-size:12px;letter-spacing:4px;color:var(--cyan);margin-bottom:8px}
-#objective .it{padding:2px 0;color:#cfc3d0;display:flex;gap:8px;align-items:center}
-#objective .it.done{color:#7a7;text-decoration:line-through}
-#objective .it i{width:10px;height:10px;border:1px solid var(--cyan);display:inline-block}
-#objective .it.done i{background:#7a7;border-color:#7a7}
-#objective .it.cur{color:#fff;font-weight:700}
-#objective .it.cur i{border-color:#fff;box-shadow:0 0 6px var(--cyan)}
-#tutBig{position:absolute;left:50%;top:92px;transform:translateX(-50%);text-align:center;background:rgba(0,0,0,.5);padding:12px 26px;border-bottom:2px solid var(--cyan);font-family:'Noto Sans KR';min-width:360px}
-#tutBig .n{font-family:'Orbitron';font-size:12px;letter-spacing:4px;color:var(--cyan)}
-#tutBig .t{font-size:21px;font-weight:900;color:#fff;margin-top:2px}
-#tutBig .s{font-size:14px;color:#cfc3d0;margin-top:3px}
-#keyHints{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);font-family:'Noto Sans KR';font-size:12px;color:#bdb2be;white-space:nowrap;letter-spacing:.5px}
-#keyHints b{color:#fff;font-family:'Rajdhani';font-size:13px;background:rgba(255,255,255,.1);padding:0 5px;border-radius:3px;margin-right:3px}
-#keyHints span{margin:0 6px}
-#cpArrow{position:absolute;left:50%;top:50%;width:0;height:0}
-#cpArrow div{position:absolute;left:-14px;top:-130px;width:0;height:0;border-left:14px solid transparent;border-right:14px solid transparent;border-bottom:24px solid var(--cyan);filter:drop-shadow(0 0 8px var(--cyan));transform-origin:14px 130px}
-#cpInfo{position:absolute;left:50%;top:84px;transform:translateX(-50%);font-family:'Orbitron';font-size:13px;letter-spacing:3px;color:var(--cyan)}
-#hint{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);font-family:'Noto Sans KR';font-size:15px;color:#fff;background:rgba(0,0,0,.45);padding:6px 16px;border-left:3px solid var(--cyan);opacity:0;transition:opacity .3s;white-space:nowrap}
-#staggerTxt{position:absolute;left:50%;top:40%;transform:translateX(-50%);font-family:'Orbitron';font-weight:900;font-size:22px;letter-spacing:8px;color:var(--gold);opacity:0}
-#fps{position:fixed;top:6px;left:8px;font-size:12px;color:#7a7;font-family:monospace;z-index:3}
-/* ================= menus ================= */
-.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 28% 50%,rgba(90,0,24,.55),rgba(0,0,0,.9));z-index:10}
-.screen.clear{background:rgba(5,2,6,.74);backdrop-filter:blur(6px)}
-.panel{width:min(600px,92vw);max-height:94vh;overflow:auto}
-.panel::-webkit-scrollbar{width:6px}.panel::-webkit-scrollbar-thumb{background:var(--red)}
-.logo{font-family:'Orbitron';font-weight:900;font-size:clamp(56px,9vw,118px);letter-spacing:10px;line-height:.88;color:#fff;font-style:italic;text-shadow:0 0 30px var(--red),5px 0 0 rgba(255,42,72,.55),-5px 0 0 rgba(48,224,255,.35)}
-.logo small{display:block;font-size:.22em;letter-spacing:.6em;color:var(--red2);text-shadow:none;margin-top:10px;font-style:normal}
-.menuGrid{display:grid;grid-template-columns:1fr 1.15fr;gap:48px;align-items:center;width:min(1120px,94vw)}
-@media (max-width:800px){.menuGrid{grid-template-columns:1fr}}
-.tag{font-size:17px;letter-spacing:8px;color:var(--dim);margin:16px 0 28px;font-family:'Noto Sans KR'}
-.btn{display:block;width:100%;text-align:left;padding:13px 22px;margin:7px 0;font-family:'Noto Sans KR';font-weight:700;font-size:19px;letter-spacing:1px;color:var(--ink);background:linear-gradient(90deg,rgba(255,42,72,.15),rgba(255,255,255,.02));border:none;border-left:3px solid var(--red);cursor:pointer;clip-path:polygon(0 0,100% 0,97.5% 100%,0 100%);transition:all .12s}
-.btn:hover{background:linear-gradient(90deg,rgba(255,42,72,.48),rgba(255,255,255,.05));padding-left:32px;color:#fff}
-.btn small{display:block;font-size:13px;font-weight:400;color:var(--dim);margin-top:2px}
-.btn.cyan{border-left-color:var(--cyan);background:linear-gradient(90deg,rgba(48,224,255,.13),rgba(255,255,255,.02))}
-.btn.cyan:hover{background:linear-gradient(90deg,rgba(48,224,255,.4),rgba(255,255,255,.05))}
-.row2{display:flex;gap:10px}.row2 .btn{flex:1}
-.lo{display:flex;gap:10px;margin:6px 0 4px}
-.lo button{flex:1;padding:10px;font-family:'Orbitron';font-size:13px;letter-spacing:3px;color:var(--dim);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);cursor:pointer}
-.lo button.on{color:#fff;border-color:var(--gold);background:rgba(255,194,58,.12)}
-.lo button small{display:block;font-family:'Noto Sans KR';font-size:11px;letter-spacing:0;margin-top:3px}
-h2{font-family:'Orbitron';font-size:30px;letter-spacing:6px;margin-bottom:16px;color:#fff}
-h3{font-family:'Orbitron';font-size:13px;letter-spacing:5px;color:var(--red2);margin:18px 0 6px}
-.row{display:grid;grid-template-columns:1fr 220px 56px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.07);font-size:16px;font-family:'Noto Sans KR';gap:10px}
-.row select{grid-column:2/4;justify-self:end}
+#threats i{position:absolute;left:-9px;top:-7px;width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:14px solid var(--red);opacity:0;filter:drop-shadow(0 0 2px #fff)}
+#threats i.near{border-bottom-color:var(--or)}
+#discMark{position:absolute;left:0;top:0;width:0;height:0;opacity:0;transition:opacity .1s}
+#discMark.show{opacity:1}
+#discMark::before{content:'';position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;border:2.5px solid var(--or);box-shadow:0 0 0 2px rgba(255,255,255,.8)}
+#discMark::after{content:'';position:absolute;left:-3px;top:-3px;width:6px;height:6px;border-radius:50%;background:var(--or)}
+#discMark.edge::before{border-style:dashed}
+#dnums{position:absolute;inset:0;overflow:hidden}
+.dn{position:absolute;left:0;top:0;font-family:'Space Grotesk';font-weight:700;font-size:20px;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff;white-space:nowrap}
+.dn.big{color:var(--or);font-size:28px}
+.dn.plain{font-family:'Noto Sans KR';font-size:15px;color:var(--ink2)}
+
+/* top */
+#topL{position:absolute;left:28px;top:22px}
+#modeTxt{font-family:'Space Grotesk';font-weight:700;font-size:30px;letter-spacing:1px;line-height:1}
+#subTxt{font-size:13px;color:var(--dim);margin-top:4px}
+#topR{position:absolute;right:28px;top:20px;text-align:right}
+#scoreTxt{font-family:'Space Grotesk';font-weight:700;font-size:40px;line-height:1}
+#comboTxt{font-size:15px;font-weight:700;color:var(--or);margin-top:4px;min-height:20px}
+#feed{position:absolute;right:28px;top:96px;width:340px;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+#feed div{background:var(--card);border:1px solid var(--line);padding:4px 10px;font-size:13px;display:flex;gap:10px;align-items:center;transition:opacity .45s,transform .45s;animation:fin .18s ease-out}
+#feed div b{font-family:'Space Grotesk';color:var(--or)}
+#feed div.out{opacity:0;transform:translateX(20px)}
+@keyframes fin{from{opacity:0;transform:translateX(30px)}}
+
+/* center messages */
+#banner{position:absolute;left:0;right:0;top:22%;text-align:center;opacity:0}
+#banner.show{animation:ban 2.4s ease-out forwards}
+@keyframes ban{0%{opacity:0;transform:scale(1.15)}8%{opacity:1;transform:scale(1)}80%{opacity:1}100%{opacity:0}}
+#bannerBig{font-family:'Space Grotesk','Noto Sans KR';font-weight:700;font-size:64px;letter-spacing:2px;line-height:1}
+#bannerSmall{font-size:16px;color:var(--ink2);margin-top:10px;font-weight:500}
+#popup{position:absolute;left:0;right:0;top:58%;text-align:center;font-size:24px;font-weight:900;color:var(--or);opacity:0;text-shadow:0 0 4px #fff,0 0 4px #fff}
+#popup.show{animation:pop .9s ease-out forwards}
+@keyframes pop{0%{opacity:0;transform:translateY(8px) scale(.8)}12%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0;transform:translateY(-10px)}}
+#hint{position:absolute;left:50%;bottom:150px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 16px;font-size:14px;opacity:0;transition:opacity .25s;white-space:nowrap}
+#hint.show{opacity:1}
+
+/* practice checklist */
+#tut{position:absolute;left:28px;top:100px;width:320px;background:var(--card);border:1px solid var(--line);padding:12px 14px}
+#tut h4{font-size:13px;letter-spacing:1px;margin-bottom:8px;display:flex;justify-content:space-between}
+#tut h4 span{font-family:'Space Grotesk';color:var(--or)}
+#tut div{font-size:13px;padding:4px 0 4px 22px;position:relative;color:var(--ink2);line-height:1.4}
+#tut div::before{content:'';position:absolute;left:0;top:7px;width:12px;height:12px;border:1.5px solid var(--dim)}
+#tut div.done{color:var(--dim);text-decoration:line-through}
+#tut div.done::before{background:var(--or);border-color:var(--or)}
+#tut div.pop{animation:tp .5s}
+@keyframes tp{30%{transform:translateX(8px);color:var(--or)}}
+#tut div b,#keyHints b{display:inline-block;font-family:'Space Grotesk','Noto Sans KR';font-size:11px;border:1px solid var(--ink);padding:0 5px;margin-right:6px;text-decoration:none;color:var(--ink)}
+
+/* bottom */
+#hpBox{position:absolute;left:28px;bottom:28px;width:280px}
+#hpRow{display:flex;justify-content:space-between;font-size:12px;letter-spacing:2px;color:var(--dim);margin-bottom:5px}
+#hpNum{font-family:'Space Grotesk';font-weight:700;font-size:22px;color:var(--ink);letter-spacing:0}
+#hpBar{height:10px;background:rgba(0,0,0,.08);overflow:hidden}
+#hpFill{height:100%;width:100%;background:var(--ink);transition:width .15s}
+#hpBar.low #hpFill{background:var(--red)}
+#speedo{position:absolute;left:50%;bottom:24px;transform:translateX(-50%);text-align:center}
+#speedNum{font-family:'Space Grotesk';font-weight:700;font-size:46px;line-height:1}
+#speedUnit{font-size:11px;letter-spacing:5px;color:var(--dim)}
+#dashPips{display:flex;gap:6px;justify-content:center;margin-top:8px}
+#dashPips i{width:26px;height:6px;background:rgba(0,0,0,.12)}
+#dashPips i.on{background:var(--ink)}
+#discBox{position:absolute;right:28px;bottom:28px;display:flex;align-items:center;gap:12px;text-align:right}
+#discTxt{font-size:14px;font-weight:700}
+#discPow{font-size:12px;color:var(--or);font-weight:700;min-height:16px}
+#discIcon{width:46px;height:46px;border-radius:50%;border:5px solid var(--or);background:var(--ink);position:relative;transition:all .12s}
+#discIcon::after{content:'';position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px;border-radius:50%;background:var(--or)}
+#discIcon.out{background:transparent;border-style:dashed;opacity:.6;transform:scale(.85)}
+#discIcon.ret{background:transparent;border-style:dashed;animation:ret .4s linear infinite}
+@keyframes ret{to{transform:rotate(360deg)}}
+#keyHints{position:absolute;left:50%;bottom:118px;transform:translateX(-50%);display:flex;gap:16px;font-size:12px;color:var(--ink2);white-space:nowrap}
+#fps{position:fixed;left:8px;top:6px;font:12px 'Space Grotesk';color:var(--dim);z-index:40}
+
+/* ================= screens ================= */
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;background:rgba(243,243,241,.45)}
+.screen.clear{background:rgba(243,243,241,.82);backdrop-filter:blur(6px)}
+.panel{background:var(--card);border:1px solid var(--line);padding:30px 34px;width:min(460px,94vw);max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.08)}
+.panel h2{font-family:'Space Grotesk';font-size:30px;letter-spacing:2px;margin-bottom:16px}
+.panel h3{font-size:12px;letter-spacing:3px;color:var(--dim);margin:18px 0 8px}
+.btn{display:block;width:100%;text-align:left;font:inherit;font-size:18px;font-weight:700;padding:13px 16px;margin-bottom:8px;background:#fff;color:var(--ink);border:1.5px solid var(--ink);cursor:pointer;transition:all .1s}
+.btn small{display:block;font-size:12px;font-weight:400;color:var(--dim);margin-top:2px}
+.btn:hover{background:var(--ink);color:#fff}.btn:hover small{color:#bbb}
+.btn.main{background:var(--or);border-color:var(--or);color:#fff}.btn.main small{color:rgba(255,255,255,.85)}
+.btn.main:hover{background:var(--ink);border-color:var(--ink)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.lo{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.lo button{font:inherit;font-weight:700;font-size:15px;padding:9px 6px;background:#fff;border:1.5px solid var(--line);cursor:pointer;color:var(--ink)}
+.lo button small{display:block;font-size:11px;font-weight:400;color:var(--dim);margin-top:2px}
+.lo button.on{border-color:var(--or);background:#fff4ee}
+.menuGrid{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;width:min(980px,96vw);padding:36px 40px}
+.logo{font-family:'Space Grotesk';font-weight:700;font-size:86px;line-height:.86;letter-spacing:-2px}
+.logo span{color:var(--or)}
+.tag{font-size:17px;font-weight:700;margin-top:16px}
+.tag2{font-size:13px;color:var(--dim);margin-top:4px}
+.cheat{margin-top:22px;border-top:1px solid var(--line);padding-top:14px;display:grid;grid-template-columns:auto 1fr;gap:7px 12px;font-size:13px;align-items:center}
+.cheat kbd{font-family:'Space Grotesk','Noto Sans KR';font-size:12px;font-weight:700;border:1.5px solid var(--ink);padding:2px 7px;text-align:center;min-width:64px}
+.cheat kbd.o{border-color:var(--or);color:var(--or)}
+#best{margin-top:16px;font-size:12px;color:var(--dim);line-height:1.6}
+.row{display:grid;grid-template-columns:1fr 160px 44px;align-items:center;gap:10px;font-size:14px;padding:5px 0}
+.row select{grid-column:2/4;font:inherit;padding:4px;border:1px solid var(--line);background:#fff}
+.row input[type=range]{width:100%;accent-color:var(--or)}
+.row .val{font-family:'Space Grotesk';font-size:13px;text-align:right}
 .row.k{grid-template-columns:1fr auto}
-.row input[type=range]{width:100%;accent-color:var(--red)}
-.row select{background:#1a1018;color:#fff;border:1px solid #442;padding:4px 8px;font-size:14px}
-.row .val{width:48px;text-align:right;color:var(--gold);font-family:'Orbitron';font-size:13px}
-.key{min-width:96px;padding:5px 8px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);color:#fff;font-family:'Rajdhani';font-weight:700;font-size:14px;cursor:pointer}
-.key.listen{border-color:var(--gold);color:var(--gold)}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px 22px;font-family:'Noto Sans KR';font-size:14px}
-.grid2 div{display:flex;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.06);padding:5px 0}
-.grid2 b{color:var(--gold);font-family:'Rajdhani';font-size:15px}
-.tips{font-family:'Noto Sans KR';font-size:14px;color:#cbbfcc;line-height:1.75}
-.tips b{color:var(--red2)}.tips em{color:var(--gold);font-style:normal}.tips .c{color:var(--cyan)}
-.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:18px 0}
-.stat{background:rgba(255,255,255,.04);padding:12px 14px;border-left:3px solid var(--red)}
-.stat span{display:block;font-size:12px;color:var(--dim);letter-spacing:2px;font-family:'Noto Sans KR'}
-.stat b{font-family:'Orbitron';font-size:24px}
-#clickTo{position:fixed;left:50%;top:62%;transform:translateX(-50%);font-family:'Noto Sans KR';font-size:18px;letter-spacing:3px;color:#fff;background:rgba(0,0,0,.6);padding:10px 22px;border:1px solid var(--red);z-index:9}
-#loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#000;z-index:30;font-family:'Orbitron';letter-spacing:8px;color:var(--red)}
-#loading .lbar{width:260px;height:3px;background:#222;margin-top:16px;overflow:hidden}#loading .lbar i{display:block;height:100%;width:30%;background:var(--red);animation:ld 1s infinite}
-@keyframes ld{from{transform:translateX(-100%)}to{transform:translateX(330%)}}
-.credits{position:absolute;bottom:16px;left:0;right:0;text-align:center;font-size:12px;color:#665;letter-spacing:2px}
-#best{margin-top:14px;font-family:'Noto Sans KR';color:var(--dim);font-size:13px;letter-spacing:1px;line-height:1.6}
+.key{font:inherit;font-size:12px;font-weight:700;min-width:70px;padding:4px 8px;border:1.5px solid var(--ink);background:#fff;cursor:pointer}
+.key.listen{border-color:var(--or);color:var(--or)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:6px 22px;font-size:14px}
+.grid2 div{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:5px 0}
+.tips{font-size:14px;line-height:1.9;color:var(--ink2)}
+.tips b{color:var(--ink)}.tips em{font-style:normal;color:var(--or);font-weight:700}
+.stats{margin:16px 0 20px}
+.stat{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:7px 0;font-size:14px}
+.stat b{font-family:'Space Grotesk','Noto Sans KR'}
+#clickTo{position:fixed;left:50%;top:62%;transform:translateX(-50%);font-size:16px;letter-spacing:2px;color:#fff;background:var(--ink);padding:10px 22px;z-index:9}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--paper);z-index:30;font-family:'Space Grotesk';font-weight:700;letter-spacing:8px;font-size:22px}
+#loading .err{font-family:'Noto Sans KR';letter-spacing:0;font-size:16px;text-align:center;line-height:1.8}
+.credits{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:var(--dim);letter-spacing:2px}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
-<div id="loading">REDSHIFT<div class="lbar"><i></i></div></div>
+<div id="loading">REDSHIFT</div>
 <div id="fps" class="hidden"></div>
 
 <div id="hud" class="hidden">
-  <div id="lowhp"></div>
+  <div id="lowhp"></div><div id="hurt"></div><div id="flash"></div>
+  <div id="dmgDir"></div>
+  <div id="dnums"></div>
   <div id="threats"></div>
-  <div id="cpArrow" class="hidden"><div></div></div>
-  <div id="cross"><div class="dot"></div><div class="tk t1"></div><div class="tk t2"></div><div class="tk t3"></div><div class="tk t4"></div></div>
-  <div id="chargeRing"></div><div id="parryRing"></div>
+  <div id="discMark"></div>
+  <div id="cross"><div class="ring"></div><div class="dot"></div></div>
   <div id="hit"><i></i><i></i><i></i><i></i></div>
-  <div id="topBar"><div id="modeTxt">WAVE 1</div><div id="subTxt"></div><div id="scoreTxt" class="num">0</div></div>
-  <div id="cpInfo" class="hidden"></div>
-  <div id="objective" class="hidden"></div>
-  <div id="tutBig" class="hidden"></div>
-  <div id="keyHints"></div>
-  <div id="style"><div id="rank">D</div><div id="rankName">DULL</div><div id="rankBar"><div id="rankFill"></div></div><div id="mult">x1.00</div><div id="feed"></div></div>
-  <div id="speedo">
-    <div id="speedNum" class="num">0</div><div id="speedUnit">KM/H</div>
-    <div id="speedBar"><div id="speedFill"></div></div>
-    <div id="momentum"></div>
-    <div id="abil">
-      <div class="ab"><div class="pips" id="dashPips"></div><span>DASH</span></div>
-      <div class="ab"><div class="pips" id="hookPips"></div><span>HOOK</span></div>
-      <div class="ab"><div class="pips" id="iaiPips"></div><span>IAIDO</span></div>
-    </div>
-  </div>
-  <div id="hpBox">
-    <div id="hpRow"><span>VITAL</span><span id="hpNum">100</span></div>
-    <div class="bar"><i id="hpGhost"></i><i id="hpFill"></i></div>
-    <div class="bar" id="instBar"><i id="instFill"></i></div>
-    <div id="instLbl">POSTURE</div>
-  </div>
-  <div id="ammoBox"><div id="ammoLbl">REVOLVER</div><div id="ammoNum" class="num">6<small> / 6</small></div><div id="rounds"></div><div id="reloadTxt"></div></div>
+  <div id="topL"><div id="modeTxt">WAVE —</div><div id="subTxt"></div></div>
+  <div id="topR"><div id="scoreTxt" class="num">0</div><div id="comboTxt"></div></div>
+  <div id="feed"></div>
+  <div id="tut" class="hidden"></div>
   <div id="banner"><div id="bannerBig"></div><div id="bannerSmall"></div></div>
   <div id="popup"></div>
   <div id="hint"></div>
-  <div id="staggerTxt">STAGGERED</div>
-  <div id="dnums"></div>
+  <div id="keyHints"></div>
+  <div id="hpBox"><div id="hpRow"><span>HP</span><span id="hpNum">100</span></div><div id="hpBar"><div id="hpFill"></div></div></div>
+  <div id="speedo"><div id="speedNum" class="num">0</div><div id="speedUnit">KM/H</div><div id="dashPips"></div></div>
+  <div id="discBox"><div><div id="discTxt"></div><div id="discPow"></div></div><div id="discIcon" class="hand"></div></div>
 </div>
 <div id="clickTo" class="hidden">클릭해서 계속</div>
 
 <div id="menu" class="screen hidden">
   <div class="panel menuGrid">
-    <div><div class="logo">RED<br>SHIFT<small>2.0</small></div>
-    <div class="tag">속도가 곧 칼날이다</div><div id="best"></div></div>
     <div>
-    <button class="btn" data-act="arena">아레나<small>몰려오는 적을 상대로 웨이브 생존 · 점수/스타일 랭크</small></button>
-    <div class="row2">
-      <button class="btn cyan" data-act="trial">타임 어택<small>체크포인트 19개 · 전 구역 질주</small></button>
-      <button class="btn cyan" data-act="training">튜토리얼<small>처음이면 여기부터 · 한 단계씩 따라 하기</small></button>
+      <div class="logo">RED<br><span>/</span>SHIFT</div>
+      <div class="tag">원반 하나. 던지고, 튕기고, 순간이동.</div>
+      <div class="tag2">하얀 아레나에서 끝까지 버티는 고속 FPS</div>
+      <div class="cheat">
+        <kbd>WASD</kbd><span>이동 · 항상 전력질주</span>
+        <kbd data-key="jump">SPACE</kbd><span>점프 · 공중에서 한 번 더</span>
+        <kbd data-key="dash">SHIFT</kbd><span>대시 · 대시 중엔 무적</span>
+        <kbd class="o" data-key="throw">좌클릭</kbd><span><b>원반 던지기</b> · 다시 누르면 회수 (돌아오며 또 때림)</span>
+        <kbd class="o" data-key="blink">우클릭</kbd><span><b>원반 위치로 순간이동</b> · 속도 유지 + 주변 충격파</span>
+      </div>
+      <div id="best"></div>
     </div>
-    <h3>LOADOUT</h3>
-    <div class="lo" id="loadout">
-      <button data-lo="revolver">REVOLVER<small>6발 · 헤드샷 · 정밀</small></button>
-      <button data-lo="shotgun">SCATTER<small>2발 · 반동으로 공중 기동</small></button>
-    </div>
-    <h3>DIFFICULTY</h3>
-    <div class="lo" id="difficulty">
-      <button data-df="easy">쉬움<small>적이 느리고 약함 · 처음이면 이걸로</small></button>
-      <button data-df="normal">보통<small>적당한 압박</small></button>
-      <button data-df="hard">어려움<small>원작 같은 긴장감</small></button>
-    </div>
-    <div class="row2" style="margin-top:10px">
-      <button class="btn" data-act="controls">조작법</button>
-      <button class="btn" data-act="settings">설정</button>
-    </div>
+    <div>
+      <button class="btn main" data-act="arena">아레나<small>포탑 · 추적자 · 방패병 웨이브 생존</small></button>
+      <button class="btn" data-act="practice">연습장<small>처음이면 여기부터 · 체크리스트 7개 · 안 죽음</small></button>
+      <h3>난이도</h3>
+      <div class="lo" id="difficulty">
+        <button data-df="easy">쉬움<small>처음이면 이걸로</small></button>
+        <button data-df="normal">보통<small>적당한 압박</small></button>
+        <button data-df="hard">어려움<small>빠르고 아픔</small></button>
+      </div>
+      <div class="row2" style="margin-top:14px">
+        <button class="btn" data-act="controls">조작법</button>
+        <button class="btn" data-act="settings">설정</button>
+      </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 2.0 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 3.0 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="pause" class="screen clear hidden">
@@ -240,29 +228,25 @@ h3{font-family:'Orbitron';font-size:13px;letter-spacing:5px;color:var(--red2);ma
 </div>
 
 <div id="settings" class="screen clear hidden">
-  <div class="panel" style="width:min(660px,94vw)">
+  <div class="panel" style="width:min(640px,94vw)">
     <h2>SETTINGS</h2>
-    <h3>CONTROL</h3>
+    <h3>조작</h3>
     <div class="row"><span>마우스 감도<br><small id="cm360" style="color:var(--dim);font-size:11px"></small></span><input type="range" id="sSens" min="0.05" max="5" step="0.01"><span class="val" id="vSens"></span></div>
-    <div class="row">점프 꾹 = 자동 버니합 <select id="sAutoHop"><option value="1">켜기</option><option value="0">끄기</option></select></div>
-    <div class="row">이동 방식 <select id="sMoveMode"><option value="easy">쉬운 이동 (추천)</option><option value="classic">클래식 (공중 스트레이프 가속)</option></select></div>
+    <div class="row">Space 꾹 = 착지할 때마다 자동 점프 <select id="sAutoHop"><option value="1">켜기</option><option value="0">끄기</option></select></div>
     <div class="row">화면 아래 조작 안내 <select id="sKeyHints"><option value="1">켜기</option><option value="0">끄기</option></select></div>
-    <div class="row">웅크리기/슬라이드 방식 <select id="sCrouchToggle"><option value="0">누르고 있기</option><option value="1">토글</option></select></div>
-    <h3>CAMERA</h3>
-    <div class="row">시야각 (FOV)<input type="range" id="sFov" min="80" max="120" step="1"><span class="val" id="vFov"></span></div>
+    <h3>카메라</h3>
+    <div class="row">시야각 (가로 FOV)<input type="range" id="sFov" min="80" max="130" step="1"><span class="val" id="vFov"></span></div>
     <div class="row">속도에 따른 FOV<input type="range" id="sFovFx" min="0" max="30" step="1"><span class="val" id="vFovFx"></span></div>
     <div class="row">화면 흔들림<input type="range" id="sShake" min="0" max="1.5" step="0.05"><span class="val" id="vShake"></span></div>
-    <div class="row">벽타기 화면 기울기<input type="range" id="sTilt" min="0" max="1.5" step="0.05"><span class="val" id="vTilt"></span></div>
+    <div class="row">옆이동 기울기<input type="range" id="sTilt" min="0" max="1.5" step="0.05"><span class="val" id="vTilt"></span></div>
     <div class="row">걸음 흔들림<input type="range" id="sBob" min="0" max="1.5" step="0.05"><span class="val" id="vBob"></span></div>
-    <div class="row">속도 블러<input type="range" id="sBlur" min="0" max="1.5" step="0.05"><span class="val" id="vBlur"></span></div>
-    <div class="row">조준점 색 <select id="sCross"><option value="#ffffff">흰색</option><option value="#30e0ff">청록</option><option value="#7dff7a">초록</option><option value="#ffc23a">노랑</option><option value="#ff3a5a">빨강</option></select></div>
-    <h3>AUDIO / VIDEO</h3>
+    <h3>소리 / 화면</h3>
     <div class="row">효과음<input type="range" id="sSfx" min="0" max="1" step="0.05"><span class="val" id="vSfx"></span></div>
     <div class="row">음악<input type="range" id="sMusic" min="0" max="1" step="0.05"><span class="val" id="vMusic"></span></div>
-    <div class="row">그래픽 품질 <select id="sQuality"><option value="low">낮음</option><option value="medium">보통</option><option value="high">높음</option><option value="ultra">울트라</option></select></div>
+    <div class="row">그래픽 품질 <select id="sQuality"><option value="low">낮음</option><option value="medium">보통</option><option value="high">높음</option></select></div>
     <div class="row">FPS 표시 <select id="sFps"><option value="0">끄기</option><option value="1">켜기</option></select></div>
     <div class="row">시작할 때 전체화면 <select id="sFull"><option value="1">켜기</option><option value="0">끄기</option></select></div>
-    <h3>KEYBINDS</h3>
+    <h3>키 설정</h3>
     <div id="binds"></div>
     <button class="btn" data-act="back" style="margin-top:16px">닫기</button>
   </div>
@@ -272,34 +256,33 @@ h3{font-family:'Orbitron';font-size:13px;letter-spacing:5px;color:var(--red2);ma
   <div class="panel" style="width:min(760px,94vw)">
     <h2>CONTROLS</h2>
     <div class="grid2" id="ctrlGrid"></div>
-    <h3>기본만 알면 됨</h3>
+    <h3>원반 — 무기는 이것 하나</h3>
     <div class="tips">
-      <b>달리기</b> — WASD, 항상 전력질주. 빨라지면 착지해도 속도가 잘 안 줄어요.<br>
-      <b>점프</b> — Space. 공중에서 한 번 더 = 2단 점프. Space를 누르고 있으면 착지할 때마다 자동으로 다시 뜀.<br>
-      <b>공중 조작</b> — 공중에서도 WASD로 바로 방향이 바뀌고 속도는 유지돼요.<br>
-      <b>대시</b> — Shift. 3회 충전 · 대시 중 무적 (<span style="color:#ff5a6a">빨간 공격</span> 피하기).<br>
-      <b>슬라이드</b> — 달리다 C. 순간 가속, <span class="c">내리막에서는 계속 빨라짐</span>. 슬라이드 중 Space = 속도 유지 점프.<br>
-      <b>벽타기</b> — 공중에서 벽에 닿으면 자동. Space = 보는 방향으로 벽점프.<br>
-      <b>그래플</b> — E 한 번. 조준점에 청록 원이 뜰 때 쓰면 끝까지 날아감. 다시 E나 Space면 중간에 놓기.
+      <b>던지기</b> — 좌클릭. 보는 방향으로 날아가고, 적을 <em>관통</em>해요. 내가 빠를수록 원반도 빨라요.<br>
+      <b>튕기기</b> — 벽·기둥·바닥에 맞으면 튕겨요. <em>한 번 튕길 때마다 피해 +35%</em>. 숨은 적은 벽에 튕겨서 맞히세요.<br>
+      <b>회수</b> — 날아가는 중에 좌클릭 한 번 더. 벽을 뚫고 돌아오면서 <em>길목의 적을 또 때려요</em>. 가만둬도 1초쯤 뒤 알아서 돌아와요.<br>
+      <b>순간이동</b> — 우클릭. 원반이 있는 곳으로 바로 이동. 속도는 <em>유지되고 오히려 빨라지고</em>, 도착 지점 주변 적에게 충격파.<br>
+      바닥의 <span style="color:var(--or)">주황 원</span>이 순간이동하면 떨어질 곳이에요.
     </div>
-    <h3>전투</h3>
+    <h3>보상</h3>
     <div class="tips">
-      <b>베기</b> — 좌클릭. 적 쪽을 대충 보고 휘두르면 <em>알아서 붙어서</em> 벱니다. 빠를수록 세짐(조준점이 빨개지면 닿는 거리).<br>
-      <b>막기 / 패링</b> — 우클릭 누르고 있으면 가드(피해 85% 감소). 적 무기가 <em>노랗게 깜빡일 때</em> 누르면 패링 → 적 자세 붕괴 + 슬로모, 총알은 반사.<br>
-      <b>사격</b> — Q. 조준점 근처 적에게 자동 보정.<br>
-      <b>처형</b> — 적 머리 위 노란 막대(자세)가 꽉 차면 베기 한 번에 처형.<br>
-      <b>발도술</b> — 좌클릭 꾹 눌렀다 떼기 → 앞으로 돌진하며 다 벰.<br>
-      <span style="color:var(--dim)">어려우면 메뉴에서 난이도를 '쉬움'으로, 설정에서 감도를 낮춰보세요.</span>
+      처치 → 대시 1회 충전 · 순간이동 → 대시 1회 + 2단 점프 다시 충전. 계속 움직일수록 강해져요.
+    </div>
+    <h3>적</h3>
+    <div class="tips">
+      <b>포탑</b> — 빨간 선으로 조준한 뒤 느린 빨간 구체를 쏴요. 옆으로 움직이거나 대시로 피하기. 원반으로 구체를 쳐서 없앨 수도 있어요.<br>
+      <b>추적자</b> — 굴러와서 부딪혀요. 대시로 뚫고 지나가면 안 맞아요.<br>
+      <b>방패병</b> — 정면 공격을 튕겨내요. <em>옆이나 뒤</em>에서 맞히거나, 원반을 뒤로 던져 놓고 순간이동!
     </div>
     <button class="btn" data-act="back" style="margin-top:16px">닫기</button>
   </div>
 </div>
 
-<div id="death" class="screen hidden">
+<div id="death" class="screen clear hidden">
   <div class="panel">
-    <div class="logo" id="endTitle" style="font-size:70px">FLATLINED</div>
+    <div class="logo" id="endTitle" style="font-size:58px">GAME OVER</div>
     <div class="stats" id="endStats"></div>
-    <button class="btn" data-act="restart">다시 하기</button>
+    <button class="btn main" data-act="restart">다시 하기</button>
     <button class="btn" data-act="quit">타이틀로</button>
   </div>
 </div>
