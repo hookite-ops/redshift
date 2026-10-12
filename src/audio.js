@@ -163,6 +163,32 @@ export class Audio {
   }
   bulletWhiz() { this._noise(0.15, { type: 'bandpass', freq: 2500, sweepTo: 900, q: 3, gain: 0.15, rev: 0 }); }
   ui() { this._tone(1000, 0.05, { type: 'sine', gain: 0.08, rev: 0 }); }
+  shotgun() {
+    this._noise(0.5, { type: 'lowpass', freq: 3500, sweepTo: 160, gain: 1.0, rev: 0.7 });
+    this._tone(90, 0.35, { type: 'sine', gain: 0.8, slideTo: 30, rev: 0 });
+    this._noise(0.08, { type: 'highpass', freq: 2500, gain: 0.5, rev: 0 });
+  }
+  pump() { this._noise(0.06, { type: 'bandpass', freq: 1500, gain: 0.2, rev: 0 }); this._noise(0.06, { type: 'bandpass', freq: 900, gain: 0.25, rev: 0, }); }
+  wallStart() { this._noise(0.25, { type: 'bandpass', freq: 2200, sweepTo: 900, gain: 0.18 }); }
+  climb() { this._noise(0.15, { type: 'bandpass', freq: 600, gain: 0.2, rev: 0 }); }
+  mantle() { this._noise(0.18, { type: 'lowpass', freq: 700, gain: 0.25, rev: 0 }); }
+  hookFire() { this._tone(2200, 0.18, { type: 'sawtooth', gain: 0.06, slideTo: 600 }); this._noise(0.12, { type: 'highpass', freq: 3000, gain: 0.2 }); }
+  hookAttach(enemy) { this._tone(enemy ? 500 : 320, 0.12, { type: 'square', gain: 0.14, slideTo: 140, rev: 0.2 }); this._noise(0.06, { type: 'bandpass', freq: 1800, gain: 0.3, rev: 0 }); }
+  sniperCharge(dist) { const g = Math.max(0.04, 0.22 - dist * 0.002); this._tone(1800, 1.2, { type: 'sine', gain: g, slideTo: 3600, attack: 0.05, rev: 0.4 }); }
+  sniperShot(dist) { const g = Math.max(0.15, 0.7 - dist * 0.004); this._noise(0.7, { type: 'lowpass', freq: 5000, sweepTo: 200, gain: g, rev: 0.9 }); this._tone(220, 0.5, { type: 'sawtooth', gain: g * 0.3, slideTo: 50 }); }
+  telegraph(parryable) { if (parryable) this._tone(2400, 0.09, { type: 'triangle', gain: 0.12, rev: 0.3 }); else { this._tone(160, 0.35, { type: 'sawtooth', gain: 0.2, slideTo: 90, rev: 0.4 }); this._tone(170, 0.35, { type: 'sawtooth', gain: 0.15, slideTo: 95 }); } }
+  block() { [1, 2.1, 3.6].forEach((m, i) => this._tone(380 * m, 0.3, { type: 'triangle', gain: 0.14 / (i + 1), rev: 0.6 })); this._noise(0.08, { type: 'bandpass', freq: 2200, gain: 0.35 }); }
+  broken() { this._tone(880, 0.5, { type: 'square', gain: 0.08, slideTo: 1760, rev: 0.6 }); this._tone(440, 0.6, { type: 'triangle', gain: 0.1, rev: 0.6, delay: 0.05 }); }
+  execute() {
+    this._noise(0.8, { type: 'lowpass', freq: 3000, sweepTo: 60, gain: 0.9, rev: 0.9 });
+    this._tone(60, 0.8, { type: 'sine', gain: 0.8, slideTo: 25, rev: 0 });
+    [1, 1.5, 2].forEach((m, i) => this._tone(660 * m, 1.0, { type: 'triangle', gain: 0.08, rev: 0.9, delay: 0.05 * i }));
+  }
+  chargeStart() { this._tone(200, 0.6, { type: 'sawtooth', gain: 0.05, slideTo: 800, attack: 0.1, rev: 0.3 }); }
+  iaido() { this._noise(0.5, { type: 'bandpass', freq: 600, sweepTo: 6000, q: 0.7, gain: 0.6, attack: 0.01, rev: 0.6 }); this._tone(120, 0.4, { type: 'sine', gain: 0.5, slideTo: 40, rev: 0 }); }
+  droneExplode() { this._noise(0.6, { type: 'lowpass', freq: 2000, sweepTo: 80, gain: 0.7, rev: 0.6 }); }
+  checkpoint(final) { [0, 0.07, 0.14].forEach((d, i) => this._tone(880 * Math.pow(1.26, i), 0.25, { type: 'triangle', gain: 0.12, delay: d })); if (final) [0, 0.1, 0.2, 0.3].forEach((d, i) => this._tone(660 * Math.pow(1.5, i % 3), 0.5, { type: 'square', gain: 0.06, delay: 0.25 + d })); }
+  boost() { this._tone(300, 0.3, { type: 'sawtooth', gain: 0.1, slideTo: 1200, rev: 0.3 }); }
 
   update(speed, wallrunning, dt) {
     if (!this.ctx) return;

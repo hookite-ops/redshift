@@ -1,463 +1,652 @@
+// REDSHIFT movement controller — fixed-tick (120 Hz) capsule physics.
+// Techniques: bhop/air-strafe, slide (+slope gain, slide-landing), slide-hop, dash, wallrun,
+// wall-jump, wall-climb, mantle, grapple (hook projectile + swing), jump pads, boost strips.
 import * as THREE from 'three';
+import { SURF } from './physics.js';
 
-const UP = new THREE.Vector3(0, 1, 0);
-const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
-
-export const TUNING = {
+export const T = {
   gravity: 30,
   runSpeed: 11.5,
+  crouchSpeed: 5.0,
   groundAccel: 14,
-  friction: 7.5,
-  airCap: 1.5,
-  airAccel: 110,
-  airControl: 5,
-  jumpVel: 10.5,
-  doubleJumpVel: 10,
-  dashSpeed: 22,
-  dashCharges: 3,
-  dashRecharge: 1.35,
-  slideBoost: 6,
-  slideFriction: 0.55,
-  slideMinSpeed: 6.5,
-  wallrunMinSpeed: 7,
-  wallrunTime: 2.2,
-  wallrunSpeed: 16,
-  wallJumpOut: 10,
+  friction: 8,
+  stopSpeed: 5,
+  airAccel: 12,
+  airCap: 1.0,
+  airControl: 3.5,
+  airSteer: 1.7,          // W-only mouse steering (rad/s, speed-preserving)
+  jumpVel: 10.2,
+  airJumpVel: 9.6,
+  airJumps: 1,
+  coyote: 0.11,
+  jumpBuffer: 0.13,
+  slideTarget: 16.5,
+  slideBoostMin: 3.5,
+  slideBoostMax: 9,
+  slideBoostCd: 1.25,
+  slideFriction: 0.42,
+  slideMinSpeed: 4.5,
+  slideSteer: 2.2,
+  slideLandFactor: 0.38,
+  dashCharges: 2,
+  dashRecharge: 1.6,
+  dashBurst: 27,
+  dashTime: 0.13,
+  dashGain: 5,
+  wallrunMin: 6,
+  wallrunTime: 1.75,
+  wallrunSpeed: 14,
+  wallJumpOut: 8.5,
   wallJumpUp: 9.5,
-  grappleRange: 70,
-  grapplePull: 62,
-  grappleCooldown: 2.6,
-  standH: 1.8,
-  slideH: 1.0,
-  radius: 0.4,
+  climbTime: 0.45,
+  climbVel: 7.5,
+  grappleRange: 75,
+  grappleHookSpeed: 200,
+  grapplePull: 40,
+  grappleYank: 7,
+  grappleCharges: 2,
+  grappleRecharge: 2.4,
+  maxSpeed: 80,
+  standH: 1.8, crouchH: 1.05, radius: 0.4,
 };
 
+const UP = new THREE.Vector3(0, 1, 0);
+const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
+const _contacts = [];
+const _preVel = new THREE.Vector3();
+const _hit = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
+const _hit2 = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
+
 export class Player {
-  constructor(world, events) {
-    this.world = world;
-    this.ev = events;
-    this.pos = new THREE.Vector3(0, 0, 30);
+  constructor(map, events) {
+    this.map = map; this.col = map.col; this.ev = events;
+    this.pos = new THREE.Vector3(); this.prevPos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
-    this.yaw = Math.PI; this.pitch = 0;
-    this.h = TUNING.standH; this.eyeH = 1.65;
-    this.onGround = false; this.groundTime = 0; this.airTime = 0;
-    this.coyote = 0; this.jumpBuffer = 0;
-    this.airJumps = 1;
-    this.dashCharges = TUNING.dashCharges; this.dashTimer = 0; this.dashActive = 0;
-    this.sliding = false; this.crouching = false; this.slideBoostCd = 0;
-    this.wallrun = null; // {normal, time, dir}
-    this.wallCooldown = 0; this.lastWallNormal = new THREE.Vector3();
-    this.grapple = null; this.grappleCd = 0;
-    this.tilt = 0; this.landDip = 0;
-    this.stepAcc = 0;
-    this.speed = 0;
-    this.lastLandSpeed = 0;
-    this.alive = true;
+    this.yaw = 0; this.pitch = 0;
+    this.reset(new THREE.Vector3(0, 0, 30), Math.PI);
   }
 
   reset(p, yaw) {
-    this.pos.copy(p); this.vel.set(0, 0, 0); this.yaw = yaw; this.pitch = 0;
-    this.wallrun = null; this.grapple = null; this.sliding = false; this.crouching = false;
-    this.dashCharges = TUNING.dashCharges; this.airJumps = 1; this.h = TUNING.standH;
+    this.pos.copy(p); this.prevPos.copy(p); this.vel.set(0, 0, 0);
+    this.yaw = yaw; this.pitch = 0;
+    this.h = T.standH; this.eyeH = T.standH - 0.14; this.prevEyeH = this.eyeH;
+    this.grounded = false; this.groundN = new THREE.Vector3(0, 1, 0); this.groundTime = 0; this.airTime = 0;
+    this.coyoteT = 0; this.bufferT = 0;
+    this.airJumps = T.airJumps;
+    this.state = 'air';
+    this.crouching = false; this.sliding = false; this.slideCd = 0; this.slideT = 0;
+    this.dashCharges = T.dashCharges; this.dashRegen = 0; this.dashT = 0; this.dashDir = new THREE.Vector3(); this.dashExit = 0;
+    this.wall = null; this.wallCd = 0; this.lastWallN = new THREE.Vector3(); this.wallContact = null;
+    this.climbT = 0; this.climbUsed = false;
+    this.mantle = null;
+    this.hook = null; this.grapple = null; this.grappleCharges = T.grappleCharges; this.grappleRegen = 0;
+    this.stagger = 0; this.burstT = 0; this.burstDir = new THREE.Vector3(); this.burstSpeed = 0; this.burstExit = 0;
+    this.speed = 0; this.hSpeed = 0;
+    this.jumpedTick = false;
+    this.lastLand = 0;
+    this.padCd = 0;
     this.alive = true;
   }
 
-  get eye() { return tmp2.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
-
-  forward(out) { return out.set(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch)); }
-  flatForward(out) { return out.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)); }
+  get eye() { return v3.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
+  lookDir(out) { return out.set(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch)); }
+  flatFwd(out) { return out.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw)); }
   flatRight(out) { return out.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw)); }
 
-  wishDir(input, out) {
-    const f = this.flatForward(new THREE.Vector3()), r = this.flatRight(new THREE.Vector3());
-    out.set(0, 0, 0).addScaledVector(f, input.fwd).addScaledVector(r, input.right);
-    if (out.lengthSq() > 0) out.normalize();
+  wish(inp, out) {
+    const f = this.flatFwd(v1), r = this.flatRight(v2);
+    out.set(f.x * inp.fwd + r.x * inp.right, 0, f.z * inp.fwd + r.z * inp.right);
+    const l = out.length(); if (l > 0) out.divideScalar(l);
     return out;
   }
 
-  accelerate(wish, wishSpeed, accel, dt) {
-    const cur = this.vel.x * wish.x + this.vel.z * wish.z;
-    const add = wishSpeed - cur;
+  accelerate(dir, wishSpeed, accel, dt, cap = Infinity) {
+    const cur = this.vel.x * dir.x + this.vel.z * dir.z;
+    const add = Math.min(wishSpeed, cap) - cur;
     if (add <= 0) return;
     const a = Math.min(accel * dt * wishSpeed, add);
-    this.vel.x += wish.x * a; this.vel.z += wish.z * a;
+    this.vel.x += dir.x * a; this.vel.z += dir.z * a;
   }
 
-  hSpeed() { return Math.hypot(this.vel.x, this.vel.z); }
+  friction(f, dt) {
+    // on the ground the velocity lies in the slope plane, so scale all of it
+    const full = this.grounded;
+    const s = full ? this.vel.length() : Math.hypot(this.vel.x, this.vel.z);
+    if (s < 0.05) { this.vel.x = this.vel.z = 0; if (full) this.vel.y = 0; return; }
+    const drop = Math.max(s, T.stopSpeed) * f * dt;
+    const k = Math.max(0, s - drop) / s;
+    this.vel.x *= k; this.vel.z *= k; if (full) this.vel.y *= k;
+  }
 
-  // ---------------- main update ----------------
-  update(dt, input) {
-    const T = TUNING;
-    const wish = this.wishDir(input, new THREE.Vector3());
+  // rotate horizontal velocity toward a direction, preserving speed
+  steer(dir, rate, dt) {
+    const s = Math.hypot(this.vel.x, this.vel.z); if (s < 0.5) return;
+    const cx = this.vel.x / s, cz = this.vel.z / s;
+    const cross = cx * dir.z - cz * dir.x, dot = cx * dir.x + cz * dir.z;
+    const ang = Math.atan2(cross, dot);
+    const step = Math.sign(ang) * Math.min(Math.abs(ang), rate * dt);
+    const c = Math.cos(step), sn = Math.sin(step);
+    this.vel.x = (cx * c - cz * sn) * s; this.vel.z = (cx * sn + cz * c) * s;
+  }
+
+  // ======================= TICK =======================
+  tick(dt, inp, ctx) {
+    this.prevPos.copy(this.pos); this.prevEyeH = this.eyeH;
+    const wish = this.wish(inp, new THREE.Vector3());
     const hasWish = wish.lengthSq() > 0;
+    this.jumpedTick = false;
 
-    this.dashTimer += dt;
-    if (this.dashCharges < T.dashCharges && this.dashTimer > T.dashRecharge) { this.dashCharges++; this.dashTimer = 0; }
-    if (this.dashCharges >= T.dashCharges) this.dashTimer = 0;
-    this.grappleCd = Math.max(0, this.grappleCd - dt);
-    this.wallCooldown = Math.max(0, this.wallCooldown - dt);
-    this.slideBoostCd = Math.max(0, this.slideBoostCd - dt);
-    this.coyote -= dt; this.jumpBuffer -= dt;
-    if (input.jumpPressed) this.jumpBuffer = 0.15;
+    // timers
+    this.coyoteT -= dt; this.bufferT -= dt; this.steerLock = (this.steerLock || 0) - dt; this.slideCd -= dt; this.wallCd -= dt; this.padCd -= dt;
+    this.stagger = Math.max(0, this.stagger - dt);
+    if (inp.jumpPressed) this.bufferT = T.jumpBuffer;
+    if (this.dashCharges < T.dashCharges) { this.dashRegen += dt; if (this.dashRegen >= T.dashRecharge) { this.dashCharges++; this.dashRegen = 0; } } else this.dashRegen = 0;
+    if (this.grappleCharges < T.grappleCharges && !this.grapple && !this.hook) { this.grappleRegen += dt; if (this.grappleRegen >= T.grappleRecharge) { this.grappleCharges++; this.grappleRegen = 0; } }
+    const stunned = this.stagger > 0;
 
-    // ---- Dash ----
-    if (input.dashPressed && this.dashCharges > 0) {
-      this.dashCharges--; this.dashTimer = 0;
-      const dir = hasWish ? wish.clone() : this.flatForward(new THREE.Vector3());
-      const hs = this.hSpeed();
-      const base = Math.max(hs, T.runSpeed);
-      this.vel.x = dir.x * (base + T.dashSpeed * 0.55);
-      this.vel.z = dir.z * (base + T.dashSpeed * 0.55);
-      if (!this.onGround) this.vel.y = Math.max(this.vel.y, 1.5);
-      this.dashActive = 0.16;
-      this.wallrun = null;
-      this.ev.dash(dir);
-    }
-    this.dashActive = Math.max(0, this.dashActive - dt);
+    // ---------- mantle (scripted vault) ----------
+    if (this.mantle) { this.tickMantle(dt); return; }
 
-    // ---- Grapple ----
-    if (this.grapple) this.updateGrapple(dt, input);
-
-    // ---- Crouch / slide ----
-    const wantCrouch = input.crouch;
+    // ---------- crouch / slide state ----------
+    const wantCrouch = inp.crouch && !stunned;
     if (wantCrouch && !this.crouching) {
       this.crouching = true;
-      if (this.onGround && this.hSpeed() > T.slideMinSpeed) this.startSlide(wish);
+      if (this.grounded && this.hSpeedNow() > T.slideMinSpeed - 1) this.startSlide(wish);
+      if (this.wall) this.endWall();
     }
-    if (!wantCrouch && this.crouching) {
-      if (this.canStand()) { this.crouching = false; this.sliding = false; }
-    }
-    const targetH = this.crouching ? T.slideH : T.standH;
-    if (targetH > this.h) this.h = Math.min(targetH, this.h + dt * 8); else this.h = targetH;
-    this.eyeH += ((this.h - 0.15) - this.eyeH) * Math.min(1, dt * 14);
+    if (!wantCrouch && this.crouching && this.canStand()) { this.crouching = false; this.sliding = false; }
+    const targetH = this.crouching ? T.crouchH : T.standH;
+    if (targetH < this.h) this.h = targetH;
+    else if (targetH > this.h) this.h = Math.min(targetH, this.h + dt * 9);
+    const eyeTarget = this.h - (this.crouching ? 0.2 : 0.14);
+    this.eyeH += (eyeTarget - this.eyeH) * Math.min(1, dt * 16);
 
-    // ---- Wallrun ----
-    if (this.wallrun) this.updateWallrun(dt, input, wish);
-    else if (!this.onGround && !this.grapple && this.wallCooldown <= 0 && !this.crouching) this.tryStartWallrun(wish);
-
-    // ---- Jump ----
-    if (this.jumpBuffer > 0) {
-      if (this.wallrun) { this.wallJump(); this.jumpBuffer = 0; }
-      else if (this.onGround || this.coyote > 0) {
-        this.vel.y = T.jumpVel; this.onGround = false; this.coyote = 0; this.jumpBuffer = 0;
-        if (this.sliding) { // slide-jump keeps momentum, a small boost
-          const hs = this.hSpeed(); if (hs > 0) { const k = (hs + 1.5) / hs; this.vel.x *= k; this.vel.z *= k; }
-        }
-        this.sliding = false;
-        this.ev.jump(false);
-      } else if (input.jumpPressed && this.airJumps > 0 && !this.grapple) {
-        this.airJumps--; this.jumpBuffer = 0;
-        this.vel.y = T.doubleJumpVel;
-        if (hasWish) { // redirect momentum toward input, keep magnitude
-          const hs = Math.max(this.hSpeed(), T.runSpeed * 0.8);
-          const cx = this.vel.x / (this.hSpeed() || 1), cz = this.vel.z / (this.hSpeed() || 1);
-          const nx = cx * 0.35 + wish.x * 0.65, nz = cz * 0.35 + wish.z * 0.65; const nl = Math.hypot(nx, nz) || 1;
-          this.vel.x = nx / nl * hs; this.vel.z = nz / nl * hs;
-        }
-        this.ev.jump(true);
-      }
+    // ---------- dash ----------
+    if (inp.dashPressed && this.dashCharges > 0 && !stunned) this.startDash(hasWish ? wish : this.flatFwd(new THREE.Vector3()), inp);
+    if (this.dashT > 0) {
+      this.dashT -= dt;
+      this.vel.x = this.dashDir.x * Math.max(T.dashBurst, this.dashExit + 6);
+      this.vel.z = this.dashDir.z * Math.max(T.dashBurst, this.dashExit + 6);
+      if (!this.grounded) this.vel.y = Math.max(this.vel.y, 0) * 0.5;
+      if (this.dashT <= 0) { this.vel.x = this.dashDir.x * this.dashExit; this.vel.z = this.dashDir.z * this.dashExit; }
     }
 
-    // ---- Horizontal movement ----
-    if (this.wallrun) {
-      // handled in updateWallrun
-    } else if (this.onGround) {
-      if (this.sliding) {
-        this.applyFriction(T.slideFriction, dt);
-        if (hasWish) this.accelerate(wish, 3, 6, dt); // light steering
-        if (this.hSpeed() < 4.5) this.sliding = false;
-      } else {
-        const justLanded = this.groundTime < 0.12 && this.jumpBuffer > 0;
-        if (!justLanded && this.dashActive <= 0) this.applyFriction(T.friction, dt);
-        const sp = this.crouching ? T.runSpeed * 0.45 : T.runSpeed;
-        if (hasWish) this.accelerate(wish, sp, T.groundAccel, dt);
-      }
-    } else if (!this.grapple || true) {
-      if (hasWish) {
-        this.accelerate(wish, T.airCap, T.airAccel, dt);            // strafe gain
-        if (this.hSpeed() < T.runSpeed) this.accelerate(wish, T.runSpeed, T.airControl, dt);
-        // CPM-style forward air steering (turn without losing speed)
-        if (input.fwd > 0 && input.right === 0) {
-          const hs = this.hSpeed();
-          if (hs > 1) {
-            const f = this.flatForward(tmp);
-            const k = Math.min(1, dt * 2.2);
-            const nx = this.vel.x / hs * (1 - k) + f.x * k, nz = this.vel.z / hs * (1 - k) + f.z * k;
-            const nl = Math.hypot(nx, nz);
-            this.vel.x = nx / nl * hs; this.vel.z = nz / nl * hs;
-          }
+    // ---------- scripted burst (iaido dash-cut) ----------
+    if (this.burstT > 0) {
+      this.burstT -= dt;
+      this.vel.copy(this.burstDir).multiplyScalar(this.burstSpeed);
+      if (this.burstT <= 0) this.vel.copy(this.burstDir).multiplyScalar(this.burstExit);
+    }
+
+    // ---------- grapple ----------
+    if (inp.grapplePressed && !this.hook && !this.grapple && this.grappleCharges > 0 && !stunned) this.fireHook(ctx);
+    if (this.hook) this.tickHook(dt, ctx);
+    if (this.grapple) this.tickGrapple(dt, inp, ctx);
+
+    // ---------- walls ----------
+    this.scanWall();
+    if (this.wall) this.tickWall(dt, inp, wish);
+    else if (!this.grounded && !this.grapple && this.dashT <= 0) this.tryWall(inp, wish);
+
+    // ---------- jump ----------
+    if (this.bufferT > 0 && !stunned) {
+      if (this.wall) { this.wallJump(inp); this.bufferT = 0; }
+      else if (this.grounded || this.coyoteT > 0) { this.groundJump(); this.bufferT = 0; }
+      else if (inp.jumpPressed && this.grapple) { this.releaseGrapple(true); this.vel.y = Math.max(this.vel.y, 0) + 5; this.bufferT = 0; this.ev.jump('grapple'); }
+      else if (inp.jumpPressed && this.airJumps > 0) { this.airJump(wish, hasWish); this.bufferT = 0; }
+    }
+    // auto-hop when holding jump (bhop assist)
+    if (inp.jumpHeld && inp.autoHop && this.grounded && !this.jumpedTick && !stunned && this.groundTime > 0) { this.groundJump(); }
+
+    // ---------- movement ----------
+    if (this.wall || this.dashT > 0 || this.burstT > 0) {
+      // handled
+    } else if (this.grounded) {
+      if (this.sliding) this.tickSlide(dt, inp, wish, hasWish);
+      else {
+        // skip friction on the landing tick if jumping (perfect bhop)
+        if (!this.jumpedTick) this.friction(T.friction, dt);
+        const sp = this.crouching ? T.crouchSpeed : T.runSpeed;
+        if (hasWish && !stunned) {
+          // project wish onto the ground plane
+          const n = this.groundN;
+          v1.copy(wish).addScaledVector(n, -wish.dot(n)).normalize();
+          const cur = this.vel.dot(v1); const add = sp - cur;
+          if (add > 0) this.vel.addScaledVector(v1, Math.min(T.groundAccel * dt * sp, add));
         }
       }
-    }
-
-    // ---- Gravity ----
-    if (!this.onGround) {
-      let g = T.gravity;
-      if (this.wallrun) g *= 0.0;
-      if (this.dashActive > 0) g *= 0.15;
-      if (this.crouching && this.vel.y < 0) g *= 1.6; // fast-fall
-      this.vel.y -= g * dt;
-    } else if (this.vel.y <= 0) {
-      this.vel.y = -2; // keep in contact with the ground
-    }
-
-    // ---- Integrate with collisions (substeps) ----
-    this.speed = this.vel.length();
-    const steps = Math.max(1, Math.ceil(this.speed * dt / 0.3));
-    const sdt = dt / steps;
-    const wasGround = this.onGround;
-    const preVy = this.vel.y;
-    this.mantleOk = input.fwd > 0;
-    this.onGround = false;
-    for (let i = 0; i < steps; i++) this.move(sdt);
-
-    // jump pads
-    for (const p of this.world.jumpPads) {
-      if (this.pos.y < 0.6 && Math.hypot(this.pos.x - p.x, this.pos.z - p.z) < p.r) {
-        this.vel.y = 30; this.onGround = false; this.airJumps = 1;
-        this.ev.jumpPad();
-      }
-    }
-
-    if (this.onGround) {
-      this.groundTime += dt;
-      if (!wasGround) this.onLand(preVy, wish);
-      this.airTime = 0; this.coyote = 0.12; this.airJumps = 1;
-      if (this.wallrun) this.endWallrun();
     } else {
-      this.groundTime = 0; this.airTime += dt;
+      if (hasWish && !stunned) {
+        this.accelerate(wish, T.runSpeed, T.airAccel, dt, T.airCap);           // Quake air strafe
+        const hs = this.hSpeedNow();
+        if (hs < T.runSpeed * 0.95) this.accelerate(wish, T.runSpeed, T.airControl, dt);
+        if (inp.fwd > 0 && inp.right === 0 && !this.grapple && this.steerLock <= 0) {
+          const rate = T.airSteer * (1.2 - Math.min(0.7, hs / 60));
+          this.steer(this.flatFwd(v2), rate, dt);
+        }
+      }
     }
 
-    // footsteps
-    if (this.onGround && !this.sliding && this.hSpeed() > 2) {
-      this.stepAcc += this.hSpeed() * dt;
-      if (this.stepAcc > 3.2) { this.stepAcc = 0; this.ev.step(); }
+    // ---------- gravity ----------
+    if (!this.grounded) {
+      let g = T.gravity;
+      if (this.wall) g = 0;                     // wall handles vertical
+      else if (this.climbT > 0) g = 0;
+      else if (this.dashT > 0) g *= 0.1;
+      else if (this.burstT > 0) g = 0;
+      else if (this.crouching && this.vel.y < 0) g *= 1.55; // fast fall
+      this.vel.y -= g * dt;
+    } else if (this.sliding) {
+      // slope gravity: accelerate down hill
+      const n = this.groundN;
+      v1.set(0, -T.gravity, 0); v1.addScaledVector(n, -v1.dot(n));
+      this.vel.addScaledVector(v1, dt);
     }
 
-    // camera tilt (wallrun + strafe lean)
-    let targetTilt = -input.right * 0.025;
-    if (this.wallrun) {
-      const r = this.flatRight(tmp);
-      targetTilt = -(this.wallrun.normal.dot(r)) * 0.2;
-    }
-    if (this.sliding) targetTilt += 0.05;
-    this.tilt += (targetTilt - this.tilt) * Math.min(1, dt * 8);
-    this.landDip *= Math.pow(0.0001, dt);
+    // speed cap (soft)
+    const sp = this.vel.length();
+    if (sp > T.maxSpeed) this.vel.multiplyScalar(1 - Math.min(1, (sp - T.maxSpeed) / sp * dt * 6));
 
-    if (this.pos.y < -20) { this.pos.set(0, 5, 30); this.vel.set(0, 0, 0); }
-    this.speed = this.vel.length();
+    // ---------- integrate ----------
+    const wasGrounded = this.grounded;
+    _preVel.copy(this.vel); const preVy = _preVel.y;
+    this.integrate(dt);
+    if (wasGrounded && this.wallContact && !this.jumpedTick) this.stepUp(_preVel);
+
+    // ground snapping (stick to slopes and ramp descents)
+    if (wasGrounded && !this.grounded && !this.jumpedTick && this.dashT <= 0 && this.vel.y < 3 && !this.grapple) this.snap();
+
+    // vault over waist/chest-high ledges when running into them
+    if (!this.mantle && !this.wall && inp.fwd > 0 && this.wallContact && this.vel.y < 6 && !stunned) this.tryMantle();
+
+    // pads
+    this.checkPads();
+
+    if (this.grounded) {
+      if (!wasGrounded) this.onLand(preVy, wish);
+      this.groundTime += dt; this.airTime = 0; this.coyoteT = T.coyote;
+      this.airJumps = T.airJumps; this.climbUsed = false;
+      if (this.wall) this.endWall();
+    } else { this.groundTime = 0; this.airTime += dt; }
+    if (this.sliding && !this.grounded && this.airTime > 0.15) this.sliding = false;
+
+    this.hSpeed = this.hSpeedNow(); this.speed = this.vel.length();
+    this.state = this.mantle ? 'mantle' : this.wall ? 'wall' : this.grapple ? 'grapple' : this.dashT > 0 ? 'dash' : this.sliding ? 'slide' : this.grounded ? 'ground' : 'air';
+    if (this.pos.y < -30) { this.ev.fell && this.ev.fell(); }
   }
 
-  applyFriction(f, dt) {
-    const s = this.hSpeed();
-    if (s < 0.01) { this.vel.x = this.vel.z = 0; return; }
-    const control = Math.max(s, 3);
-    const drop = control * f * dt;
-    const ns = Math.max(0, s - drop) / s;
-    this.vel.x *= ns; this.vel.z *= ns;
+  hSpeedNow() { return Math.hypot(this.vel.x, this.vel.z); }
+
+  get invuln() { return this.dashT > 0 || this.burstT > 0; }
+
+  burst(dir, speed, time, exit) {
+    this.burstDir = dir.clone().normalize(); this.burstSpeed = speed; this.burstT = time; this.burstExit = exit;
+    if (this.wall) this.endWall();
+    if (this.grapple) this.releaseGrapple(false);
+    this.sliding = false;
+    if (this.grounded && this.burstDir.y < 0.05) this.burstDir.y = Math.max(this.burstDir.y, 0.02);
   }
 
-  startSlide(wish) {
-    this.sliding = true;
-    if (this.slideBoostCd <= 0) {
-      const hs = this.hSpeed();
-      const k = (hs + TUNING.slideBoost) / hs;
-      this.vel.x *= k; this.vel.z *= k;
-      this.slideBoostCd = 1.2;
+  integrate(dt) {
+    const sp = this.vel.length();
+    const steps = Math.min(10, Math.max(1, Math.ceil(sp * dt / 0.22)));
+    const h = dt / steps;
+    this.grounded = false; this.wallContact = null;
+    for (let s = 0; s < steps; s++) {
+      this.pos.addScaledVector(this.vel, h);
+      if (this.col.collideCapsule(this.pos, T.radius, this.h, _contacts)) {
+        for (const c of _contacts) {
+          if (c.y > 0.68) { this.grounded = true; this.groundN.set(c.x, c.y, c.z); }
+          else if (c.y < -0.6) { if (this.vel.y > 0) this.vel.y = 0; }
+          else if (Math.abs(c.y) < 0.35) this.wallContact = { x: c.x, y: c.y, z: c.z };
+          const vn = this.vel.x * c.x + this.vel.y * c.y + this.vel.z * c.z;
+          if (vn < 0) { this.vel.x -= c.x * vn; this.vel.y -= c.y * vn; this.vel.z -= c.z * vn; }
+        }
+      }
     }
-    this.ev.slide();
+    // when standing on ground, don't keep a downward drift
+    if (this.grounded && !this.sliding) { const vn = this.vel.dot(this.groundN); if (vn < 0) this.vel.addScaledVector(this.groundN, -vn); }
+  }
+
+  snap() {
+    // probe straight down; only ever move vertically (moving along the contact normal would
+    // shove the player backwards on slopes)
+    const d = 0.45;
+    v1.copy(this.pos); v1.y -= d;
+    if (this.col.collideCapsule(v1, T.radius, this.h, _contacts)) {
+      let ground = null;
+      for (const c of _contacts) if (c.y > 0.68 && (!ground || c.y < ground.y)) ground = c;
+      if (!ground) return;
+      const push = Math.hypot(v1.x - this.pos.x, v1.y - (this.pos.y - d), v1.z - this.pos.z);
+      const y = this.pos.y - d + push / Math.max(0.68, ground.y);
+      if (y <= this.pos.y + 0.05) {
+        this.pos.y = Math.min(this.pos.y, y + 0.001);
+        this.grounded = true; this.groundN.set(ground.x, ground.y, ground.z);
+        const vn = this.vel.dot(this.groundN); if (vn > 0) this.vel.addScaledVector(this.groundN, -vn);
+      }
+    }
+  }
+
+  // climb small curbs/steps (≤ 0.45m) without losing speed
+  stepUp(pre) {
+    const hs = Math.hypot(pre.x, pre.z); if (hs < 1) return;
+    const dx = pre.x / hs, dz = pre.z / hs;
+    const fx = this.pos.x + dx * (T.radius + 0.12), fz = this.pos.z + dz * (T.radius + 0.12);
+    const h = this.col.raycast(fx, this.pos.y + 0.5, fz, 0, -1, 0, 0.5, _hit2);
+    if (!h || h.ny < 0.7) return;
+    const rise = h.y - this.pos.y;
+    if (rise < 0.03 || rise > 0.46) return;
+    if (!this.col.capsuleFree(this.pos.x + dx * 0.08, h.y + 0.02, this.pos.z + dz * 0.08, T.radius, this.h)) return;
+    this.pos.set(this.pos.x + dx * 0.08, h.y + 0.02, this.pos.z + dz * 0.08);
+    this.vel.x = pre.x; this.vel.z = pre.z; if (this.vel.y < 0) this.vel.y = 0;
+    this.grounded = true;
+  }
+
+  canStand() { return this.col.capsuleFree(this.pos.x, this.pos.y + 0.02, this.pos.z, T.radius - 0.02, T.standH); }
+
+  // ---------------- jumping ----------------
+  groundJump() {
+    const n = this.grounded ? this.groundN : UP;
+    // jump mostly up, slightly off slopes
+    this.vel.y = Math.max(this.vel.y, 0) + T.jumpVel;
+    if (n.y < 0.97) { this.vel.x += n.x * 2; this.vel.z += n.z * 2; }
+    if (this.sliding) { const hs = this.hSpeedNow(); if (hs > 1) { const k = (hs + 0.6) / hs; this.vel.x *= k; this.vel.z *= k; } this.ev.jump('slide'); }
+    else this.ev.jump('ground');
+    this.sliding = false;
+    this.grounded = false; this.coyoteT = 0; this.jumpedTick = true;
+  }
+
+  airJump(wish, hasWish) {
+    this.airJumps--;
+    this.vel.y = Math.max(this.vel.y * 0.25, 0) + T.airJumpVel;
+    if (hasWish) {
+      // redirect momentum toward input (keeps speed, a bit of control)
+      const hs = Math.max(this.hSpeedNow(), T.runSpeed * 0.85);
+      const s = this.hSpeedNow() || 1;
+      let nx = this.vel.x / s * 0.3 + wish.x * 0.7, nz = this.vel.z / s * 0.3 + wish.z * 0.7;
+      const nl = Math.hypot(nx, nz) || 1;
+      this.vel.x = nx / nl * hs; this.vel.z = nz / nl * hs;
+    }
+    this.jumpedTick = true;
+    this.ev.jump('air');
   }
 
   onLand(vy, wish) {
-    const impact = -vy;
-    this.lastLandSpeed = impact;
-    this.landDip = Math.min(0.35, impact * 0.012);
-    // Slide-landing converts fall speed into forward speed
-    if (this.crouching && impact > 6) {
-      const hs = this.hSpeed();
-      const dir = hs > 1 ? tmp.set(this.vel.x / hs, 0, this.vel.z / hs) : this.flatForward(tmp);
-      const add = Math.min(impact * 0.4, 10);
+    const impact = Math.max(0, -vy);
+    this.lastLand = impact;
+    // slide-landing: convert fall energy into forward speed
+    if (this.crouching && impact > 5) {
+      const hs = this.hSpeedNow();
+      const dir = hs > 1 ? v1.set(this.vel.x / hs, 0, this.vel.z / hs) : this.flatFwd(v1);
+      const add = Math.min(impact * T.slideLandFactor, 10);
       this.vel.x += dir.x * add; this.vel.z += dir.z * add;
-      this.sliding = true;
-      this.ev.slide();
-    } else if (this.crouching && this.hSpeed() > TUNING.slideMinSpeed) {
-      this.sliding = true; this.ev.slide();
-    }
+      this.sliding = true; this.slideT = 0;
+      this.ev.slide('land', add);
+    } else if (this.crouching && this.hSpeedNow() > T.slideMinSpeed) { this.sliding = true; this.slideT = 0; this.ev.slide('enter', 0); }
     this.ev.land(impact);
   }
 
-  canStand() {
-    const r = TUNING.radius;
-    const mn = tmp.set(this.pos.x - r, this.pos.y + 0.1, this.pos.z - r);
-    const mx = tmp2.set(this.pos.x + r, this.pos.y + TUNING.standH, this.pos.z + r);
-    for (const c of this.world.colliders) {
-      if (mx.x > c.min.x && mn.x < c.max.x && mx.y > c.min.y && mn.y < c.max.y && mx.z > c.min.z && mn.z < c.max.z) return false;
+  // ---------------- slide ----------------
+  startSlide(wish) {
+    this.sliding = true; this.slideT = 0;
+    let boost = 0;
+    if (this.slideCd <= 0) {
+      const hs = this.hSpeedNow();
+      boost = THREE.MathUtils.clamp(T.slideTarget - hs, T.slideBoostMin, T.slideBoostMax);
+      const dir = hs > 1 ? v1.set(this.vel.x / hs, 0, this.vel.z / hs) : (wish.lengthSq() ? v1.copy(wish) : this.flatFwd(v1));
+      this.vel.x += dir.x * boost; this.vel.z += dir.z * boost;
+      this.slideCd = T.slideBoostCd;
     }
-    return true;
+    this.ev.slide('enter', boost);
   }
 
-  // Axis-separated AABB movement
-  move(dt) {
-    const r = TUNING.radius;
-    const cols = this.world.colliders;
-    for (let axis = 0; axis < 3; axis++) {
-      const comp = axis === 0 ? 'x' : axis === 1 ? 'y' : 'z';
-      const delta = this.vel[comp] * dt;
-      if (delta === 0) continue;
-      this.pos[comp] += delta;
-      const mnx = this.pos.x - r, mxx = this.pos.x + r, mny = this.pos.y, mxy = this.pos.y + this.h, mnz = this.pos.z - r, mxz = this.pos.z + r;
-      for (const c of cols) {
-        if (mxx <= c.min.x || mnx >= c.max.x || mxy <= c.min.y || mny >= c.max.y || mxz <= c.min.z || mnz >= c.max.z) continue;
-        if (axis === 1) {
-          if (delta < 0) { this.pos.y = c.max.y; this.onGround = true; this.vel.y = 0; }
-          else { this.pos.y = c.min.y - this.h; this.vel.y = Math.min(0, this.vel.y); }
-        } else {
-          // step-up / mantle
-          const top = c.max.y - this.pos.y;
-          if (top > 0 && top <= 0.6 && this.canOccupy(this.pos.x, c.max.y + 0.01, this.pos.z)) { this.pos.y = c.max.y + 0.01; continue; }
-          if (top > 0 && top <= 1.5 && this.vel.y < 4 && !this.wallrun && this.mantleOk && this.canOccupy(this.pos.x, c.max.y + 0.01, this.pos.z)) {
-            this.vel.y = Math.max(this.vel.y, 8.5); this.ev.mantle && this.ev.mantle();
-          }
-          if (delta > 0) this.pos[comp] = c.min[comp] - r - 0.0001; else this.pos[comp] = c.max[comp] + r + 0.0001;
-          this.lastHitNormal = { axis: comp, sign: delta > 0 ? -1 : 1, collider: c };
-          this.vel[comp] = 0;
-        }
-        break;
+  tickSlide(dt, inp, wish, hasWish) {
+    this.slideT += dt;
+    this.friction(T.slideFriction * (this.groundN.y > 0.985 ? 1 : 0.25), dt);
+    if (hasWish) this.steer(wish, T.slideSteer, dt);
+    if (this.hSpeedNow() < T.slideMinSpeed && this.groundN.y > 0.985) this.sliding = false;
+  }
+
+  // ---------------- dash ----------------
+  startDash(dir, inp) {
+    this.dashCharges--; this.dashRegen = Math.min(this.dashRegen, 0.2);
+    this.dashDir.copy(dir).setY(0).normalize();
+    const along = Math.max(0, this.vel.x * this.dashDir.x + this.vel.z * this.dashDir.z);
+    this.dashExit = Math.max(along, this.hSpeedNow() * 0.85, T.runSpeed) + T.dashGain;
+    this.dashT = T.dashTime;
+    if (this.wall) this.endWall();
+    if (this.grapple) this.releaseGrapple(false);
+    if (!this.grounded) this.vel.y = Math.max(this.vel.y, 0);
+    if (this.grounded && inp.crouch) { this.sliding = true; }
+    this.ev.dash(this.dashDir);
+  }
+
+  // ---------------- walls ----------------
+  scanWall() {
+    // find nearest runnable wall around the capsule (8 directions, 2 heights)
+    this.nearWall = null;
+    if (this.grounded) return;
+    let best = 1e9;
+    const r = T.radius + 0.45;
+    for (let k = 0; k < 8; k++) {
+      const a = this.yaw + k * Math.PI / 4;
+      const dx = Math.cos(a), dz = -Math.sin(a);
+      let ok = 0, hx = 0, hz = 0, dist = 0, nx = 0, nz = 0;
+      for (const hh of [0.55, 1.3]) {
+        const h = this.col.raycast(this.pos.x, this.pos.y + Math.min(hh, this.h - 0.2), this.pos.z, dx, 0, dz, r, _hit, SURF.WALLRUN);
+        if (h && Math.abs(h.ny) < 0.3) { ok++; dist = h.t; nx = h.nx; nz = h.nz; }
       }
+      if (ok === 2 && dist < best) { best = dist; this.nearWall = { nx, nz, dist }; }
     }
   }
 
-  canOccupy(x, y, z) {
-    const r = TUNING.radius;
-    for (const c of this.world.colliders) {
-      if (x + r > c.min.x && x - r < c.max.x && y + this.h > c.min.y && y < c.max.y && z + r > c.min.z && z - r < c.max.z) return false;
+  tryWall(inp, wish) {
+    if (this.airTime < 0.05 || this.crouching) return;
+    const w = this.nearWall; if (!w) return;
+    const n = v1.set(w.nx, 0, w.nz).normalize();
+    if (this.wallCd > 0 && n.dot(this.lastWallN) > 0.9) return;
+    const hs = this.hSpeedNow();
+    const vdir = hs > 0.1 ? v2.set(this.vel.x / hs, 0, this.vel.z / hs) : this.flatFwd(v2);
+    const into = -vdir.dot(n);
+    const lookInto = -this.flatFwd(v3).dot(n);
+    // straight into the wall → climb
+    if ((into > 0.75 || (hs < 4 && lookInto > 0.7)) && inp.fwd > 0 && lookInto > 0.6) {
+      if (!this.climbUsed && this.vel.y > -6) { this.climbT = T.climbTime; this.climbUsed = true; this.wall = { n: n.clone(), dir: new THREE.Vector3(), t: 0, climb: true }; this.bufferT = 0; this.ev.climb(); }
+      return;
     }
-    return true;
-  }
-
-  // Find a wall touching the player's side
-  findWall() {
-    const r = TUNING.radius + 0.25;
-    const y0 = this.pos.y + 0.3, y1 = this.pos.y + this.h - 0.2;
-    let best = null, bestD = 1e9;
-    for (const c of this.world.colliders) {
-      if (!c.wallrun || c.ground) continue;
-      if (y1 < c.min.y || y0 > c.max.y - 0.3) continue;
-      // check x faces
-      const inZ = this.pos.z > c.min.z - 0.05 && this.pos.z < c.max.z + 0.05;
-      const inX = this.pos.x > c.min.x - 0.05 && this.pos.x < c.max.x + 0.05;
-      if (inZ) {
-        const dl = this.pos.x - c.max.x; if (dl >= -0.05 && dl < r && dl < bestD) { bestD = dl; best = new THREE.Vector3(1, 0, 0); }
-        const dr = c.min.x - this.pos.x; if (dr >= -0.05 && dr < r && dr < bestD) { bestD = dr; best = new THREE.Vector3(-1, 0, 0); }
-      }
-      if (inX) {
-        const dl = this.pos.z - c.max.z; if (dl >= -0.05 && dl < r && dl < bestD) { bestD = dl; best = new THREE.Vector3(0, 0, 1); }
-        const dr = c.min.z - this.pos.z; if (dr >= -0.05 && dr < r && dr < bestD) { bestD = dr; best = new THREE.Vector3(0, 0, -1); }
-      }
-    }
-    return best;
-  }
-
-  tryStartWallrun(wish) {
-    if (this.airTime < 0.08) return;
-    const hs = this.hSpeed();
-    if (hs < TUNING.wallrunMinSpeed) return;
-    const n = this.findWall();
-    if (!n) return;
-    if (this.wallCooldown > 0 && n.equals(this.lastWallNormal)) return;
-    // must be moving mostly along the wall, not straight into it
-    const vx = this.vel.x / hs, vz = this.vel.z / hs;
-    const into = -(vx * n.x + vz * n.z);
-    if (into > 0.85) return;
+    if (hs < T.wallrunMin) return;
+    if (inp.fwd <= 0 && Math.abs(inp.right) === 0) return;
     const along = new THREE.Vector3(-n.z, 0, n.x);
-    if (along.x * vx + along.z * vz < 0) along.negate();
-    this.wallrun = { normal: n, dir: along, time: 0, entry: Math.max(hs, TUNING.wallrunSpeed) };
-    this.vel.y = Math.max(this.vel.y * 0.3, 1.5);
-    this.airJumps = 1;
-    if (this.dashCharges < TUNING.dashCharges) this.dashTimer += 0.5;
-    this.ev.wallrunStart();
+    if (along.dot(vdir) < 0) along.negate();
+    this.wall = { n: n.clone(), dir: along, t: 0, entry: Math.max(hs, T.wallrunSpeed), climb: false };
+    this.vel.y = THREE.MathUtils.clamp(this.vel.y, -1.5, 4.5);
+    this.airJumps = T.airJumps;
+    this.climbUsed = false;
+    this.bufferT = 0;
+    this.ev.wallStart(n);
   }
 
-  updateWallrun(dt, input, wish) {
-    const w = this.wallrun;
-    w.time += dt;
-    const n = this.findWall();
-    if (!n || !n.equals(w.normal) || w.time > TUNING.wallrunTime || this.onGround || input.crouch) { this.endWallrun(); return; }
-    // follow look direction along wall
-    const f = this.flatForward(tmp);
-    if (f.dot(w.dir) < -0.2) w.dir.negate();
-    const target = Math.max(w.entry, TUNING.wallrunSpeed) + (input.fwd > 0 ? 2 * w.time : 0);
+  tickWall(dt, inp, wish) {
+    const w = this.wall; w.t += dt;
+    const nw = this.nearWall;
+    const same = nw && (nw.nx * w.n.x + nw.nz * w.n.z) > 0.8;
+    if (w.climb) {
+      this.climbT -= dt;
+      if (!same || this.climbT <= 0 || inp.fwd <= 0) {
+        this.wall = null; this.climbT = 0;
+        if (this.vel.y > 0) this.vel.y = Math.min(this.vel.y, 4);
+        return;
+      }
+      this.vel.y = T.climbVel * (0.6 + 0.4 * (this.climbT / T.climbTime));
+      this.vel.x = -w.n.x * 1.5; this.vel.z = -w.n.z * 1.5;
+      this.tryMantle(true);
+      return;
+    }
+    if (!same || w.t > T.wallrunTime || this.grounded) { this.endWall(); return; }
+    if (nw) w.n.set(nw.nx, 0, nw.nz).normalize();
+    // keep direction aligned with the wall and the view
+    w.dir.set(-w.n.z, 0, w.n.x);
+    if (w.dir.dot(this.flatFwd(v1)) < 0) w.dir.negate();
     const cur = this.vel.x * w.dir.x + this.vel.z * w.dir.z;
-    const sp = cur + (target - cur) * Math.min(1, dt * 3);
-    this.vel.x = w.dir.x * sp - w.normal.x * 1.5;
-    this.vel.z = w.dir.z * sp - w.normal.z * 1.5;
-    // gentle arc: rise then fall
-    this.vel.y += (1.2 - w.time * 3.2 - this.vel.y) * Math.min(1, dt * 3);
+    const target = Math.max(w.entry, T.wallrunSpeed) + (inp.fwd > 0 ? w.t * 1.2 : -w.t * 3);
+    const sp = cur + (target - cur) * Math.min(1, dt * 4);
+    this.vel.x = w.dir.x * sp - w.n.x * 1.8;
+    this.vel.z = w.dir.z * sp - w.n.z * 1.8;
+    // vertical arc: hold height, then sag
+    const vyTarget = w.t < 0.35 ? 1.2 : 1.2 - (w.t - 0.35) * 5.5;
+    this.vel.y += (vyTarget - this.vel.y) * Math.min(1, dt * 6);
+    // stepping off: pressing away from the wall
+    const away = (inp.right !== 0) ? this.wish(inp, v2).dot(w.n) : 0;
+    if (away > 0.6 && w.t > 0.15) { this.vel.x += w.n.x * 4; this.vel.z += w.n.z * 4; this.endWall(); }
   }
 
-  wallJump() {
-    const w = this.wallrun, T = TUNING;
-    const f = this.flatForward(tmp);
-    const hs = this.hSpeed();
-    // blend of along-wall momentum, away from wall, and look direction
-    let dx = w.dir.x * 0.6 + w.normal.x * 0.7 + f.x * 0.5;
-    let dz = w.dir.z * 0.6 + w.normal.z * 0.7 + f.z * 0.5;
-    // never jump back into the wall
-    const into = dx * w.normal.x + dz * w.normal.z;
-    if (into < 0.35) { dx += w.normal.x * (0.35 - into); dz += w.normal.z * (0.35 - into); }
-    const l = Math.hypot(dx, dz);
-    const s = Math.max(hs, T.wallrunSpeed) + 1.5;
-    this.vel.x = dx / l * s; this.vel.z = dz / l * s;
-    this.vel.y = T.wallJumpUp;
-    this.lastWallNormal.copy(w.normal);
-    this.wallCooldown = 0.35;
-    this.wallrun = null;
-    this.airJumps = 1;
-    this.ev.jump(false, true);
+  wallJump(inp) {
+    const w = this.wall;
+    if (w.climb) {
+      // kick off backwards
+      this.vel.set(w.n.x * T.wallJumpOut * 1.1, T.wallJumpUp, w.n.z * T.wallJumpOut * 1.1);
+    } else {
+      const f = this.flatFwd(v1);
+      const hs = Math.max(this.hSpeedNow(), T.wallrunSpeed);
+      let dx = w.dir.x * 0.75 + w.n.x * 0.55 + f.x * 0.45, dz = w.dir.z * 0.75 + w.n.z * 0.55 + f.z * 0.45;
+      const into = dx * w.n.x + dz * w.n.z;
+      if (into < 0.3) { dx += w.n.x * (0.3 - into); dz += w.n.z * (0.3 - into); }
+      const l = Math.hypot(dx, dz);
+      const s = hs + 1.2;
+      this.vel.set(dx / l * s + w.n.x * 2, T.wallJumpUp, dz / l * s + w.n.z * 2);
+    }
+    this.lastWallN.copy(w.n); this.wallCd = 0.4;
+    this.wall = null; this.climbT = 0;
+    this.airJumps = T.airJumps;
+    this.jumpedTick = true; this.steerLock = 0.35;
+    this.ev.jump('wall');
   }
 
-  endWallrun() {
-    if (!this.wallrun) return;
-    this.lastWallNormal.copy(this.wallrun.normal);
-    this.wallCooldown = 0.3;
-    this.wallrun = null;
+  endWall() {
+    if (!this.wall) return;
+    this.lastWallN.copy(this.wall.n); this.wallCd = 0.3;
+    this.wall = null; this.climbT = 0;
   }
 
-  startGrapple(point, target) {
-    if (this.grappleCd > 0) return false;
-    this.grapple = { point: point.clone(), target, time: 0, len: point.distanceTo(this.eye) };
-    this.wallrun = null; this.sliding = false;
-    if (this.onGround) { this.vel.y = 6; this.onGround = false; }
-    this.ev.grapple();
+  // ---------------- mantle ----------------
+  tryMantle(force = false) {
+    if (this.mantle) return false;
+    const f = this.flatFwd(v1);
+    const h = this.col.raycast(this.pos.x, this.pos.y + 0.9, this.pos.z, f.x, 0, f.z, T.radius + 0.7, _hit);
+    if (!h || Math.abs(h.ny) > 0.3) return false;
+    // the obstacle must end below ~2.4m (otherwise it's a wall, not a ledge)
+    const tall = this.col.raycast(this.pos.x, this.pos.y + 2.45, this.pos.z, f.x, 0, f.z, T.radius + 0.9, _hit2);
+    if (tall && Math.abs(tall.ny) < 0.3) return false;
+    const hx = h.x - h.nx * 0.45, hz = h.z - h.nz * 0.45;
+    const top = this.col.raycast(hx, this.pos.y + 2.6, hz, 0, -1, 0, 2.6, _hit);
+    if (!top || top.ny < 0.7) return false;
+    const rise = top.y - this.pos.y;
+    if (rise < 0.4 || rise > 2.3) return false;
+    const tx = top.x - h.nx * 0.0 + f.x * (T.radius * 0.6), tz = top.z + f.z * (T.radius * 0.6);
+    if (!this.col.capsuleFree(tx, top.y + 0.03, tz, T.radius, T.crouchH)) return false;
+    this.mantle = { from: this.pos.clone(), to: new THREE.Vector3(tx, top.y + 0.03, tz), t: 0, dur: 0.14 + rise * 0.05, speed: Math.max(this.hSpeedNow(), 7), dir: f.clone() };
+    this.wall = null; this.climbT = 0;
+    this.ev.mantle();
     return true;
   }
 
-  updateGrapple(dt, input) {
-    const g = this.grapple;
-    g.time += dt;
-    if (g.target) { if (!g.target.alive) { this.endGrapple(); return; } g.point.copy(g.target.chest); }
-    const eye = this.eye.clone();
-    const to = tmp.subVectors(g.point, eye);
-    const dist = to.length();
-    to.divideScalar(dist || 1);
-    if (!input.grapple || dist < (g.target ? 2.8 : 2.2) || g.time > 2.6) { this.endGrapple(); return; }
-    // pull
-    const pull = TUNING.grapplePull * (g.target ? 1.3 : 1);
-    this.vel.addScaledVector(to, pull * dt);
-    // counter gravity a bit while pulling
-    this.vel.y += TUNING.gravity * 0.45 * dt;
-    // damp sideways drift slightly so it feels snappy
-    const along = this.vel.dot(to);
-    tmp2.copy(this.vel).addScaledVector(to, -along);
-    this.vel.addScaledVector(tmp2, -Math.min(1, dt * 1.5));
-    const maxS = 48;
-    if (this.vel.length() > maxS) this.vel.setLength(maxS);
+  tickMantle(dt) {
+    const m = this.mantle; m.t += dt;
+    const u = Math.min(1, m.t / m.dur);
+    const e = 1 - Math.pow(1 - u, 2);
+    // up first, then forward
+    this.pos.x = m.from.x + (m.to.x - m.from.x) * Math.max(0, (u - 0.35) / 0.65);
+    this.pos.z = m.from.z + (m.to.z - m.from.z) * Math.max(0, (u - 0.35) / 0.65);
+    this.pos.y = m.from.y + (m.to.y - m.from.y) * Math.min(1, e * 1.4);
+    this.vel.set(0, 0, 0);
+    if (u >= 1) {
+      this.mantle = null;
+      this.vel.set(m.dir.x * m.speed, 0, m.dir.z * m.speed);
+      this.grounded = true; this.groundN.set(0, 1, 0);
+    }
   }
 
-  endGrapple() {
+  // ---------------- grapple ----------------
+  fireHook(ctx) {
+    this.grappleCharges--; this.grappleRegen = 0;
+    const d = this.lookDir(new THREE.Vector3());
+    const e = this.eye.clone();
+    this.hook = { pos: e.clone().addScaledVector(d, 0.6), dir: d, traveled: 0 };
+    this.ev.hookFire();
+  }
+
+  tickHook(dt, ctx) {
+    const h = this.hook;
+    const step = T.grappleHookSpeed * dt;
+    // enemies first (they move)
+    const target = ctx && ctx.hookEnemy ? ctx.hookEnemy(h.pos, h.dir, step) : null;
+    const wh = this.col.raycast(h.pos.x, h.pos.y, h.pos.z, h.dir.x, h.dir.y, h.dir.z, step, _hit, SURF.GRAPPLE);
+    if (target && (!wh || target.t < wh.t)) {
+      this.attach(target.point, target.enemy); this.hook = null; return;
+    }
+    if (wh) { this.attach(new THREE.Vector3(wh.x, wh.y, wh.z), null, new THREE.Vector3(wh.nx, wh.ny, wh.nz)); this.hook = null; return; }
+    h.pos.addScaledVector(h.dir, step); h.traveled += step;
+    if (h.traveled > T.grappleRange) { this.hook = null; this.ev.hookMiss(); this.grappleCharges = Math.min(T.grappleCharges, this.grappleCharges + 1); }
+  }
+
+  attach(point, enemy, normal) {
+    this.grapple = { point: point.clone(), enemy, t: 0, normal };
+    // yank toward anchor
+    const to = v1.subVectors(point, this.eye).normalize();
+    const along = this.vel.dot(to);
+    if (along < T.grappleYank) this.vel.addScaledVector(to, T.grappleYank - Math.max(0, along) * 0.5);
+    if (this.grounded) { this.vel.y = Math.max(this.vel.y, 5); this.grounded = false; }
+    this.sliding = false;
+    if (this.wall) this.endWall();
+    this.ev.hookAttach(point, !!enemy);
+  }
+
+  tickGrapple(dt, inp, ctx) {
+    const g = this.grapple; g.t += dt;
+    if (g.enemy) { if (!g.enemy.alive) { this.releaseGrapple(false); return; } g.point.copy(g.enemy.chest); }
+    const e = this.eye;
+    const to = v1.subVectors(g.point, e); const dist = to.length(); to.divideScalar(dist || 1);
+    if (!inp.grappleHeld || dist < (g.enemy ? 3.0 : 2.4) || g.t > 3.2) { this.releaseGrapple(dist < 3.2); return; }
+    const pull = T.grapplePull * (g.enemy ? 1.35 : 1) * (dist > 8 ? 1 : 0.6 + dist / 20);
+    this.vel.addScaledVector(to, pull * dt);
+    // partial gravity compensation so the swing feels lively not sluggish
+    this.vel.y += T.gravity * 0.35 * dt;
+    // input lets you swing sideways
+    const r = this.flatRight(v2);
+    this.vel.addScaledVector(r, inp.right * 9 * dt);
+    const s = this.vel.length(); if (s > 55) this.vel.multiplyScalar(55 / s);
+  }
+
+  releaseGrapple(arrived) {
     if (!this.grapple) return;
-    if (this.vel.y < 6) this.vel.y += 3;
+    const enemy = this.grapple.enemy;
     this.grapple = null;
-    this.grappleCd = TUNING.grappleCooldown;
+    if (arrived && this.vel.y < 4) this.vel.y += 3.5;
+    this.ev.hookRelease(arrived, enemy);
+  }
+
+  // ---------------- pads ----------------
+  checkPads() {
+    if (this.padCd > 0) return;
+    for (const p of this.map.jumpPads) {
+      if (Math.abs(this.pos.y - p.y) < 0.7 && (this.pos.x - p.x) ** 2 + (this.pos.z - p.z) ** 2 < p.r * p.r) {
+        this.vel.y = p.power; this.vel.x *= 1.1; this.vel.z *= 1.1;
+        this.grounded = false; this.airJumps = T.airJumps; this.padCd = 0.4; this.sliding = false;
+        this.ev.pad(p); return;
+      }
+    }
+    if (!this.grounded) return;
+    for (const b of this.map.boostPads) {
+      const dx = this.pos.x - b.x, dz = this.pos.z - b.z;
+      const along = dx * b.dir.x + dz * b.dir.z, side = dx * b.dir.z - dz * b.dir.x;
+      if (Math.abs(along) < b.len / 2 && Math.abs(side) < b.w / 2 && Math.abs(this.pos.y - b.y) < 0.6) {
+        const cur = this.vel.x * b.dir.x + this.vel.z * b.dir.z;
+        const target = 32;
+        if (cur < target) { this.vel.x += b.dir.x * (target - cur); this.vel.z += b.dir.z * (target - cur); }
+        this.padCd = 0.5;
+        this.ev.boost(b);
+        return;
+      }
+    }
   }
 }

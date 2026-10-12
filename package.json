@@ -1,6 +1,7 @@
 {
   "name": "redshift",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=public/game.js && cp src/index.html public/index.html"
   },
