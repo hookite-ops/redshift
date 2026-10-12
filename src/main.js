@@ -79,7 +79,11 @@ document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click',
 }));
 
 // loadout
-function renderLoadout() { document.querySelectorAll('#loadout button').forEach(b => b.classList.toggle('on', b.dataset.lo === S.loadout)); }
+function renderLoadout() {
+  document.querySelectorAll('#loadout button').forEach(b => b.classList.toggle('on', b.dataset.lo === S.loadout));
+  document.querySelectorAll('#difficulty button').forEach(b => b.classList.toggle('on', b.dataset.df === S.difficulty));
+}
+document.querySelectorAll('#difficulty button').forEach(b => b.addEventListener('click', () => { S.difficulty = b.dataset.df; saveSettings(S); renderLoadout(); game.audio.init(); game.audio.ui(); }));
 document.querySelectorAll('#loadout button').forEach(b => b.addEventListener('click', () => { S.loadout = b.dataset.lo; saveSettings(S); renderLoadout(); game.audio.init(); game.audio.ui(); }));
 renderLoadout();
 
@@ -96,7 +100,7 @@ function openSettings() {
   sl('Tilt', 'tilt', v => (+v).toFixed(2)); sl('Bob', 'bob', v => (+v).toFixed(2)); sl('Blur', 'blur', v => (+v).toFixed(2));
   sl('Sfx', 'sfx', v => Math.round(v * 100)); sl('Music', 'music', v => Math.round(v * 100));
   const sel = (id, key, num = true, after) => { const el = $('s' + id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(S); applySettings(); after && after(); }; };
-  sel('AutoHop', 'autoHop'); sel('CrouchToggle', 'crouchToggle'); sel('Fps', 'fps'); sel('Full', 'full'); sel('Cross', 'crosshair', false);
+  sel('AutoHop', 'autoHop'); sel('CrouchToggle', 'crouchToggle'); sel('MoveMode', 'moveMode', false); sel('KeyHints', 'keyHints'); sel('Fps', 'fps'); sel('Full', 'full'); sel('Cross', 'crosshair', false);
   sel('Quality', 'quality', false, () => { if (confirm('그래픽 품질을 바꾸려면 새로고침이 필요해요. 지금 새로고침할까요?')) { game.state = 'menu'; location.reload(); } });
   renderBinds();
 }
@@ -116,14 +120,22 @@ function renderBinds() {
           const arr = [...S.binds[a]]; arr[i] = code; S.binds[a] = arr;
           for (const k in S.binds) S.binds[k] = S.binds[k].filter(Boolean);
         }
-        saveSettings(S); renderBinds();
+        saveSettings(S); renderBinds(); renderKeyHints();
       };
     }, 50);
   });
   $('resetBinds').onclick = () => { S.binds = JSON.parse(JSON.stringify(DEFAULT_BINDS)); saveSettings(S); renderBinds(); };
 }
+function renderKeyHints() {
+  const k = a => (S.binds[a] && S.binds[a][0]) ? keyName(S.binds[a][0]) : '—';
+  const items = [['slash', '베기'], ['block', '막기/패링'], ['shoot', '사격'], ['grapple', '그래플'], ['dash', '대시'], ['crouch', '슬라이드'], ['jump', '점프·벽점프']];
+  $('keyHints').innerHTML = items.map(([a, n]) => `<span><b>${k(a)}</b>${n}</span>`).join('');
+  $('keyHints').classList.toggle('hidden', !S.keyHints);
+}
 function applySettings() {
   game.audio.setVolumes(S.sfx, S.music);
+  renderKeyHints();
+  if (game.player) game.player.easy = S.moveMode !== 'classic';
   $('fps').classList.toggle('hidden', !S.fps);
   document.documentElement.style.setProperty('--xc', S.crosshair);
 }

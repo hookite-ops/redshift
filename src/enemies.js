@@ -273,7 +273,7 @@ export class Enemy {
     } else if (this.state === 'burst') {
       w.s = 2.5; this.shotT -= dt;
       if (this.shotT <= 0) { this.shotT = 0.12; this.shots--; ctx.enemyShoot(this, { speed: 48, dmg: 8, spread: 0.035 }); if (this.shots <= 0) { this.state = 'idle'; this.atkCd = 1.5 + Math.random() * 1.5; } }
-    } else if (this.atkCd <= 0 && this.los && dist < 60) { this.state = 'windup'; this.windup = 0.55; this.parryable = true; }
+    } else if (this.atkCd <= 0 && this.los && dist < 60 && ctx.canAttack(this, 'ranged')) { this.state = 'windup'; this.windup = 0.55 * ctx.windMul; this.parryable = true; }
     return w;
   }
 
@@ -288,7 +288,7 @@ export class Enemy {
     if (this.state === 'recover') {
       this.stateT -= dt; w.s = 3;
       if (this.stateT <= 0) {
-        if (this.chain < 2 && Math.random() < 0.4 && dist < 3.5) { this.state = 'windup'; this.windup = 0.32; this.parryable = true; ctx.telegraph(this, true); }
+        if (this.chain < 2 && Math.random() < 0.35 && dist < 3.5) { this.state = 'windup'; this.windup = 0.38 * ctx.windMul; this.parryable = true; ctx.telegraph(this, true); }
         else { this.state = 'idle'; this.atkCd = 0.9 + Math.random() * 0.8; this.chain = 0; }
       }
       return w;
@@ -296,9 +296,16 @@ export class Enemy {
     if (this.guardT > 0) { this.state = 'guard'; w.s = 3; w.x = dir.x * 0.3 + dir.z * this.strafe * 0.7; w.z = dir.z * 0.3 - dir.x * this.strafe * 0.7; return w; }
     if (this.state === 'guard') this.state = 'idle';
     // guard when the player is close and facing us
-    if (dist < 7 && Math.random() < dt * 0.6 && this.atkCd > 0.2) { this.guardT = 1.0 + Math.random() * 0.8; }
+    if (ctx.guards && dist < 7 && Math.random() < dt * 0.6 && this.atkCd > 0.2) { this.guardT = 1.0 + Math.random() * 0.8; }
     if (dist < 6) { const s = v1.set(dir.z, 0, -dir.x).multiplyScalar(this.strafe * 0.6); w.x += s.x; w.z += s.z; }
-    if (dist < 3.2 && this.atkCd <= 0 && Math.abs(dy) < 2.4) { this.state = 'windup'; this.windup = 0.48; this.parryable = true; this.chain = 0; ctx.telegraph(this, true); }
+    const mayAttack = ctx.canAttack(this, 'melee');
+    if (!mayAttack && dist < 5) {
+      // waiting for its turn: circle at a respectful distance instead of crowding
+      const s = v1.set(dir.z, 0, -dir.x).multiplyScalar(this.strafe);
+      w.x = s.x - dir.x * (dist < 3.8 ? 0.8 : 0); w.z = s.z - dir.z * (dist < 3.8 ? 0.8 : 0); w.s = 5;
+      return w;
+    }
+    if (dist < 3.2 && this.atkCd <= 0 && Math.abs(dy) < 2.4) { this.state = 'windup'; this.windup = 0.5 * ctx.windMul; this.parryable = true; this.chain = 0; ctx.telegraph(this, true); }
     // gap closer
     if (dist > 7 && dist < 22 && this.dashCd <= 0 && this.grounded && this.los) {
       this.vel.x = dir.x * 26; this.vel.z = dir.z * 26; this.vel.y = 4 + Math.max(0, dy) * 1.1;
@@ -320,8 +327,8 @@ export class Enemy {
       return w;
     }
     if (this.state === 'recover') { this.stateT -= dt; w.s = 1; if (this.stateT <= 0) { this.state = 'idle'; this.atkCd = 1.2 + Math.random(); } return w; }
-    if (dist < 4.2 && this.atkCd <= 0 && Math.abs(dy) < 3) {
-      this.unblockable = Math.random() < 0.35; this.state = 'windup'; this.windup = this.unblockable ? 0.8 : 0.6; this.parryable = !this.unblockable;
+    if (dist < 4.2 && this.atkCd <= 0 && Math.abs(dy) < 3 && ctx.canAttack(this, 'melee')) {
+      this.unblockable = Math.random() < 0.3; this.state = 'windup'; this.windup = (this.unblockable ? 0.85 : 0.65) * ctx.windMul; this.parryable = !this.unblockable;
       ctx.telegraph(this, !this.unblockable);
     }
     if (dist > 8 && dist < 16 && this.dashCd <= 0 && this.grounded && this.los) { // lunge
@@ -344,7 +351,7 @@ export class Enemy {
         this.shotsHere = (this.shotsHere || 0) + 1;
         if (this.shotsHere >= 2) { this.shotsHere = 0; ctx.relocate(this); }
       }
-    } else if (this.atkCd <= 0 && this.los && dist < 140) { this.state = 'aim'; this.windup = 1.4; this.parryable = true; this.aimPoint = p.eye.clone(); }
+    } else if (this.atkCd <= 0 && this.los && dist < 140 && ctx.canAttack(this, 'ranged')) { this.state = 'aim'; this.windup = 1.4 * ctx.windMul; this.parryable = true; this.aimPoint = p.eye.clone(); }
     return w;
   }
 
@@ -356,7 +363,7 @@ export class Enemy {
     } else if (this.state === 'burst') {
       this.shotT -= dt;
       if (this.shotT <= 0) { this.shotT = 0.16; this.shots--; ctx.enemyShoot(this, { speed: 34, dmg: 6, spread: 0.05, small: true }); if (this.shots <= 0) { this.state = 'idle'; this.atkCd = 1.6 + Math.random() * 1.4; } }
-    } else if (this.atkCd <= 0 && this.los && dist < 45) { this.state = 'windup'; this.windup = 0.45; this.parryable = true; }
+    } else if (this.atkCd <= 0 && this.los && dist < 45 && ctx.canAttack(this, 'ranged')) { this.state = 'windup'; this.windup = 0.45 * ctx.windMul; this.parryable = true; }
     return null;
   }
 

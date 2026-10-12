@@ -1,18 +1,19 @@
 export const ACTIONS = [
   ['forward', '앞으로'], ['back', '뒤로'], ['left', '왼쪽'], ['right', '오른쪽'],
-  ['jump', '점프 / 벽점프'], ['crouch', '슬라이드 / 웅크리기'], ['dash', '대시'],
-  ['slash', '베기 (꾹 = 발도술)'], ['shoot', '사격'], ['parry', '패링'], ['grapple', '그래플 (누르고 있기)'],
-  ['reload', '재장전'], ['inspect', '칼 돌리기'], ['restart', '타임어택 재시작'],
+  ['jump', '점프 / 벽점프 (공중 2단)'], ['crouch', '슬라이드'], ['dash', '대시'],
+  ['slash', '베기 (꾹 눌렀다 떼면 발도술)'], ['block', '막기 / 패링 (누르는 순간 패링)'], ['shoot', '사격'], ['grapple', '그래플 (한 번 누르기)'],
+  ['reload', '재장전 (자동)'], ['inspect', '칼 돌리기'], ['restart', '타임어택 재시작'],
 ];
 export const DEFAULT_BINDS = {
   forward: ['KeyW'], back: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
   jump: ['Space'], crouch: ['KeyC', 'ControlLeft'], dash: ['ShiftLeft'],
-  slash: ['Mouse0'], shoot: ['Mouse2'], parry: ['KeyF', 'Mouse3'], grapple: ['KeyE', 'KeyQ'],
+  slash: ['Mouse0'], block: ['Mouse2', 'KeyF'], shoot: ['KeyQ', 'Mouse3'], grapple: ['KeyE'],
   reload: ['KeyR'], inspect: ['KeyV'], restart: ['KeyT'],
 };
 export const DEFAULTS = {
-  sens: 1.0, fov: 100, fovFx: 18, shake: 1, tilt: 1, bob: 1, blur: 1,
+  sens: 0.8, fov: 95, fovFx: 12, shake: 0.5, tilt: 0.6, bob: 0.4, blur: 0.5,
   sfx: 0.8, music: 0.4, crouchToggle: 0, quality: 'high', fps: 0, full: 1, autoHop: 1, loadout: 'revolver', crosshair: '#ffffff',
+  difficulty: 'easy', moveMode: 'easy', keyHints: 1,
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {
@@ -21,7 +22,7 @@ export const QUALITY = {
   high: { pr: 1.25, shadows: true, shadowSize: 2048, bloom: true, msaa: 4, particles: 1500, lights: true, rain: true, rainCount: 3000, traffic: 90, envRes: 256 },
   ultra: { pr: 2.0, shadows: true, shadowSize: 4096, bloom: true, msaa: 4, particles: 2500, lights: true, rain: true, rainCount: 5000, traffic: 140, envRes: 512 },
 };
-const KEY = 'redshift2_settings';
+const KEY = 'redshift3_settings';
 export function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');

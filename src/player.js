@@ -50,6 +50,22 @@ export const T = {
   standH: 1.8, crouchH: 1.05, radius: 0.4,
 };
 
+// "Easy" (default) assist layer — keeps the speed fantasy, removes the execution barrier
+export const EASY = {
+  coyote: 0.16, jumpBuffer: 0.2,
+  momentumDecay: 2.6,       // m/s² lost while running above run speed (instead of friction)
+  groundTurn: 7,            // rad/s steering of momentum on the ground
+  airTurn: 4.2,             // rad/s steering of momentum in the air (speed preserved)
+  airBrake: 9,              // m/s² when holding the opposite direction in the air
+  airAccel: 9,              // up to run speed from a standstill jump
+  dashCharges: 3, dashRecharge: 1.15,
+  wallReach: 0.85,          // how far a wall can be to auto-attach
+  wallrunTime: 2.6, wallSagStart: 1.1,
+  wallrunMin: 3,
+  slideFriction: 0.32, slideSteer: 3.2,
+  grappleTap: true,
+};
+
 const UP = new THREE.Vector3(0, 1, 0);
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
 const _contacts = [];
@@ -75,7 +91,7 @@ export class Player {
     this.airJumps = T.airJumps;
     this.state = 'air';
     this.crouching = false; this.sliding = false; this.slideCd = 0; this.slideT = 0;
-    this.dashCharges = T.dashCharges; this.dashRegen = 0; this.dashT = 0; this.dashDir = new THREE.Vector3(); this.dashExit = 0;
+    this.dashCharges = this.easy === false ? T.dashCharges : EASY.dashCharges; this.dashRegen = 0; this.dashT = 0; this.dashDir = new THREE.Vector3(); this.dashExit = 0;
     this.wall = null; this.wallCd = 0; this.lastWallN = new THREE.Vector3(); this.wallContact = null;
     this.climbT = 0; this.climbUsed = false;
     this.mantle = null;
@@ -86,7 +102,10 @@ export class Player {
     this.lastLand = 0;
     this.padCd = 0;
     this.alive = true;
+    this.easy = this.easy ?? true;
   }
+
+  get dashMax() { return this.easy ? EASY.dashCharges : T.dashCharges; }
 
   get eye() { return v3.set(this.pos.x, this.pos.y + this.eyeH, this.pos.z); }
   lookDir(out) { return out.set(-Math.sin(this.yaw) * Math.cos(this.pitch), Math.sin(this.pitch), -Math.cos(this.yaw) * Math.cos(this.pitch)); }
@@ -137,10 +156,12 @@ export class Player {
     this.jumpedTick = false;
 
     // timers
-    this.coyoteT -= dt; this.bufferT -= dt; this.steerLock = (this.steerLock || 0) - dt; this.slideCd -= dt; this.wallCd -= dt; this.padCd -= dt;
+    this.coyoteT -= dt; this.bufferT -= dt; this.dashCd = (this.dashCd || 0) - dt; this.steerLock = (this.steerLock || 0) - dt; this.slideCd -= dt; this.wallCd -= dt; this.padCd -= dt;
     this.stagger = Math.max(0, this.stagger - dt);
-    if (inp.jumpPressed) this.bufferT = T.jumpBuffer;
-    if (this.dashCharges < T.dashCharges) { this.dashRegen += dt; if (this.dashRegen >= T.dashRecharge) { this.dashCharges++; this.dashRegen = 0; } } else this.dashRegen = 0;
+    const E = this.easy;
+    if (inp.jumpPressed) this.bufferT = E ? EASY.jumpBuffer : T.jumpBuffer;
+    const dRe = E ? EASY.dashRecharge : T.dashRecharge;
+    if (this.dashCharges < this.dashMax) { this.dashRegen += dt; if (this.dashRegen >= dRe) { this.dashCharges++; this.dashRegen = 0; } } else this.dashRegen = 0;
     if (this.grappleCharges < T.grappleCharges && !this.grapple && !this.hook) { this.grappleRegen += dt; if (this.grappleRegen >= T.grappleRecharge) { this.grappleCharges++; this.grappleRegen = 0; } }
     const stunned = this.stagger > 0;
 
@@ -179,6 +200,7 @@ export class Player {
     }
 
     // ---------- grapple ----------
+    if (inp.grapplePressed && E && (this.grapple || this.hook)) { if (this.grapple) this.releaseGrapple(false); else this.hook = null; inp.grapplePressed = false; }
     if (inp.grapplePressed && !this.hook && !this.grapple && this.grappleCharges > 0 && !stunned) this.fireHook(ctx);
     if (this.hook) this.tickHook(dt, ctx);
     if (this.grapple) this.tickGrapple(dt, inp, ctx);
@@ -203,7 +225,13 @@ export class Player {
       // handled
     } else if (this.grounded) {
       if (this.sliding) this.tickSlide(dt, inp, wish, hasWish);
-      else {
+      else if (E && hasWish && !stunned && !this.crouching && this.hSpeedNow() > T.runSpeed + 0.5) {
+        // momentum mode: running above run speed bleeds speed slowly and steers like a car, no friction wall
+        const hs = this.hSpeedNow();
+        this.steer(wish, EASY.groundTurn * (1 - Math.min(0.55, hs / 70)), dt);
+        const ns = Math.max(T.runSpeed, hs - EASY.momentumDecay * dt) / hs;
+        this.vel.x *= ns; this.vel.z *= ns;
+      } else {
         // skip friction on the landing tick if jumping (perfect bhop)
         if (!this.jumpedTick) this.friction(T.friction, dt);
         const sp = this.crouching ? T.crouchSpeed : T.runSpeed;
@@ -214,6 +242,15 @@ export class Player {
           const cur = this.vel.dot(v1); const add = sp - cur;
           if (add > 0) this.vel.addScaledVector(v1, Math.min(T.groundAccel * dt * sp, add));
         }
+      }
+    } else if (E) {
+      if (hasWish && !stunned) {
+        const hs = this.hSpeedNow();
+        const dot = hs > 0.5 ? (this.vel.x * wish.x + this.vel.z * wish.z) / hs : 1;
+        if (dot < -0.4 && hs > 2) { const k = Math.max(0, hs - EASY.airBrake * dt) / hs; this.vel.x *= k; this.vel.z *= k; }
+        else if (!this.grapple && this.steerLock <= 0) this.steer(wish, EASY.airTurn * (1 - Math.min(0.5, hs / 80)), dt);
+        if (this.hSpeedNow() < T.runSpeed) this.accelerate(wish, T.runSpeed, EASY.airAccel, dt);
+        this.accelerate(wish, T.runSpeed, T.airAccel, dt, T.airCap); // strafe gain still works for experts
       }
     } else {
       if (hasWish && !stunned) {
@@ -264,7 +301,7 @@ export class Player {
 
     if (this.grounded) {
       if (!wasGrounded) this.onLand(preVy, wish);
-      this.groundTime += dt; this.airTime = 0; this.coyoteT = T.coyote;
+      this.groundTime += dt; this.airTime = 0; this.coyoteT = E ? EASY.coyote : T.coyote;
       this.airJumps = T.airJumps; this.climbUsed = false;
       if (this.wall) this.endWall();
     } else { this.groundTime = 0; this.airTime += dt; }
@@ -402,17 +439,21 @@ export class Player {
 
   tickSlide(dt, inp, wish, hasWish) {
     this.slideT += dt;
-    this.friction(T.slideFriction * (this.groundN.y > 0.985 ? 1 : 0.25), dt);
-    if (hasWish) this.steer(wish, T.slideSteer, dt);
+    this.friction((this.easy ? EASY.slideFriction : T.slideFriction) * (this.groundN.y > 0.985 ? 1 : 0.25), dt);
+    if (hasWish) this.steer(wish, this.easy ? EASY.slideSteer : T.slideSteer, dt);
     if (this.hSpeedNow() < T.slideMinSpeed && this.groundN.y > 0.985) this.sliding = false;
   }
 
   // ---------------- dash ----------------
   startDash(dir, inp) {
-    this.dashCharges--; this.dashRegen = Math.min(this.dashRegen, 0.2);
+    if (this.dashCd > 0) return;
+    this.dashCharges--; this.dashRegen = Math.min(this.dashRegen, 0.2); this.dashCd = 0.22;
+    // chaining dashes builds speed from the previous exit speed, not from the burst itself
+    const baseVel = this.dashT > 0 ? v2.copy(this.dashDir).multiplyScalar(this.dashExit) : v2.copy(this.vel);
     this.dashDir.copy(dir).setY(0).normalize();
-    const along = Math.max(0, this.vel.x * this.dashDir.x + this.vel.z * this.dashDir.z);
-    this.dashExit = Math.max(along, this.hSpeedNow() * 0.85, T.runSpeed) + T.dashGain;
+    const along = Math.max(0, baseVel.x * this.dashDir.x + baseVel.z * this.dashDir.z);
+    const hsBase = Math.hypot(baseVel.x, baseVel.z);
+    this.dashExit = Math.max(along, hsBase * 0.85, T.runSpeed) + T.dashGain;
     this.dashT = T.dashTime;
     if (this.wall) this.endWall();
     if (this.grapple) this.releaseGrapple(false);
@@ -427,7 +468,7 @@ export class Player {
     this.nearWall = null;
     if (this.grounded) return;
     let best = 1e9;
-    const r = T.radius + 0.45;
+    const r = T.radius + (this.easy ? EASY.wallReach : 0.45);
     for (let k = 0; k < 8; k++) {
       const a = this.yaw + k * Math.PI / 4;
       const dx = Math.cos(a), dz = -Math.sin(a);
@@ -454,12 +495,13 @@ export class Player {
       if (!this.climbUsed && this.vel.y > -6) { this.climbT = T.climbTime; this.climbUsed = true; this.wall = { n: n.clone(), dir: new THREE.Vector3(), t: 0, climb: true }; this.bufferT = 0; this.ev.climb(); }
       return;
     }
-    if (hs < T.wallrunMin) return;
-    if (inp.fwd <= 0 && Math.abs(inp.right) === 0) return;
+    if (hs < (this.easy ? EASY.wallrunMin : T.wallrunMin)) return;
+    if (!this.easy && inp.fwd <= 0 && Math.abs(inp.right) === 0) return;
+    if (this.easy && inp.fwd < 0) return;
     const along = new THREE.Vector3(-n.z, 0, n.x);
     if (along.dot(vdir) < 0) along.negate();
     this.wall = { n: n.clone(), dir: along, t: 0, entry: Math.max(hs, T.wallrunSpeed), climb: false };
-    this.vel.y = THREE.MathUtils.clamp(this.vel.y, -1.5, 4.5);
+    this.vel.y = THREE.MathUtils.clamp(this.vel.y, this.easy ? 0 : -1.5, 4.5);
     this.airJumps = T.airJumps;
     this.climbUsed = false;
     this.bufferT = 0;
@@ -482,7 +524,7 @@ export class Player {
       this.tryMantle(true);
       return;
     }
-    if (!same || w.t > T.wallrunTime || this.grounded) { this.endWall(); return; }
+    if (!same || w.t > (this.easy ? EASY.wallrunTime : T.wallrunTime) || this.grounded) { this.endWall(); return; }
     if (nw) w.n.set(nw.nx, 0, nw.nz).normalize();
     // keep direction aligned with the wall and the view
     w.dir.set(-w.n.z, 0, w.n.x);
@@ -490,10 +532,12 @@ export class Player {
     const cur = this.vel.x * w.dir.x + this.vel.z * w.dir.z;
     const target = Math.max(w.entry, T.wallrunSpeed) + (inp.fwd > 0 ? w.t * 1.2 : -w.t * 3);
     const sp = cur + (target - cur) * Math.min(1, dt * 4);
-    this.vel.x = w.dir.x * sp - w.n.x * 1.8;
-    this.vel.z = w.dir.z * sp - w.n.z * 1.8;
+    const stick = this.easy ? 3 : 1.8;
+    this.vel.x = w.dir.x * sp - w.n.x * stick;
+    this.vel.z = w.dir.z * sp - w.n.z * stick;
     // vertical arc: hold height, then sag
-    const vyTarget = w.t < 0.35 ? 1.2 : 1.2 - (w.t - 0.35) * 5.5;
+    const sag0 = this.easy ? EASY.wallSagStart : 0.35, sagK = this.easy ? 3.5 : 5.5;
+    const vyTarget = w.t < sag0 ? (this.easy ? 0.6 : 1.2) : (this.easy ? 0.6 : 1.2) - (w.t - sag0) * sagK;
     this.vel.y += (vyTarget - this.vel.y) * Math.min(1, dt * 6);
     // stepping off: pressing away from the wall
     const away = (inp.right !== 0) ? this.wish(inp, v2).dot(w.n) : 0;
@@ -508,7 +552,8 @@ export class Player {
     } else {
       const f = this.flatFwd(v1);
       const hs = Math.max(this.hSpeedNow(), T.wallrunSpeed);
-      let dx = w.dir.x * 0.75 + w.n.x * 0.55 + f.x * 0.45, dz = w.dir.z * 0.75 + w.n.z * 0.55 + f.z * 0.45;
+      const lk = this.easy ? 1.1 : 0.45, al = this.easy ? 0.5 : 0.75;
+      let dx = w.dir.x * al + w.n.x * 0.55 + f.x * lk, dz = w.dir.z * al + w.n.z * 0.55 + f.z * lk;
       const into = dx * w.n.x + dz * w.n.z;
       if (into < 0.3) { dx += w.n.x * (0.3 - into); dz += w.n.z * (0.3 - into); }
       const l = Math.hypot(dx, dz);
@@ -518,7 +563,7 @@ export class Player {
     this.lastWallN.copy(w.n); this.wallCd = 0.4;
     this.wall = null; this.climbT = 0;
     this.airJumps = T.airJumps;
-    this.jumpedTick = true; this.steerLock = 0.35;
+    this.jumpedTick = true; this.steerLock = this.easy ? 0.15 : 0.35;
     this.ev.jump('wall');
   }
 
@@ -606,7 +651,8 @@ export class Player {
     if (g.enemy) { if (!g.enemy.alive) { this.releaseGrapple(false); return; } g.point.copy(g.enemy.chest); }
     const e = this.eye;
     const to = v1.subVectors(g.point, e); const dist = to.length(); to.divideScalar(dist || 1);
-    if (!inp.grappleHeld || dist < (g.enemy ? 3.0 : 2.4) || g.t > 3.2) { this.releaseGrapple(dist < 3.2); return; }
+    const holding = this.easy ? true : inp.grappleHeld;
+    if (!holding || dist < (g.enemy ? 3.0 : 2.4) || g.t > (this.easy ? 2.6 : 3.2)) { this.releaseGrapple(dist < 3.2); return; }
     const pull = T.grapplePull * (g.enemy ? 1.35 : 1) * (dist > 8 ? 1 : 0.6 + dist / 20);
     this.vel.addScaledVector(to, pull * dt);
     // partial gravity compensation so the swing feels lively not sluggish
@@ -622,6 +668,8 @@ export class Player {
     const enemy = this.grapple.enemy;
     this.grapple = null;
     if (arrived && this.vel.y < 4) this.vel.y += 3.5;
+    // easy mode: arriving at a ledge pulls you up onto it
+    if (arrived && !enemy && this.easy) this.tryMantle();
     this.ev.hookRelease(arrived, enemy);
   }
 

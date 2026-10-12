@@ -40,7 +40,7 @@ async def main():
         pg = await b.new_page(viewport={"width":480,"height":270})
         errs=[]
         pg.on("pageerror", lambda e: errs.append("PAGEERROR: "+str(e)))
-        await pg.add_init_script("localStorage.setItem('redshift2_settings', JSON.stringify({quality:'low', full:0}))")
+        await pg.add_init_script("localStorage.setItem('redshift3_settings', JSON.stringify({quality:'low', full:0}))")
         await pg.goto("http://localhost:8766/index.html", timeout=120000)
         await pg.wait_for_timeout(2000)
         await pg.evaluate("window.__game.start('training'); window.__game.input.locked = true")

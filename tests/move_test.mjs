@@ -52,11 +52,11 @@ run(0.02, I({ fwd: 1, jumpPressed: true, jumpHeld: true }));
 log.length = 0; let cy=0; run(0.6, I({ fwd: 1 }), ()=>cy=Math.max(cy,P.pos.y)); st('climb'); console.log('  climb maxY', cy.toFixed(2)); console.log('  events', [...new Set(log)].join(' '));
 // grapple to the tall wall from far
 P.reset(new THREE.Vector3(0, 0, -20), 0); P.pitch = 0.3; log.length = 0;
-run(0.02, I({ grapplePressed: true, grappleHeld: true }));
+run(1/120, I({ grapplePressed: true, grappleHeld: true }));
 run(1.0, I({ grappleHeld: true })); st('grapple'); console.log('  events', [...new Set(log)].join(' '));
 // dash
 P.reset(new THREE.Vector3(-60, 0, -60), 0); run(0.5, I({ fwd: 1 }));
-run(0.02, I({ fwd: 1, dashPressed: true })); run(0.13, I({ fwd: 1 })); st('dash end');
+run(1/120, I({ fwd: 1, dashPressed: true })); run(0.13, I({ fwd: 1 })); st('dash end');
 run(0.5, I({ fwd: 1 })); st('dash +0.5');
 // slide-landing: fall from 12m crouched
 P.reset(new THREE.Vector3(-60, 12, -90), 0); P.vel.set(0, 0, -10); run(1.5, I({ crouch: true }), () => {}); st('slide land');

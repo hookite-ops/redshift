@@ -21,7 +21,12 @@ export const WEAPONS = {
   shotgun: { id: 'shotgun', name: 'SCATTER', mag: 2, rate: 0.3, reload: 0.95, dmg: 12, head: 1.5, pellets: 10, spread: 0.07, airSpread: 0.07, kickAir: 15, kickGround: 5, inst: 5 },
 };
 const TICK = 1 / 120;
-const PARRY_PERFECT = 0.18, PARRY_BLOCK = 0.34;
+// difficulty: how hard the enemies push. 'easy' is the default — the speed fantasy without the punishment
+export const DIFF = {
+  easy: { name: '쉬움', dmg: 0.55, windup: 1.45, count: 0.7, projSpeed: 0.7, parryWin: 0.32, melee: 1, ranged: 2, guards: false, regen: 24, enemyHp: 0.8, pInst: 0.55, assist: 1 },
+  normal: { name: '보통', dmg: 0.85, windup: 1.15, count: 0.9, projSpeed: 0.85, parryWin: 0.25, melee: 2, ranged: 3, guards: false, regen: 17, enemyHp: 1, pInst: 0.85, assist: 0.7 },
+  hard: { name: '어려움', dmg: 1.15, windup: 0.95, count: 1.15, projSpeed: 1, parryWin: 0.18, melee: 3, ranged: 5, guards: true, regen: 12, enemyHp: 1.15, pInst: 1, assist: 0.35 },
+};
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
 const _hit = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
 
@@ -53,6 +58,7 @@ export class Game {
     this.acc = 0; this.last = performance.now(); this.clockT = 0;
     this.fpsAcc = 0; this.fpsN = 0;
     this.camState = { dip: 0, dipV: 0, tilt: 0, fov: S.fov, kick: 0, trauma: 0, bob: 0 };
+    this.D = DIFF[S.difficulty] || DIFF.easy;
     this.timeScale = 1; this.slowmoT = 0; this.hitstop = 0; this.lastRight = 0; this.mouseDX = 0; this.mouseDY = 0;
     this.records = { score: 0, wave: 0, speed: 0, trial: 0 };
     this.resetRun();
@@ -122,7 +128,7 @@ export class Game {
     this.weapon = WEAPONS[this.S.loadout] || WEAPONS.revolver;
     this.ammo = this.weapon.mag; this.reloadT = 0; this.shootCd = 0;
     this.slashCd = 0; this.combo = 0; this.comboT = 0; this.pendingSlash = null; this.charge = 0; this.chargeHold = 0; this.iaidoCd = 0; this.iaidoActive = null;
-    this.parryT = -1; this.parryCd = 0; this.hookSlashT = 0; this.lastHookEnemy = null;
+    this.parryT = -1; this.parryCd = 0; this.parryWinNow = 0.25; this.guarding = false; this.hookSlashT = 0; this.lastHookEnemy = null;
     this.score = 0; this.kills = 0; this.maxSpeed = 0; this.bestRank = 0; this.style = 0; this.styleHold = 0; this.execs = 0; this.parries = 0;
     this.wave = 0; this.waveState = 'break'; this.waveT = 3; this.toSpawn = [];
     this.trialTime = 0; this.cpIndex = 0; this.cpTarget = null; this.trialRunning = false; this.splits = [];
@@ -145,6 +151,8 @@ export class Game {
     this.mode = mode;
     this.audio.init(); this.audio.setVolumes(this.S.sfx, this.S.music);
     this.clearWorld();
+    this.D = DIFF[this.S.difficulty] || DIFF.easy;
+    this.player.easy = this.S.moveMode !== 'classic';
     this.resetRun();
     this.slowmoT = 0; this.hitstop = 0; this.timeScale = 1; this.crouchLatched = false;
     Object.assign(this.camState, { dip: 0, dipV: 0, tilt: 0, kick: 0, trauma: 0 });
@@ -152,7 +160,7 @@ export class Game {
     this.vm.anim.sword = null; this.vm.anim.left = null; this.vm.charge = 0;
     const P = this.player;
     if (mode === 'trial') { P.reset(this.map.trialStart.pos, this.map.trialStart.yaw); this.setupTrial(); }
-    else if (mode === 'training') { P.reset(new THREE.Vector3(0, 0.05, 40), Math.PI); this.setupTraining(); }
+    else if (mode === 'training') { P.reset(new THREE.Vector3(-24, 0.05, 30), -Math.PI / 2 - 0.2); this.setupTraining(); }
     else { P.reset(new THREE.Vector3(0, 0.05, 40), Math.PI); }
     this.hud.show('objective', mode === 'training');
     document.getElementById('style').style.visibility = mode === 'arena' ? 'visible' : 'hidden';
@@ -171,6 +179,8 @@ export class Game {
     this.debris.forEach(d => this.scene.remove(d.m)); this.debris = [];
     this.trialRings.forEach(r => this.scene.remove(r)); this.trialRings = [];
     if (this.laser) { this.scene.remove(this.laser); this.laser = null; }
+    if (this.tutMarker) this.tutMarker.visible = false;
+    const tb = document.getElementById('tutBig'); if (tb) tb.classList.add('hidden');
   }
 
   setupTrial() {
@@ -199,32 +209,79 @@ export class Game {
     this.cpTarget = this.map.checkpoints[this.cpIndex] || null;
   }
 
+  static DUMMY_SPOTS = [[-27, 0, 21], [-20, 0, 18.5], [-13, 0, 21]];
   setupTraining() {
-    const spots = [[-8, 0, 20], [8, 0, 20], [0, 0, 8]];
-    // dummies: blades that never move, attack slowly, deal no damage
-    for (const [x, y, z] of spots) {
+    // dummies: blades that never move; they only start swinging (slowly, no damage) at the parry lesson
+    for (const [x, y, z] of Game.DUMMY_SPOTS) {
       const e = new Enemy(this, 'blade', new THREE.Vector3(x, y, z));
       e.dummy = true; e.spawnT = 0.2;
       this.enemies.push(e);
     }
+    this.tutRun = 0;
+    if (!this.tutMarker) {
+      const m = new THREE.Group();
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.08, 8, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 2.6, 3.2), transparent: true, depthTest: false }));
+      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.1, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 2.6, 3.2), depthTest: false }));
+      arrow.rotation.x = Math.PI; arrow.position.y = 1.6; ring.renderOrder = arrow.renderOrder = 30;
+      m.add(ring, arrow); this.scene.add(m); this.tutMarker = m;
+    }
     this.renderObjectives();
   }
-  static TRAINING = [
-    ['slide', '슬라이드 (달리다 C)'], ['slidejump', '슬라이드 점프'], ['bhop', '버니합 3연속 (40km/h↑)'], ['wall', '벽타기'], ['walljump', '벽점프'],
-    ['climb', '벽 오르기 (벽 보고 W+점프)'], ['mantle', '난간 넘기'], ['dash', '대시'], ['hook', '그래플'], ['slideland', '낙하 슬라이드 착지'],
-    ['ramp', '경사로 슬라이드 60km/h'], ['speed', '90km/h 돌파'], ['parry', '패링 (노란 깜빡임)'], ['iaido', '발도술 (베기 꾹→떼기)'], ['execute', '처형 (자세 붕괴 후 베기)'],
+  // guided lessons, in order — each is ticked by the matching action (any order works)
+  static TUTORIAL = [
+    { k: 'run', t: 'WASD로 달리기', sub: '마우스로 보는 방향이 앞이에요' },
+    { k: 'jump', t: 'Space = 점프' },
+    { k: 'airjump', t: '공중에서 Space 한 번 더', sub: '= 2단 점프' },
+    { k: 'dash', t: 'Shift = 대시', sub: '3번까지 연달아 · 대시 중엔 무적' },
+    { k: 'slide', t: '달리면서 C = 슬라이드', sub: '순간 가속 · 내리막에선 계속 빨라져요' },
+    { k: 'slidejump', t: '슬라이드 중에 Space', sub: '속도를 그대로 들고 점프' },
+    { k: 'wall', t: '앞의 벽 사이로 달려가 점프해서 벽에 붙기', sub: '벽에 닿으면 자동으로 벽을 달려요', marker: [-4, 3, 34] },
+    { k: 'walljump', t: '벽 달리는 중에 Space = 벽점프', sub: '보는 방향으로 튕겨나가요', marker: [-4, 3, 34] },
+    { k: 'hook', t: 'E = 그래플', sub: '조준점에 청록 원이 뜨면 걸려요 · 한 번 누르면 끝까지 날아감' },
+    { k: 'slash', t: '좌클릭 = 베기', sub: '허수아비 쪽을 보고 휘두르면 알아서 붙어서 벱니다', marker: 'dummy' },
+    { k: 'parry', t: '허수아비가 노랗게 깜빡일 때 우클릭', sub: '= 패링 · 우클릭을 누르고 있으면 가드(막기)', marker: 'dummy' },
+    { k: 'shoot', t: 'Q = 사격', sub: '조준점 근처 적에게 자동으로 보정돼요' },
+    { k: 'iaido', t: '좌클릭 꾹 → 떼기 = 발도술', sub: '앞으로 순간 돌진하며 경로의 적을 전부 베기' },
+    { k: 'execute', t: '노란 막대가 꽉 찬 적을 베기 = 처형', sub: '패링·베기로 막대(자세)를 채우세요', marker: 'dummy' },
   ];
+  static EXTRA = [['ramp', '경사로 슬라이드로 60km/h'], ['speed', '90km/h 돌파'], ['slideland', '높은 곳에서 C 누른 채 착지'], ['climb', '벽 보고 W+점프 = 벽 오르기'], ['mantle', '턱 넘기 (자동)']];
+  tutIndex() { const d = this.training.done; const i = Game.TUTORIAL.findIndex(s => !d.has(s.k)); return i < 0 ? Game.TUTORIAL.length : i; }
   renderObjectives() {
-    const d = this.training.done;
-    const list = Game.TRAINING.map(([k, n]) => `<div class="it${d.has(k) ? ' done' : ''}"><i></i>${n}</div>`).join('');
-    document.getElementById('objective').innerHTML = `<h4>TECHNIQUES ${d.size}/${Game.TRAINING.length}</h4>${list}`;
+    const d = this.training.done, idx = this.tutIndex();
+    // compact list: the next few lessons (finished ones collapse into the counter)
+    const done = Game.TUTORIAL.filter(st => d.has(st.k)).length;
+    const upcoming = Game.TUTORIAL.map((st, i) => ({ st, i })).filter(o => !d.has(o.st.k)).slice(0, 6);
+    const list = upcoming.map(({ st, i }) => `<div class="it${i === idx ? ' cur' : ''}"><i></i>${st.t}</div>`).join('');
+    const extra = idx >= Game.TUTORIAL.length ? `<h4 style="margin-top:6px">심화</h4>` + Game.EXTRA.map(([k, n]) => `<div class="it${d.has(k) ? ' done' : ''}"><i></i>${n}</div>`).join('') : '';
+    document.getElementById('objective').innerHTML = `<h4>TUTORIAL ${done}/${Game.TUTORIAL.length}</h4>${list}${upcoming.length < Game.TUTORIAL.length - done ? '<div class="it" style="color:#776">…</div>' : ''}${extra}`;
+    const big = document.getElementById('tutBig');
+    if (this.mode !== 'training') { big.classList.add('hidden'); return; }
+    big.classList.remove('hidden');
+    const st = Game.TUTORIAL[idx];
+    big.innerHTML = st ? `<div class="n">${idx + 1} / ${Game.TUTORIAL.length}</div><div class="t">${st.t}</div>${st.sub ? `<div class="s">${st.sub}</div>` : ''}`
+      : `<div class="t">튜토리얼 완료!</div><div class="s">ESC → 타이틀에서 아레나나 타임 어택을 해보세요</div>`;
   }
   train(k) {
     if (this.mode !== 'training' || this.training.done.has(k)) return;
-    this.training.done.add(k); this.renderObjectives();
-    this.audio.checkpoint(this.training.done.size === Game.TRAINING.length);
-    const name = Game.TRAINING.find(t => t[0] === k)[1];
-    this.hud.popup('✓ ' + name.split(' (')[0], '#7dfcff');
+    this.training.done.add(k);
+    const before = this.tutIndex();
+    this.renderObjectives();
+    const all = this.tutIndex() >= Game.TUTORIAL.length;
+    this.audio.checkpoint(all);
+    const st = Game.TUTORIAL.find(t => t.k === k) || { t: (Game.EXTRA.find(t => t[0] === k) || [0, k])[1] };
+    this.hud.popup('✓ ' + st.t.split(' =')[0], '#7dfcff');
+  }
+  tickTutorial(dt) {
+    const P = this.player;
+    if (P.grounded && P.hSpeed > 3) { this.tutRun += P.hSpeed * dt; if (this.tutRun > 12) this.train('run'); }
+    const st = Game.TUTORIAL[this.tutIndex()];
+    const m = this.tutMarker;
+    if (!st || !st.marker) { m.visible = false; return; }
+    m.visible = true;
+    if (st.marker === 'dummy') { const e = this.enemies[1] || this.enemies[0]; if (e) m.position.set(e.pos.x, e.pos.y + 2.9, e.pos.z); else m.visible = false; }
+    else m.position.set(...st.marker);
+    m.children[0].rotation.x = Math.PI / 2; m.children[1].position.y = 1.6 + Math.sin(this.clockT * 4) * 0.25;
+    m.children[0].scale.setScalar(1 + Math.sin(this.clockT * 4) * 0.08);
   }
 
   // ======================= player events → audio/fx =======================
@@ -235,7 +292,8 @@ export class Game {
       jump(kind) {
         g.audio.jump();
         const P = g.player;
-        if (kind === 'air') { g.fx.sparks.emit(v1.copy(P.pos).setY(P.pos.y + 0.1), 14, { color: [0.3, 0.9, 1], speed: 5, life: 0.35, gravity: 2 }); g.fx.bursts.ring(v1.copy(P.pos).setY(P.pos.y + 0.05), null, 0x30e0ff, 2, 0.3); }
+        if (kind === 'ground') g.train('jump');
+        if (kind === 'air') { g.train('airjump'); g.fx.sparks.emit(v1.copy(P.pos).setY(P.pos.y + 0.1), 14, { color: [0.3, 0.9, 1], speed: 5, life: 0.35, gravity: 2 }); g.fx.bursts.ring(v1.copy(P.pos).setY(P.pos.y + 0.05), null, 0x30e0ff, 2, 0.3); }
         if (kind === 'wall') { g.addStyle(2); g.shake(0.05); g.train('walljump'); }
         if (kind === 'slide') { g.train('slidejump'); }
         if (kind === 'ground' || kind === 'slide') {
@@ -322,7 +380,7 @@ export class Game {
       autoHop: !!this.S.autoHop,
       slashPressed: I.pressed('slash'), slashHeld: I.is('slash'), slashReleased: I.released('slash'),
       shootPressed: I.pressed('shoot'), shootHeld: I.is('shoot'),
-      parryPressed: I.pressed('parry'), reloadPressed: I.pressed('reload'), inspectPressed: I.pressed('inspect'), restartPressed: I.pressed('restart'),
+      blockPressed: I.pressed('block'), blockHeld: I.is('block'), reloadPressed: I.pressed('reload'), inspectPressed: I.pressed('inspect'), restartPressed: I.pressed('restart'),
     };
     I.consumeEdges();
     return inp;
@@ -344,15 +402,16 @@ export class Game {
     if (Math.abs(P.pos.z) > B) { P.pos.z = Math.sign(P.pos.z) * B; if (P.vel.z * Math.sign(P.pos.z) > 0) P.vel.z = 0; }
     this.maxSpeed = Math.max(this.maxSpeed, P.hSpeed);
     if (P.sliding && P.groundN.y < 0.985 && P.hSpeed * 3.6 > 60) this.train('ramp');
-    if (P.hSpeed * 3.6 > 90) this.train('speed');
+    if (P.hSpeed * 3.6 > 90 && P.dashT <= 0 && P.burstT <= 0) this.train('speed');
 
     // ---------- combat input ----------
     this.slashCd -= dt; this.shootCd -= dt; this.parryCd -= dt; this.comboT -= dt; this.iaidoCd -= dt; this.hookSlashT -= dt;
-    if (this.parryT >= 0) { this.parryT += dt; if (this.parryT > PARRY_BLOCK) this.parryT = -1; }
+    if (this.parryT >= 0) { this.parryT += dt; if (this.parryT > this.parryWinNow) this.parryT = -1; }
+    this.guarding = inp.blockHeld && !stunned;
     if (!stunned) {
       if (inp.slashPressed && this.slashCd <= 0 && !this.iaidoActive) this.doSlash();
       // hold to charge iaido
-      if (inp.slashHeld && this.slashCd <= 0.05 && this.iaidoCd <= 0 && !this.iaidoActive) {
+      if (inp.slashHeld && !this.guarding && this.slashCd <= 0.05 && this.iaidoCd <= 0 && !this.iaidoActive) {
         this.chargeHold += dt;
         if (this.chargeHold > 0.22) { if (this.charge === 0) this.audio.chargeStart(); this.charge = Math.min(1, this.charge + dt * 2.4); }
       }
@@ -361,11 +420,12 @@ export class Game {
         this.charge = 0; this.chargeHold = 0;
       }
       if (inp.shootPressed && this.shootCd <= 0) this.shoot();
-      if (inp.parryPressed) this.tryParry();
+      if (inp.blockPressed) this.tryParry();
       if (inp.reloadPressed) this.startReload();
       if (inp.inspectPressed) this.vm.inspect();
     } else { this.charge = 0; this.chargeHold = 0; }
     this.vm.chargePose(this.charge);
+    this.vm.guard = this.guarding;
     if (this.pendingSlash) { const ps = this.pendingSlash; ps.t -= dt; if (ps.t <= 0) { this.resolveSlash(ps); ps.checks--; ps.t = 0.05; if (ps.checks <= 0) this.pendingSlash = null; } }
     if (this.iaidoActive) this.tickIaido(dt);
     if (this.reloadT > 0) { this.reloadT -= dt; if (this.reloadT <= 0) { this.ammo = this.weapon.mag; if (this.weapon.id === 'shotgun') this.audio.pump(); } }
@@ -373,7 +433,7 @@ export class Game {
 
     // ---------- vitals ----------
     this.regenT -= dt;
-    if (this.regenT <= 0 && this.hp < 100) this.hp = Math.min(100, this.hp + 16 * dt);
+    if (this.regenT <= 0 && this.hp < 100) this.hp = Math.min(100, this.hp + this.D.regen * dt);
     if ((this.pInstHold -= dt) <= 0) this.pInst = Math.max(0, this.pInst - 22 * dt);
     if (this.mode === 'training') this.hp = 100;
 
@@ -388,7 +448,7 @@ export class Game {
     this.tickDebris(dt);
     if (this.mode === 'arena') this.tickWaves(dt);
     if (this.mode === 'trial') this.tickTrial(dt);
-    if (this.mode === 'training') this.tickTraining(dt);
+    if (this.mode === 'training') { this.tickTraining(dt); this.tickTutorial(dt); }
 
     // style
     this.styleHold -= dt;
@@ -414,18 +474,27 @@ export class Game {
     this.audio.slash(1 + m * 0.5);
     this.slashCd = kind === 2 ? 0.32 : 0.27;
     this.combo++; this.comboT = 0.7;
-    // lunge toward an aimed enemy
+    // magnetism: snap toward the enemy you're roughly facing (wide cone, generous range)
     const f = this.lookDir(new THREE.Vector3());
-    let lunge = target, best = 0.93;
+    const assist = this.D.assist;
+    const reach = 6 + m * 4 + assist * 3, cone = 0.88 - assist * 0.22;
+    let lunge = target, best = -1;
     if (!lunge) for (const e of this.enemies) {
       if (!e.alive) continue;
       v1.subVectors(e.chest, this.player.eye); const d = v1.length();
-      if (d > 8.5 || d < 1.8) continue;
-      const dot = v1.normalize().dot(f); if (dot > best) { best = dot; lunge = e; }
+      if (d > reach) continue;
+      const dot = v1.normalize().dot(f); if (dot < cone) continue;
+      const score = dot * 2 - d * 0.08;
+      if (score > best) { best = score; lunge = e; }
     }
+    this.slashTarget = lunge;
     if (lunge) {
-      v1.subVectors(lunge.chest, this.player.eye).normalize();
-      this.player.vel.addScaledVector(v1, 10);
+      v1.subVectors(lunge.chest, this.player.eye); const d = v1.length(); v1.normalize();
+      if (d > 2.2) {
+        const want = Math.min(20, d * 4.5);
+        const cur = this.player.vel.dot(v1);
+        if (cur < want) this.player.vel.addScaledVector(v1, want - Math.max(0, cur));
+      }
       if (this.player.vel.y > 7) this.player.vel.y = 7;
     }
     const q = this.camera.quaternion.clone();
@@ -454,9 +523,10 @@ export class Game {
       if (!e.alive || ps.hit.has(e)) continue;
       let bd = 1e9, bp = null;
       for (const p of [e.chest, e.head, v2.set(e.pos.x, e.pos.y + 0.6, e.pos.z)]) { const d = p.distanceTo(eye); if (d < bd) { bd = d; bp = p.clone(); } }
-      if (bd > range + (e.type === 'brute' ? 0.6 : 0)) continue;
+      const magnet = e === this.slashTarget;
+      if (bd > range + (e.type === 'brute' ? 0.6 : 0) + (magnet ? 1.2 : 0)) continue;
       v1.subVectors(bp, eye).normalize();
-      if (v1.dot(f) < (bd < 1.7 ? -0.25 : 0.42)) continue;
+      if (!magnet && v1.dot(f) < (bd < 1.8 ? -0.3 : 0.3)) continue;
       ps.hit.add(e);
       // ---- execute broken enemy ----
       if (e.broken > 0) { this.execute(e, f); hitAny = true; continue; }
@@ -487,7 +557,7 @@ export class Game {
       if (p.owner !== 'enemy' || p.dead) continue;
       if (p.pos.distanceTo(eye) < 3.8 && v1.subVectors(p.pos, eye).normalize().dot(f) > 0.25) this.reflect(p, false);
     }
-    if (hitAny) { this.audio.slashHit(); this.hud.hitmarker(false); this.hitstop = Math.max(this.hitstop, 0.045 + ps.m * 0.03); this.shake(0.16); }
+    if (hitAny) { this.train('slash'); this.audio.slashHit(); this.hud.hitmarker(false); this.hitstop = Math.max(this.hitstop, 0.045 + ps.m * 0.03); this.shake(0.16); }
     if (blockedAny && !hitAny) this.vm.blocked();
   }
 
@@ -574,8 +644,9 @@ export class Game {
   }
 
   tryParry() {
-    if (this.parryCd > 0) return;
-    this.parryT = 0; this.parryCd = 0.45;
+    // spamming the button shrinks the window; a clean press gets the full one
+    this.parryWinNow = this.parryCd > 0 ? 0.07 : this.D.parryWin;
+    this.parryT = 0; this.parryCd = 0.35;
     this.vm.parry();
     this.audio._noise(0.1, { type: 'highpass', freq: 3000, gain: 0.15, rev: 0 });
   }
@@ -596,7 +667,7 @@ export class Game {
   }
 
   addPInst(n) {
-    this.pInst = Math.min(100, this.pInst + n); this.pInstHold = 1.4;
+    this.pInst = Math.min(100, this.pInst + n * this.D.pInst); this.pInstHold = 1.4;
     if (this.pInst >= 100) {
       this.pInst = 0; this.player.stagger = 0.75;
       this.hud.stagger(true); setTimeout(() => this.hud.stagger(false), 750);
@@ -609,7 +680,7 @@ export class Game {
     const W = this.weapon;
     if (this.reloadT > 0) return;
     if (this.ammo <= 0) { this.audio.empty(); this.startReload(); return; }
-    this.ammo--; this.shootCd = W.rate;
+    this.ammo--; this.shootCd = W.rate; this.train('shoot');
     this.vm.shoot(W.id === 'shotgun' ? 1.6 : 1);
     if (W.id === 'shotgun') this.audio.shotgun(); else this.audio.gunshot();
     this.shake(W.id === 'shotgun' ? 0.22 : 0.09); this.recoilUI = 1;
@@ -626,9 +697,16 @@ export class Game {
     }
     const spread = P.grounded ? W.spread : W.airSpread;
     const hitsBy = new Map(); let anyHead = false;
+    // aim assist: bend the shot onto an enemy close to the crosshair
+    let assistDir = null;
+    { const lim = Math.cos((1.5 + this.D.assist * 3.5) * Math.PI / 180); let bestDot = lim;
+      for (const e of this.enemies) {
+        if (!e.alive) continue; v1.subVectors(e.chest, eye); const d = v1.length(); if (d > 140) continue; v1.normalize();
+        const dot = v1.dot(aim); if (dot > bestDot && this.enemyCtx().los(eye, e.chest)) { bestDot = dot; assistDir = v1.clone(); }
+      } }
     for (let k = 0; k < W.pellets; k++) {
-      const dir = aim.clone();
-      if (spread > 0) { dir.x += (Math.random() - 0.5) * spread * 2; dir.y += (Math.random() - 0.5) * spread * 2; dir.z += (Math.random() - 0.5) * spread * 2; dir.normalize(); }
+      const dir = (assistDir && (k === 0 || W.pellets === 1)) ? assistDir.clone() : aim.clone();
+      if (spread > 0 && !(assistDir && k === 0)) { dir.x += (Math.random() - 0.5) * spread * 2; dir.y += (Math.random() - 0.5) * spread * 2; dir.z += (Math.random() - 0.5) * spread * 2; dir.normalize(); }
       let t = 300, enemy = null, head = false;
       const wh = this.map.col.raycast(eye.x, eye.y, eye.z, dir.x, dir.y, dir.z, 300, _hit);
       const wn = wh ? new THREE.Vector3(wh.nx, wh.ny, wh.nz) : null;
@@ -721,7 +799,12 @@ export class Game {
       const to = wh ? new THREE.Vector3(wh.x, wh.y, wh.z) : from.clone().addScaledVector(dir, len);
       if (p.owner === 'enemy') {
         // parry window catches bullets about to arrive
-        if (this.parryT >= 0 && this.parryT < PARRY_BLOCK && from.distanceTo(eye) < 5 && v1.subVectors(from, eye).normalize().dot(this.lookDir(v2)) > -0.2) { this.reflect(p, this.parryT < PARRY_PERFECT); continue; }
+        const near = from.distanceTo(eye);
+        if (this.parryT >= 0 && near < 5.5 && v1.subVectors(from, eye).normalize().dot(this.lookDir(v2)) > -0.2) { this.reflect(p, true); continue; }
+        if (this.guarding && near < 2.2 && v1.copy(p.vel).normalize().dot(this.lookDir(v2)) < -0.25) {
+          this.audio.block(); this.addPInst(4); this.destroyProjectile(p, true);
+          this.fx.sparks.emit(from, 10, { color: [1, 0.85, 0.4], speed: 6, life: 0.25, size: 0.08 }); continue;
+        }
         const d = segPointDist(from, to, body);
         if (d < 0.42 + P.h * 0.12 && !P.invuln) { this.hurt(p.dmg, p.shooter ? p.shooter.pos : from, 6); this.destroyProjectile(p, true); continue; }
         if (!p.whizzed && segPointDist(from, to, eye) < 2.2) { p.whizzed = true; this.audio.bulletWhiz(); }
@@ -808,6 +891,18 @@ export class Game {
     const ctx = this._ectx = {
       player: this.player, enemies: this.enemies, camera: this.camera,
       los(a, b) { v1.subVectors(b, a); const len = v1.length(); v1.divideScalar(len); return !g.map.col.raycast(a.x, a.y, a.z, v1.x, v1.y, v1.z, len - 0.3, _hit); },
+      // attack tokens: only a few enemies may attack at the same time
+      canAttack(e, kind) {
+        let n = 0;
+        for (const o of g.enemies) {
+          if (o === e || !o.alive) continue;
+          const busy = kind === 'melee' ? (o.state === 'windup' && (o.type === 'blade' || o.type === 'brute')) : (o.state === 'windup' || o.state === 'burst' || o.state === 'aim') && !(o.type === 'blade' || o.type === 'brute');
+          if (busy) n++;
+        }
+        return n < (kind === 'melee' ? g.D.melee : g.D.ranged);
+      },
+      get windMul() { return g.D.windup; },
+      get guards() { return g.D.guards; },
       telegraph(e, parryable) { g.audio.telegraph(parryable); g.once(parryable ? 'yellow' : 'red', parryable ? '노란 깜빡임 = 패링 타이밍 (F)' : '빨간 공격은 패링 불가 — 대시(Shift)로 피하기'); },
       enemyDash(e) { g.fx.sparks.emit(e.chest, 12, { color: [0.3, 0.9, 1], speed: 5, life: 0.3, gravity: 0, size: 0.1 }); g.audio._noise(0.2, { type: 'bandpass', freq: 600, sweepTo: 1800, gain: 0.12 }); },
       relocate(e) {
@@ -823,11 +918,11 @@ export class Game {
         const P = g.player;
         const target = o.at ? o.at.clone() : P.eye.clone().setY(P.eye.y - 0.35);
         const dist = m.distanceTo(target);
-        if (!o.at) target.addScaledVector(P.vel, dist / o.speed * 0.5);
+        if (!o.at) target.addScaledVector(P.vel, dist / (o.speed * g.D.projSpeed) * 0.5 * g.D.dmg);
         const dir = target.sub(m).normalize();
         const spr = (o.spread || 0) + Math.min(0.03, P.speed * 0.001);
         if (spr > 0) { dir.x += (Math.random() - 0.5) * spr; dir.y += (Math.random() - 0.5) * spr; dir.z += (Math.random() - 0.5) * spr; dir.normalize(); }
-        g.spawnProjectile(m, dir.multiplyScalar(o.speed), e, o.dmg * g.waveDmg(), o.sniper ? 'sniper' : o.small ? 'small' : 'enemy');
+        g.spawnProjectile(m, dir.multiplyScalar(o.speed * g.D.projSpeed), e, o.dmg * g.waveDmg(), o.sniper ? 'sniper' : o.small ? 'small' : 'enemy');
         if (o.sniper) g.audio.sniperShot(dist); else g.audio.enemyShot(dist);
         g.fx.bursts.flash(m, o.sniper ? 0xb050ff : 0xff3050, o.sniper ? 0.6 : 0.3, 0.06);
       },
@@ -843,12 +938,14 @@ export class Game {
         if (P.invuln) { g.hud.popup('DODGE', '#7dfcff'); g.addStyle(6); return; }
         const dmg = o.dmg * g.waveDmg();
         const mid = e.chest.clone().lerp(P.eye, 0.5);
-        if (!o.unblockable && g.parryT >= 0 && g.parryT < PARRY_PERFECT) {
-          e.stagger = 0.9; e.addInst(o.inst * 2.5 + 20); e.cancelAttack();
+        const facing = v2.subVectors(e.pos, P.pos).setY(0).normalize().dot(P.flatFwd(v3)) > 0.15;
+        if (!o.unblockable && g.parryT >= 0 && facing) {
+          e.stagger = 0.9; e.addInst(o.inst * 2.5 + 25); e.cancelAttack();
           g.audio.clash(); g.parrySuccess('melee', mid);
-        } else if (!o.unblockable && g.parryT >= 0 && g.parryT < PARRY_BLOCK) {
-          g.audio.block(); g.hud.popup('BLOCK', '#ffffff'); g.hurt(dmg * 0.25, e.pos, o.inst * 0.6); e.addInst(o.inst * 0.6);
+        } else if (!o.unblockable && g.guarding && facing) {
+          g.audio.block(); g.hud.popup('BLOCK', '#ffffff'); g.hurt(dmg * 0.15, e.pos, o.inst * 0.5); e.addInst(o.inst * 0.5);
           g.fx.sparks.emit(mid, 20, { color: [1, 0.9, 0.6], speed: 8, life: 0.3, size: 0.1 });
+          P.vel.addScaledVector(d.normalize(), 3);
         } else {
           if (o.unblockable && g.parryT >= 0) g.hud.popup('UNBLOCKABLE', '#ff3048');
           g.hurt(dmg, e.pos, o.inst * 0.4);
@@ -863,7 +960,7 @@ export class Game {
     if (this._seen.has(key)) return; this._seen.add(key);
     this.hud.hint(text, 3200);
   }
-  waveDmg() { return this.mode === 'arena' ? Math.min(1.35, 0.8 + this.wave * 0.05) : 1; }
+  waveDmg() { return this.D.dmg * (this.mode === 'arena' ? Math.min(1.35, 0.8 + this.wave * 0.05) : 1); }
 
   tickDummy(e, dt, ctx) {
     // training dummy: stands still, attacks slowly when you're close so you can practise parries
@@ -876,7 +973,7 @@ export class Game {
     if (e.broken <= 0) e.yaw += dd * Math.min(1, dt * 5);
     if (e.state === 'windup') { e.windup -= dt; if (e.windup <= 0) { ctx.enemyStrike(e, { dmg: 0, reach: 3.1, inst: 0 }); e.state = 'recover'; e.stateT = 0.4; } }
     else if (e.state === 'recover') { e.stateT -= dt; if (e.stateT <= 0) { e.state = 'idle'; e.atkCd = 1.6; } }
-    else if (e.broken <= 0 && dist < 3.2 && e.atkCd <= 0) { e.state = 'windup'; e.windup = 0.7; e.parryable = true; this.audio.telegraph(true); }
+    else if (e.broken <= 0 && dist < 3.4 && e.atkCd <= 0 && this.tutIndex() >= Game.TUTORIAL.findIndex(t => t.k === 'parry')) { e.state = 'windup'; e.windup = 0.75; e.parryable = true; this.audio.telegraph(true); }
     e.vel.set(0, 0, 0); e.updateAnchors(); e.animate(dt, ctx);
   }
 
@@ -914,6 +1011,7 @@ export class Game {
     if (type !== 'sniper') { p.x += (Math.random() - 0.5) * 4; p.z += (Math.random() - 0.5) * 4; }
     if (type === 'drone') p.y = 12 + Math.random() * 6;
     const e = new Enemy(this, type, p);
+    e.hp = e.maxHp = Math.round(e.maxHp * this.D.enemyHp);
     this.enemies.push(e);
     this.fx.sparks.emit(v1.copy(p).setY(p.y + 1), 40, { color: [1, 0.15, 0.3], speed: 6, life: 0.7, gravity: -6, size: 0.12 });
     this.fx.bursts.ring(v1.copy(p).setY(p.y + 0.05), null, e.cfg.accent, 3, 0.6);
@@ -924,6 +1022,7 @@ export class Game {
       document.getElementById('subTxt').textContent = this.wave === 0 ? '' : `다음 웨이브까지 ${Math.ceil(this.waveT)}`;
       if (this.waveT <= 0) {
         this.wave++; this.toSpawn = this.buildWave(this.wave); this.waveState = 'fight'; this.spawnT = 0;
+        { const keep = Math.max(2, Math.round(this.toSpawn.length * this.D.count)); this.toSpawn = this.toSpawn.slice(0, keep); }
         const special = this.wave === 3 ? '드론 접근' : this.wave === 4 ? '저격수 주의 — 보라색 레이저' : this.wave % 5 === 0 ? '브루트 — 빨간 공격은 대시로 회피' : `${this.toSpawn.length}명 접근 중`;
         this.hud.banner('WAVE ' + this.wave, special);
         this.audio.wave();
@@ -932,7 +1031,7 @@ export class Game {
     } else {
       this.spawnT -= dt;
       const alive = this.enemies.length;
-      if (this.toSpawn.length && this.spawnT <= 0 && alive < 6 + Math.min(5, this.wave)) { this.spawnEnemy(this.toSpawn.shift()); this.spawnT = 0.6; }
+      if (this.toSpawn.length && this.spawnT <= 0 && alive < Math.round((4 + Math.min(5, this.wave)) * this.D.count + 1)) { this.spawnEnemy(this.toSpawn.shift()); this.spawnT = 0.9; }
       if (!this.toSpawn.length && alive === 0) {
         this.waveState = 'break'; this.waveT = 5;
         this.hp = Math.min(100, this.hp + 40);
@@ -986,8 +1085,7 @@ export class Game {
       this._respawnT -= dt;
       if (this._respawnT <= 0) {
         this._respawnT = 0;
-        const spots = [[-8, 0, 20], [8, 0, 20], [0, 0, 8]];
-        for (const [x, y, z] of spots) if (!this.enemies.some(e => Math.hypot(e.pos.x - x, e.pos.z - z) < 1)) { const e = new Enemy(this, 'blade', new THREE.Vector3(x, y, z)); e.dummy = true; this.enemies.push(e); }
+        for (const [x, y, z] of Game.DUMMY_SPOTS) if (!this.enemies.some(e => Math.hypot(e.pos.x - x, e.pos.z - z) < 1)) { const e = new Enemy(this, 'blade', new THREE.Vector3(x, y, z)); e.dummy = true; this.enemies.push(e); }
       }
     }
   }
@@ -1144,7 +1242,7 @@ export class Game {
       if (!l) { this.once('sniper', '보라색 레이저 = 저격 — 깜빡일 때 F로 반사하거나 엄폐'); l = new THREE.Mesh(this.laserGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 0.6, 5), transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false })); this.scene.add(l); this._lasers.set(e, l); this.audio.sniperCharge(e.pos.distanceTo(this.player.pos)); }
       const m = new THREE.Vector3(); e.gunTip.getWorldPosition(m);
       const d = m.distanceTo(e.aimPoint);
-      l.position.copy(m); l.lookAt(e.aimPoint); const w = 1 + (1.4 - e.windup) * 1.5; l.scale.set(w, w, d);
+      l.position.copy(m); l.lookAt(e.aimPoint); const w = 1 + Math.max(0, 1.4 - e.windup) * 1.5; l.scale.set(w, w, d);
       l.material.opacity = e.windup < 0.25 ? (Math.sin(this.clockT * 60) > 0 ? 1 : 0.3) : 0.35;
     }
     for (const [e, l] of this._lasers) if (!live.has(e)) { this.scene.remove(l); this._lasers.delete(e); }

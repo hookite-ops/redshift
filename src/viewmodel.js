@@ -229,6 +229,9 @@ export class ViewModel {
       P = lerpArr(P, [0.48, -0.36, -0.18, -0.35, 1.25, -1.55], c);
       P[0] += (Math.random() - 0.5) * 0.004 * c; P[1] += (Math.random() - 0.5) * 0.004 * c;
     }
+    // held guard: blade across the body
+    this.guardB = (this.guardB || 0) + (((this.guard && !this.anim.sword) ? 1 : 0) - (this.guardB || 0)) * Math.min(1, dt * 18);
+    if (this.guardB > 0.001) P = lerpArr(P, [0.08, -0.1, -0.46, 0.1, 0.0, 1.4], this.guardB);
     const a = this.anim.sword;
     if (a) {
       a.t += dt; const u = Math.min(1, a.t / a.dur);
