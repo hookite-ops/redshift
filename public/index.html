@@ -134,6 +134,20 @@ b{font-weight:700}
 #discIcon.out{background:transparent;border-style:dashed;opacity:.6;transform:scale(.85)}
 #discIcon.ret{background:transparent;border-style:dashed;animation:ret .4s linear infinite}
 @keyframes ret{to{transform:rotate(360deg)}}
+#skillBox{position:absolute;right:28px;bottom:92px;width:230px;text-align:right}
+#skillBox .sk{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:14px;font-weight:700}
+#skillBox .sk b{font-family:'Space Grotesk';font-size:11px;border:1.5px solid var(--ink);padding:0 5px}
+#skillBox .sk em{font-style:normal;font-family:'Space Grotesk';color:var(--dim);min-width:40px}
+#skillBox.ready .sk em{color:var(--or)}
+#skillBox .bar{height:4px;background:rgba(0,0,0,.1);margin-top:5px}
+#skillBox .bar i{display:block;height:100%;width:0;background:var(--ink)}
+#skillBox.ready .bar i{background:var(--or)}
+#skillBox.active .sk span{color:var(--or)}
+#chat{position:absolute;left:28px;bottom:96px;width:300px;display:flex;flex-direction:column;gap:3px}
+#chat div{font-size:13px;background:rgba(255,255,255,.75);padding:3px 8px;align-self:flex-start;transition:opacity .3s}
+#chat div b{margin-right:6px}
+#hud.over::after{content:'';position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,90,31,.22));animation:pulse .5s infinite}
+#hud.refl::before{content:'';position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 0 6px rgba(22,22,26,.5),inset 0 0 80px rgba(255,255,255,.9)}
 #keyHints{position:absolute;left:50%;bottom:118px;transform:translateX(-50%);display:flex;gap:16px;font-size:12px;color:var(--ink2);white-space:nowrap}
 #fps{position:fixed;left:8px;top:6px;font:12px 'Space Grotesk';color:var(--dim);z-index:40}
 
@@ -156,12 +170,16 @@ b{font-weight:700}
 .lo.four{grid-template-columns:repeat(4,1fr)}
 .btn.vs{border-color:var(--ink);background:#fff}
 .btn.vs:hover{background:var(--ink)}
-.menuGrid{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;width:min(980px,96vw);padding:36px 40px}
-.logo{font-family:'Space Grotesk';font-weight:700;font-size:86px;line-height:.86;letter-spacing:-2px}
+.menuGrid{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;width:min(1000px,96vw);padding:30px 38px}
+.menuGrid .btn{padding:10px 14px;margin-bottom:7px;font-size:17px}
+.menuGrid h3{margin:12px 0 6px}
+.leftsel{margin-top:6px}
+.leftsel .lo button{padding:7px 4px}
+.logo{font-family:'Space Grotesk';font-weight:700;font-size:72px;line-height:.86;letter-spacing:-2px}
 .logo span{color:var(--or)}
 .tag{font-size:17px;font-weight:700;margin-top:16px}
 .tag2{font-size:13px;color:var(--dim);margin-top:4px}
-.cheat{margin-top:22px;border-top:1px solid var(--line);padding-top:14px;display:grid;grid-template-columns:auto 1fr;gap:7px 12px;font-size:13px;align-items:center}
+.cheat{margin-top:16px;border-top:1px solid var(--line);padding-top:14px;display:grid;grid-template-columns:auto 1fr;gap:7px 12px;font-size:13px;align-items:center}
 .cheat kbd{font-family:'Space Grotesk','Noto Sans KR';font-size:12px;font-weight:700;border:1.5px solid var(--ink);padding:2px 7px;text-align:center;min-width:64px}
 .cheat kbd.o{border-color:var(--or);color:var(--or)}
 #best{margin-top:16px;font-size:12px;color:var(--dim);line-height:1.6}
@@ -211,6 +229,8 @@ b{font-weight:700}
   <div id="keyHints"></div>
   <div id="hpBox"><div id="hpRow"><span>HP</span><span id="hpNum">100</span></div><div id="hpBar"><div id="hpFill"></div></div></div>
   <div id="speedo"><div id="speedNum" class="num">0</div><div id="speedUnit">KM/H</div><div id="dashPips"></div></div>
+  <div id="skillBox"><div class="sk"><b id="skillKey">Q</b><span id="skillName"></span><em id="skillCd"></em></div><div class="bar"><i id="skillFill"></i></div></div>
+  <div id="chat"></div>
   <div id="discBox"><div><div id="discTxt"></div><div id="discPow"></div></div><div id="discIcon" class="hand"></div></div>
 </div>
 <div id="clickTo" class="hidden">클릭해서 계속</div>
@@ -227,16 +247,9 @@ b{font-weight:700}
         <kbd data-key="dash">SHIFT</kbd><span>대시 · 대시 중엔 무적</span>
         <kbd class="o" data-key="throw">좌클릭</kbd><span><b>원반 던지기</b> · 다시 누르면 회수 (돌아오며 또 때림)</span>
         <kbd class="o" data-key="blink">우클릭</kbd><span><b>원반 위치로 순간이동</b> · 속도 유지 + 주변 충격파</span>
+        <kbd class="o" data-key="skill">Q</kbd><span><b>스킬</b> · 반사막 / 오버드라이브 / 중력탄 / 재생 중 하나</span>
       </div>
-      <div id="best"></div>
-    </div>
-    <div>
-      <button class="btn main" data-act="arena">아레나<small>포탑 · 추적자 · 방패병 웨이브 생존</small></button>
-      <div class="row2">
-        <button class="btn vs" data-act="duel">1V1<small>봇 1명과 맞대결 · 5킬 먼저</small></button>
-        <button class="btn vs" data-act="ffa">FFA<small>봇 5명 개인전 · 15킬 / 4분</small></button>
-      </div>
-      <button class="btn" data-act="practice">연습장<small>처음이면 여기부터 · 체크리스트 8개 · 안 죽음</small></button>
+<div class="leftsel">
       <h3>봇 실력 (1V1 · FFA)</h3>
       <div class="lo four" id="botskill">
         <button data-bs="easy">쉬움</button>
@@ -250,13 +263,37 @@ b{font-weight:700}
         <button data-df="normal">보통<small>적당한 압박</small></button>
         <button data-df="hard">어려움<small>빠르고 아픔</small></button>
       </div>
+      </div>
+      <div id="best"></div>
+    </div>
+    <div>
+      <button class="btn main" data-act="arena">아레나<small>포탑 · 추적자 · 방패병 웨이브 생존</small></button>
+      <div class="row2">
+        <button class="btn vs" data-act="duel">1V1<small>봇 1명과 맞대결 · 5킬 먼저</small></button>
+        <button class="btn vs" data-act="ffa">FFA<small>봇 5명 개인전 · 15킬 / 4분</small></button>
+      </div>
+      <button class="btn" data-act="practice">연습장<small>처음이면 여기부터 · 체크리스트 9개 · 안 죽음</small></button>
+      <h3>무기</h3>
+      <div class="lo four" id="weapons">
+        <button data-wp="disc">원반<small>기본 · 튕길수록 강함</small></button>
+        <button data-wp="heavy">해머<small>느림 · 크고 묵직</small></button>
+        <button data-wp="rail">레일<small>아주 빠름 · 원거리</small></button>
+        <button data-wp="boomerang">부메랑<small>왕복 2타</small></button>
+      </div>
+      <h3>스킬 (<span data-key="skill">Q</span>)</h3>
+      <div class="lo four" id="skills">
+        <button data-sk="reflect">반사막<small>원반 되받아치기</small></button>
+        <button data-sk="overdrive">오버드라이브<small>속도 · 대시 무한</small></button>
+        <button data-sk="gravity">중력탄<small>적 끌어당기기</small></button>
+        <button data-sk="heal">재생<small>체력 +35</small></button>
+      </div>
       <div class="row2" style="margin-top:14px">
         <button class="btn" data-act="controls">조작법</button>
         <button class="btn" data-act="settings">설정</button>
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 3.2 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 3.3 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="pause" class="screen clear hidden">
@@ -308,13 +345,28 @@ b{font-weight:700}
       <b>순간이동</b> — 우클릭. 원반이 있는 곳으로 바로 이동. 속도는 <em>유지되고 오히려 빨라지고</em>, 도착 지점 주변 적에게 충격파.<br>
       바닥의 <span style="color:var(--or)">주황 원</span>이 순간이동하면 떨어질 곳이에요.
     </div>
+    <h3>무기 (메뉴에서 선택 · 조작은 똑같음)</h3>
+    <div class="tips">
+      <b>원반</b> — 기본. 튕길 때마다 +35%.<br>
+      <b>해머</b> — 느리지만 판정이 크고 묵직함(58). 순간이동 충격파가 넓고 셈.<br>
+      <b>레일</b> — 아주 빠르고 멀리 감(52). 벽에 맞으면 바로 돌아옴 — 원거리 저격용.<br>
+      <b>부메랑</b> — 금방 크게 휘어서 돌아오며 <em>가는 길·오는 길 둘 다</em> 같은 피해.
+    </div>
+    <h3>스킬 (Q)</h3>
+    <div class="tips">
+      <b>반사막</b> — 0.6초 동안 날아오는 원반을 <em>던진 사람에게 되돌려</em> 보내고, 충격파도 튕겨냄. 쿨 7초.<br>
+      <b>오버드라이브</b> — 4초간 더 빠르게 달리고 대시 무한, 원반 +25% 속도. 쿨 13초.<br>
+      <b>중력탄</b> — 던진 곳에 1.4초간 적을 끌어당기는 구멍. 끌려온 적에게 원반을 던지세요. 쿨 9초.<br>
+      <b>재생</b> — 체력 +35, 2초간 추가 회복. 쿨 14초.
+    </div>
     <h3>보상</h3>
     <div class="tips">
       처치 → 대시 1회 충전 · 순간이동 → 대시 1회 + 2단 점프 다시 충전. 계속 움직일수록 강해져요.
     </div>
     <h3>1V1 · FFA (봇 대전)</h3>
     <div class="tips">
-      봇도 나와 <em>똑같은 조작</em>만 써요 — 던지기·회수·순간이동·대시·2단 점프. 체력 100, 맞으면 4초 뒤부터 회복, 처치하면 체력 +25 · 대시 +1.<br>
+      봇도 나와 <em>똑같은 조작</em>만 써요 — 던지기·회수·순간이동·대시·2단 점프·스킬. 체력 100, 맞으면 4초 뒤부터 회복, 처치하면 체력 +25 · 대시 +1.<br>
+      봇마다 <b>성격</b>(돌격형·저격형·곡예형·수비형)이 있어 무기·스킬·거리·겁이 달라요. <em>시야 밖이나 벽 뒤로 돌아가면 나를 놓쳐요</em> — 소리(던지기·순간이동)는 들어요. 대시 후 버니합, 원반 타고 이동, 측면 돌기, 피 없으면 엄폐물로 후퇴도 해요.<br>
       <b>최강 봇</b>은 움직임을 예측해서 던지고, 숨으면 벽에 튕겨서 맞히고, 원반이 옆을 지나가는 순간 <em>순간이동 충격파</em>로 덮쳐요.<br>
       <b>살아남는 법</b> — 빨간 화살표(원반 접근 경고)가 크게 뜨면 <em>대시</em>: 대시 중엔 원반도 충격파도 안 맞아요. 적 원반 근처에 오래 서 있지 마세요.<br>
       이름표는 벽 너머로도 보여요(봇도 내 위치를 알아요). 너무 어려우면 메뉴에서 봇 실력을 낮추세요.

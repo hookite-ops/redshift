@@ -1,5 +1,6 @@
 // First-person hands: right hand holds/throws the disc, left hand points when you blink
 import * as THREE from 'three';
+import { discModel, WEAPONS } from './disc.js';
 
 const lerpArr = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 const easeOut = t => 1 - Math.pow(1 - t, 3);
@@ -27,14 +28,15 @@ export class Hand {
     this.right.scale.setScalar(0.6); this.left.scale.setScalar(0.6); this.left.visible = false;
     // disc held flat in the right hand
     const disc = this.disc = new THREE.Group();
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.03, 8, 32), orange);
-    const face = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.025, 28), dark); face.rotation.x = Math.PI / 2;
-    const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.035, 14), orange); dot.rotation.x = Math.PI / 2;
-    disc.add(rim, face, dot);
+    this.setWeapon(WEAPONS.disc, 0xff5a1f);
     disc.scale.setScalar(0.7); disc.rotation.x = -Math.PI / 2 + 0.22; disc.position.set(-0.02, 0.03, -0.12);
     this.right.add(disc);
     this.t = 0; this.bob = 0; this.swayX = 0; this.swayY = 0;
     this.anim = null; this.leftAnim = null;
+  }
+  setWeapon(w, color) {
+    this.disc.clear();
+    this.disc.add(discModel(color, w, 0.5 * Math.min(1.1, w.scale)));
   }
   resize(a) { this.camera.aspect = a; this.camera.updateProjectionMatrix(); }
   throwAnim() { this.anim = { t: 0, dur: 0.28, k: 'throw' }; }

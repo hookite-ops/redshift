@@ -1,7 +1,7 @@
 // A FIGHTER is anyone who carries a disc: the human (first person, no model) or a bot (third person body).
 import * as THREE from 'three';
 import { Player, T } from './player.js';
-import { Disc } from './disc.js';
+import { Disc, WEAPONS, discModel } from './disc.js';
 
 export const BOT_ROSTER = [
   { name: 'VEGA', color: 0x2f6bff },
@@ -15,13 +15,14 @@ export const BOT_ROSTER = [
 const _v = new THREE.Vector3();
 
 export class Fighter {
-  constructor(game, { name, color, isBot, body = null, disc = null }) {
+  constructor(game, { name, color, isBot, body = null, disc = null, weapon = 'disc', skill = 'reflect' }) {
     this.game = game; this.name = name; this.color = color; this.isBot = isBot;
     this.css = '#' + color.toString(16).padStart(6, '0');
     this.body = body || new Player(game.arena, game.botEvents(this));
     this.body.easy = true; this.body.noWall = true;
-    this.disc = disc || new Disc(game, this, color);
+    this.disc = disc || new Disc(game, this, color, weapon);
     this.disc.owner = this;
+    this.skill = skill; this.skillCd = 0; this.reflectT = 0; this.overT = 0; this.healT = 0;
     this.hp = 100; this.kills = 0; this.deaths = 0; this.alive = true;
     this.respawnT = 0; this.protT = 0; this.invulnT = 0; this.regenT = 0;
     this.lastHitBy = null; this.lastHitT = -9; this.streak = 0;
@@ -57,10 +58,17 @@ export class Fighter {
     this.arm = new THREE.Group(); this.arm.position.set(0.36, 1.28, 0); body.add(this.arm);
     this.arm.add(m(new THREE.CapsuleGeometry(0.075, 0.36, 4, 8), dark, 0, -0.22, 0));
     const hd = this.handDisc = new THREE.Group(); hd.position.set(0.04, -0.45, -0.12);
-    hd.add(m(new THREE.TorusGeometry(0.17, 0.035, 8, 24), team));
-    const face = m(new THREE.CylinderGeometry(0.15, 0.15, 0.03, 20), dark); face.rotation.x = Math.PI / 2; hd.add(face);
     hd.rotation.y = Math.PI / 2;
     this.arm.add(hd);
+    this.setHandDisc();
+    // reflect bubble + chat bubble
+    this.dome = new THREE.Mesh(new THREE.SphereGeometry(1.15, 24, 16), new THREE.MeshBasicMaterial({ color: this.color, transparent: true, opacity: 0.22, depthWrite: false }));
+    this.dome.position.y = 1.0; this.dome.visible = false; root.add(this.dome);
+    const bc = this.bubbleCanvas = document.createElement('canvas'); bc.width = 512; bc.height = 96;
+    this.bubbleTex = new THREE.CanvasTexture(bc); this.bubbleTex.colorSpace = THREE.SRGBColorSpace;
+    this.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.bubbleTex, depthTest: false, transparent: true }));
+    this.bubble.renderOrder = 21; this.bubble.visible = false; this.bubble.position.y = 2.95; root.add(this.bubble);
+    this.bubbleT = 0;
     // name tag + health (through walls, so you always know where they are — they know where you are)
     const c = this.tagCanvas = document.createElement('canvas'); c.width = 256; c.height = 64;
     this.tagTex = new THREE.CanvasTexture(c); this.tagTex.colorSpace = THREE.SRGBColorSpace;
@@ -70,6 +78,24 @@ export class Fighter {
     this._tagHp = -1; this.drawTag();
     this.game.scene.add(root);
     this.walk = 0; this.lean = 0; this.throwT = 0;
+  }
+  setHandDisc() {
+    if (!this.handDisc) return;
+    this.handDisc.clear();
+    this.handDisc.add(discModel(this.color, this.disc.w, 0.5 * Math.min(1.4, this.disc.w.scale)));
+  }
+  // short chat line over the head (bots only)
+  say(text, dur = 2.6) {
+    if (!this.bubble) return;
+    const g = this.bubbleCanvas.getContext('2d');
+    g.clearRect(0, 0, 512, 96);
+    g.font = '700 34px "Noto Sans KR", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const w = Math.min(500, g.measureText(text).width + 40);
+    g.fillStyle = 'rgba(22,22,26,.88)';
+    const x = 256 - w / 2; g.beginPath(); g.roundRect ? g.roundRect(x, 10, w, 64, 18) : g.rect(x, 10, w, 64); g.fill();
+    g.beginPath(); g.moveTo(240, 74); g.lineTo(256, 92); g.lineTo(272, 74); g.fill();
+    g.fillStyle = '#fff'; g.fillText(text, 256, 43);
+    this.bubbleTex.needsUpdate = true; this.bubble.visible = true; this.bubbleT = dur;
   }
   drawTag() {
     const g = this.tagCanvas.getContext('2d'), hp = Math.max(0, Math.round(this.hp));
@@ -103,11 +129,16 @@ export class Fighter {
     this.arm.rotation.x = 0.35 + B.pitch * 0.5 + k * 1.4;
     this.arm.rotation.z = -0.15;
     this.handDisc.visible = this.disc.state === 'hand';
+    this.dome.visible = this.reflectT > 0;
+    if (this.dome.visible) { this.dome.scale.setScalar(0.9 + Math.sin(t * 30) * 0.05); this.dome.material.opacity = 0.1 + this.reflectT * 0.15; }
+    this.teamMat.emissiveIntensity = this.overT > 0 ? 2.2 + Math.sin(t * 20) * 0.6 : 1;
+    if (this.bubbleT > 0) { this.bubbleT -= dt; if (this.bubbleT <= 0) this.bubble.visible = false; }
     this.handDisc.rotation.z += dt * 2;
     this.drawTag();
     // keep the tag a readable size at distance
     const d = Math.max(4, root.position.distanceTo(this.game.camera.position));
     const s = 0.4 + d * 0.035; this.tag.scale.set(s * 4, s, 1);
+    this.bubble.scale.set(s * 4.4, s * 0.83, 1); this.bubble.position.y = 2.35 + s * 0.9;
   }
   shatter(dir) {
     const pieces = [];

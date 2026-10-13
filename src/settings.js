@@ -2,17 +2,17 @@
 export const ACTIONS = [
   ['forward', '앞으로'], ['back', '뒤로'], ['left', '왼쪽'], ['right', '오른쪽'],
   ['jump', '점프 (공중에서 한 번 더)'], ['dash', '대시 (대시 중 무적)'],
-  ['throw', '원반 던지기 / 회수'], ['blink', '순간이동 (원반 위치로)'],
+  ['throw', '원반 던지기 / 회수'], ['blink', '순간이동 (원반 위치로)'], ['skill', '스킬'],
 ];
 export const DEFAULT_BINDS = {
   forward: ['KeyW'], back: ['KeyS'], left: ['KeyA'], right: ['KeyD'],
   jump: ['Space'], dash: ['ShiftLeft'],
-  throw: ['Mouse0'], blink: ['Mouse2', 'KeyE'],
+  throw: ['Mouse0'], blink: ['Mouse2', 'KeyE'], skill: ['KeyQ', 'KeyF'],
 };
 export const DEFAULTS = {
   sens: 0.8, fov: 103, fovFx: 14, shake: 0.5, tilt: 0.5, bob: 0.4,
   sfx: 0.8, music: 0.4, quality: 'high', fps: 0, full: 1, autoHop: 1,
-  difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', keyHints: 1,
+  difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', weapon: 'disc', skill: 'reflect', keyHints: 1,
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {

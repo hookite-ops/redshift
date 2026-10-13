@@ -223,20 +223,21 @@ export class Player {
     if (inp.jumpHeld && inp.autoHop && this.grounded && !this.jumpedTick && !stunned && this.groundTime > 0) { this.groundJump(); }
 
     // ---------- movement ----------
+    const RS = T.runSpeed * (this.speedMul || 1); // overdrive skill raises the run speed
     if (this.wall || this.dashT > 0 || this.burstT > 0) {
       // handled
     } else if (this.grounded) {
       if (this.sliding) this.tickSlide(dt, inp, wish, hasWish);
-      else if (E && hasWish && !stunned && !this.crouching && this.hSpeedNow() > T.runSpeed + 0.5) {
+      else if (E && hasWish && !stunned && !this.crouching && this.hSpeedNow() > RS + 0.5) {
         // momentum mode: running above run speed bleeds speed slowly and steers like a car, no friction wall
         const hs = this.hSpeedNow();
         this.steer(wish, EASY.groundTurn * (1 - Math.min(0.55, hs / 70)), dt);
-        const ns = Math.max(T.runSpeed, hs - EASY.momentumDecay * dt) / hs;
+        const ns = Math.max(RS, hs - EASY.momentumDecay * dt) / hs;
         this.vel.x *= ns; this.vel.z *= ns;
       } else {
         // skip friction on the landing tick if jumping (perfect bhop)
         if (!this.jumpedTick) this.friction(T.friction, dt);
-        const sp = this.crouching ? T.crouchSpeed : T.runSpeed;
+        const sp = this.crouching ? T.crouchSpeed : RS;
         if (hasWish && !stunned) {
           // project wish onto the ground plane
           const n = this.groundN;
@@ -251,7 +252,7 @@ export class Player {
         const dot = hs > 0.5 ? (this.vel.x * wish.x + this.vel.z * wish.z) / hs : 1;
         if (dot < -0.4 && hs > 2) { const k = Math.max(0, hs - EASY.airBrake * dt) / hs; this.vel.x *= k; this.vel.z *= k; }
         else if (!this.grapple && this.steerLock <= 0) this.steer(wish, EASY.airTurn * (1 - Math.min(0.5, hs / 80)), dt);
-        if (this.hSpeedNow() < T.runSpeed) this.accelerate(wish, T.runSpeed, EASY.airAccel, dt);
+        if (this.hSpeedNow() < RS) this.accelerate(wish, RS, EASY.airAccel, dt);
         this.accelerate(wish, T.runSpeed, T.airAccel, dt, T.airCap); // strafe gain still works for experts
       }
     } else {

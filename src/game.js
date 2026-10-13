@@ -1,14 +1,15 @@
-// REDSHIFT 3.1 — white arena + THE DISC. Modes: arena waves, practice, 1V1 and FFA against bots.
+// REDSHIFT 3.3 — white arena, 4 disc weapons, 4 skills. Modes: arena waves, practice, 1V1 and FFA vs human-like bots.
 // One weapon, six inputs: WASD · Space · Shift · LMB (throw / recall) · RMB (blink to the disc).
 import * as THREE from 'three';
 import { Arena } from './arena.js';
 import { Player, T } from './player.js';
 import { Foe, FOE } from './foes.js';
-import { Disc, DISC } from './disc.js';
+import { Disc, DISC, WEAPONS } from './disc.js';
+import { SKILLS, CHAT, pick } from './skills.js';
 import { Hand } from './hand.js';
 import { Particles, Rings, SpeedLines } from './fx.js';
 import { Fighter, BOT_ROSTER } from './fighter.js';
-import { BotBrain, SKILL } from './bot.js';
+import { BotBrain, SKILL, PERSONAS } from './bot.js';
 import { Audio } from './audio.js';
 import { QUALITY, ASSIST, keyName } from './settings.js';
 
@@ -33,6 +34,7 @@ const TUTORIAL = [
   { k: 'flank', a: null, t: '방패병을 옆·뒤에서 맞히기' },
   { k: 'dash', a: 'dash', t: '대시 (대시 중엔 무적)' },
   { k: 'air', a: 'jump', t: '공중에서 한 번 더 점프' },
+  { k: 'skill', a: 'skill', t: '스킬 쓰기 (메뉴에서 바꿀 수 있어요)' },
 ];
 
 function segParam(a, b, p) {
@@ -112,6 +114,9 @@ export class Game {
     this.disc = new Disc(this);
     this.me = new Fighter(this, { name: '나', color: 0xff5a1f, isBot: false, body: this.player, disc: this.disc });
     this.fighters = [this.me];
+    this.grenades = []; this.wells = []; this.chatLines = [];
+    this.nadeGeo = new THREE.SphereGeometry(0.24, 14, 10);
+    this.wellGeo = new THREE.SphereGeometry(1, 28, 18);
     this.versus = false; this.match = { limit: 0, timeLeft: 0, over: true };
     this.foes = []; this.orbs = []; this.debris = []; this.respawns = []; this.dnums = [];
 
@@ -182,6 +187,9 @@ export class Game {
     Object.assign(me, { kills: 0, deaths: 0, alive: true, protT: 0, invulnT: 0, regenT: 0, streak: 0, lastHitBy: null, respawnT: 0 });
     this.deathInfo = null; this.match = { limit: 0, timeLeft: 0, over: true };
     this.disc.caught(); this.disc.catchCd = 0; this.trail.reset();
+    this.disc.setWeapon(this.S.weapon); this.hand.setWeapon(this.disc.w, 0xff5a1f);
+    me.skill = SKILLS[this.S.skill] ? this.S.skill : 'reflect';
+    me.skillCd = 0; me.reflectT = me.overT = me.healT = 0; P.speedMul = 1;
     this.state = 'play'; this.acc = 0; this.last = performance.now(); this.timeScale = 1; this.slowT = this.stopT = 0;
     Object.assign(this.camState, { dip: 0, dipV: 0, tilt: 0, fov: this.S.fov, kick: 0, trauma: 0 });
     this.buildDashPips();
@@ -201,6 +209,10 @@ export class Game {
     for (const n of this.dnums) n.el.remove();
     this.foes = []; this.orbs = []; this.debris = []; this.respawns = []; this.dnums = [];
     for (const l of this.lasers) l.visible = false;
+    for (const g of this.grenades || []) this.scene.remove(g.m);
+    for (const w of this.wells || []) { this.scene.remove(w.m); this.scene.remove(w.ring); }
+    this.grenades = []; this.wells = [];
+    if (this.chatLines) { for (const c of this.chatLines) c.el.remove(); this.chatLines = []; }
     this.blinkGhost.visible = false;
     if (this.disc) { this.disc.caught(); this.trail.reset(); }
     if (this.fighters) { for (const f of this.fighters) if (f !== this.me) f.dispose(); this.fighters = [this.me]; }
@@ -352,7 +364,7 @@ export class Game {
       crouch: false, dashPressed: I.pressed('dash'),
       grapplePressed: false, grappleHeld: false,
       autoHop: !!this.S.autoHop,
-      throwPressed: I.pressed('throw'), blinkPressed: I.pressed('blink'),
+      throwPressed: I.pressed('throw'), blinkPressed: I.pressed('blink'), skillPressed: I.pressed('skill'),
     };
     I.consumeEdges();
     return inp;
@@ -384,6 +396,7 @@ export class Game {
         }
         if (this.throwBuf > 0 && d.state === 'hand' && d.catchCd <= 0) { this.throwBuf = 0; this.throwDisc(); }
         if (inp.blinkPressed) this.blink();
+        if (inp.skillPressed) this.useSkill(me);
       }
     }
     // ---------- bots ----------
@@ -394,6 +407,7 @@ export class Game {
       this.clampBounds(f.body);
     }
     for (const f of this.fighters) f.disc.tick(dt);
+    this.tickSkills(dt);
 
     // ---------- vitals ----------
     for (const f of this.fighters) {
@@ -401,7 +415,7 @@ export class Game {
       if (!this.versus) continue;
       if (!f.alive) { if (!this.match.over) { f.respawnT -= dt; if (f.respawnT <= 0) this.respawn(f); } continue; }
       f.regenT -= dt;
-      if (f.regenT <= 0 && f.hp < 100) f.hp = Math.min(100, f.hp + 12 * dt);
+      if (f.regenT <= 0 && f.hp < 100) f.hp = Math.min(100, f.hp + 8 * dt);
     }
     if (!this.versus) {
       this.regenT -= dt;
@@ -433,8 +447,9 @@ export class Game {
   throwFor(f, dir) {
     const B = f.body, d = f.disc;
     const origin = new THREE.Vector3().copy(B.eye); origin.y -= 0.15; origin.addScaledVector(dir, 0.3);
-    if (!d.throw(origin, dir, B.vel)) return false;
+    if (!d.throw(origin, dir, B.vel, f.overT > 0 ? 1.25 : 1)) return false;
     f.st.throws++;
+    this.noise(f, origin, 30);
     if (f === this.me) {
       this.stats.throws++;
       this.audio.discThrow(1); this.hand.throwAnim();
@@ -461,13 +476,14 @@ export class Game {
   }
   leadPoint(origin, t, out) {
     const { c, v, air } = this.tInfo(t), P = this.player;
-    let tt = origin.distanceTo(c) / DISC.speed;
+    const W = this.disc.w;
+    let tt = origin.distanceTo(c) / W.speed;
     for (let k = 0; k < 3; k++) {
       out.copy(c).addScaledVector(v, tt);
       if (air) { out.y += -0.5 * T.gravity * tt * tt; if (out.y < 0.8) out.y = 0.8; } else out.y = c.y;
       const d = origin.distanceTo(out);
       _d.subVectors(out, origin).divideScalar(d || 1);
-      tt = d / (DISC.speed + Math.max(0, P.vel.dot(_d)) * DISC.carry);
+      tt = d / (W.speed + Math.max(0, P.vel.dot(_d)) * W.carry);
     }
     return out;
   }
@@ -543,12 +559,12 @@ export class Game {
   discSweep(d, a, b, leg) {
     const len = a.distanceTo(b); if (len < 1e-6) return null;
     const dir = new THREE.Vector3().subVectors(b, a).divideScalar(len);
-    if (this.versus) { this.sweepFighters(d, a, b, dir, leg); return null; }
+    if (this.versus) return this.sweepFighters(d, a, b, dir, leg);
     const hits = [];
     for (const f of this.foes) {
       if (!f.alive || d.hit.has(f) || f.spawnT > 0.25) continue;
       const t = segParam(a, b, f.center);
-      if (segDist(a, b, f.center, t) < f.hitRadius + DISC.radius + (d.bonus || 0)) hits.push({ f, t });
+      if (segDist(a, b, f.center, t) < f.hitRadius + d.w.radius + (d.bonus || 0)) hits.push({ f, t });
     }
     hits.sort((x, y) => x.t - y.t);
     for (const { f, t } of hits) {
@@ -570,14 +586,14 @@ export class Game {
       }
       if (f.type === 'shield') this.train('flank');
       const dmg = leg === 'out'
-        ? DISC.dmg * (1 + 0.35 * d.bounces) * (0.75 + 0.25 * d.speedMul())
-        : DISC.returnDmg * (1 + 0.2 * d.bounces);
+        ? d.w.dmg * (1 + d.w.bounceMul * d.bounces) * (0.75 + 0.25 * d.speedMul())
+        : d.w.returnDmg * (1 + 0.2 * d.bounces);
       this.hitFoe(f, dmg, dir, leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', d.bounces);
     }
     // the disc also swats enemy orbs out of the air
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const o = this.orbs[i];
-      if (segDist(a, b, o.pos, segParam(a, b, o.pos)) < DISC.radius + 0.55) this.killOrb(o, true);
+      if (segDist(a, b, o.pos, segParam(a, b, o.pos)) < d.w.radius + 0.55) this.killOrb(o, true);
     }
     return null;
   }
@@ -628,26 +644,32 @@ export class Game {
     if (this.versus) {
       for (const o of this.fighters) {
         if (o === f || !o.alive) continue;
-        if (o.updateCenter().distanceTo(c) < DISC.blinkRadius + T.radius) {
+        if (o.updateCenter().distanceTo(c) < d.w.blinkRadius + T.radius) {
           const out = new THREE.Vector3().subVectors(o.body.pos, spot).setY(0);
           if (out.lengthSq() < 1e-4) out.set(1, 0, 0);
           out.normalize();
-          if (this.damageFighter(o, DISC.blinkSlam * (1 + 0.15 * d.bounces), f, 'slam', out, d.bounces)) { slammed++; f.st.slams++; }
+          if (o.reflectT > 0) { // the shockwave bounces off a reflect bubble and throws YOU back
+            B.vel.addScaledVector(out, -14); B.vel.y = 6; f.st.reflected = (f.st.reflected || 0) + 1;
+            this.reflectFx(o, c);
+            if (f.brain) this.chat(f, 'reflected', 0.5);
+            continue;
+          }
+          if (this.damageFighter(o, d.w.blinkSlam * (1 + 0.15 * d.bounces), f, 'slam', out, d.bounces)) { slammed++; f.st.slams++; }
         }
       }
     } else {
       for (const e of this.foes) {
         if (!e.alive) continue;
-        if (e.center.distanceTo(c) < DISC.blinkRadius + e.cfg.r) {
+        if (e.center.distanceTo(c) < d.w.blinkRadius + e.cfg.r) {
           const out = new THREE.Vector3().subVectors(e.pos, spot).setY(0);
           if (out.lengthSq() < 1e-4) out.set(1, 0, 0);
           out.normalize();
           slammed++;
-          this.hitFoe(e, DISC.blinkSlam * (1 + 0.15 * d.bounces), out, 'slam', d.bounces);
+          this.hitFoe(e, d.w.blinkSlam * (1 + 0.15 * d.bounces), out, 'slam', d.bounces);
           if (e.alive) { e.vel.addScaledVector(out, 9); e.vel.y = 5; }
         }
       }
-      for (let i = this.orbs.length - 1; i >= 0; i--) if (this.orbs[i].pos.distanceTo(c) < DISC.blinkRadius) this.killOrb(this.orbs[i], true);
+      for (let i = this.orbs.length - 1; i >= 0; i--) if (this.orbs[i].pos.distanceTo(c) < d.w.blinkRadius) this.killOrb(this.orbs[i], true);
     }
     // fx
     const col = new THREE.Color(f.color);
@@ -656,7 +678,8 @@ export class Game {
       const p = _c.lerpVectors(from, spot, i / n); p.y += 1;
       this.parts.emit(p, 2, { color: [[col.r, col.g, col.b], [0.12, 0.12, 0.14]], speed: 1.5, life: 0.45, gravity: 0, size: 0.14 });
     }
-    this.rings.add(new THREE.Vector3(spot.x, spot.y + 0.06, spot.z), slammed ? 0x16161a : f.color, slammed ? DISC.blinkRadius * 1.3 : 2.2, 0.45);
+    this.rings.add(new THREE.Vector3(spot.x, spot.y + 0.06, spot.z), slammed ? 0x16161a : f.color, slammed ? d.w.blinkRadius * 1.3 : 2.2, 0.45);
+    this.noise(f, spot, 38);
     if (isMe) {
       this.audio.blink(); this.hand.blinkAnim();
       this.camState.kick = Math.max(this.camState.kick, 1.3); this.flashFx = Math.max(this.flashFx, 0.6);
@@ -700,7 +723,7 @@ export class Game {
     const m = new THREE.Mesh(this.orbGeo, this.orbMat);
     const halo = new THREE.Mesh(this.orbGeo, this.orbHalo); halo.scale.setScalar(1.9); m.add(halo);
     m.position.copy(o); this.scene.add(m);
-    this.orbs.push({ m, halo, pos: o, vel: dir.multiplyScalar(15 * this.D.projSpeed), life: 6, dmg: 12 * this.D.dmg, dodged: false, t: 0 });
+    this.orbs.push({ m, halo, pos: o, vel: dir.multiplyScalar(15 * this.D.projSpeed), life: 6, dmg: 12 * this.D.dmg, dodged: false, t: 0, from: f, reflected: false });
     this.audio.orbFire(dist);
     this.parts.emit(o, 6, { color: [0.9, 0.15, 0.2], speed: 3, life: 0.25, gravity: 0 });
   }
@@ -714,6 +737,20 @@ export class Game {
       if (h && h.t < step + 0.3) { o.pos.set(h.x, h.y, h.z); this.killOrb(o, false); continue; }
       o.pos.addScaledVector(o.vel, dt);
       o.m.position.copy(o.pos);
+      if (o.reflected) {
+        let hitF = null;
+        for (const f of this.foes) if (f.alive && f.center.distanceTo(o.pos) < f.hitRadius + 0.4) { hitF = f; break; }
+        if (hitF) { this.hitFoe(hitF, 35, o.vel.clone().normalize(), 'reflect', 0); this.killOrb(o, false); continue; }
+        if (o.life <= 0) this.killOrb(o, false);
+        continue;
+      }
+      // reflect bubble bats the orb straight back at the turret that fired it
+      if (this.me.reflectT > 0 && o.pos.distanceTo(this.me.updateCenter()) < 1.9) {
+        const back = o.from && o.from.alive ? _b.subVectors(o.from.center, o.pos).normalize() : _b.copy(o.vel).negate().normalize();
+        o.vel.copy(back).multiplyScalar(30); o.reflected = true; o.life = 3;
+        o.m.material = this.orbMatR || (this.orbMatR = new THREE.MeshBasicMaterial({ color: 0xff5a1f }));
+        this.reflectFx(this.me, o.pos); continue;
+      }
       // hit test against the player's capsule
       const yb = P.pos.y + 0.4, yt = P.pos.y + P.h - 0.4;
       const cy = THREE.MathUtils.clamp(o.pos.y, yb, yt);
@@ -882,6 +919,114 @@ export class Game {
   // drive the human fighter with a bot brain (automated tests / bot-vs-bot measurements)
   autopilot(skill) { this.me.brain = skill ? new BotBrain(this, this.me, skill) : null; }
 
+  // ======================= SKILLS (Q) =======================
+  useSkill(f) {
+    const K = SKILLS[f.skill];
+    if (!K || !f.alive) return false;
+    if (f.skillCd > 0) { if (f === this.me) this.audio.empty(); return false; }
+    f.skillCd = K.cd; f.st.skills = (f.st.skills || 0) + 1;
+    const B = f.body, isMe = f === this.me, c = f.updateCenter().clone();
+    const play = fn => isMe ? fn() : this.spatial(c, fn);
+    if (f.skill === 'reflect') { f.reflectT = K.dur; play(() => this.audio.shieldClang()); this.rings.add(c, f.color, 2.4, 0.3, null); }
+    else if (f.skill === 'overdrive') { f.overT = K.dur; B.speedMul = 1.35; B.dashCharges = B.dashMax; play(() => this.audio.boost()); this.rings.add(new THREE.Vector3(B.pos.x, B.pos.y + 0.06, B.pos.z), f.color, 3, 0.4); }
+    else if (f.skill === 'gravity') { this.throwGrenade(f); play(() => this.audio.discThrow(0.6)); }
+    else if (f.skill === 'heal') {
+      f.hp = Math.min(100, f.hp + 35); f.healT = K.dur; play(() => this.audio.checkpoint(false));
+      this.parts.emit(c, 20, { color: [[0.25, 0.85, 0.45], [1, 1, 1]], speed: 4, life: 0.6, gravity: -3 });
+    }
+    if (isMe) { this.train('skill'); this.hand.blinkAnim(); if (f.skill === 'overdrive') this.camState.kick = Math.max(this.camState.kick, 1); }
+    this.noise(f, c, 25);
+    return true;
+  }
+  tickSkills(dt) {
+    for (const f of this.fighters) {
+      f.skillCd = Math.max(0, f.skillCd - dt);
+      if (f.reflectT > 0) f.reflectT -= dt;
+      if (f.overT > 0) { f.overT -= dt; if (f.alive) f.body.dashCharges = f.body.dashMax; if (f.overT <= 0) f.body.speedMul = 1; }
+      if (f.healT > 0) { f.healT -= dt; if (f.alive) f.hp = Math.min(100, f.hp + 12 * dt); }
+    }
+    this.tickGrenades(dt); this.tickWells(dt);
+  }
+  throwGrenade(f, dir = null) {
+    const B = f.body;
+    dir = dir || B.lookDir(new THREE.Vector3());
+    const pos = new THREE.Vector3().copy(B.eye); pos.y -= 0.2; pos.addScaledVector(dir, 0.5);
+    const vel = dir.clone().multiplyScalar(24).add(new THREE.Vector3(0, 4, 0)).addScaledVector(B.vel, 0.4);
+    const m = new THREE.Mesh(this.nadeGeo, new THREE.MeshStandardMaterial({ color: 0x16161a, emissive: new THREE.Color(f.color).multiplyScalar(0.6) }));
+    m.position.copy(pos); m.castShadow = true; this.scene.add(m);
+    this.grenades.push({ f, pos, vel, t: 0, m });
+  }
+  tickGrenades(dt) {
+    const col = this.arena.col;
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const g = this.grenades[i]; g.t += dt;
+      g.vel.y -= 22 * dt;
+      const sp = g.vel.length(), step = sp * dt;
+      const h = sp > 0 ? col.raycast(g.pos.x, g.pos.y, g.pos.z, g.vel.x / sp, g.vel.y / sp, g.vel.z / sp, step + 0.25, _hit) : null;
+      let boom = !!(h && h.t < step + 0.25);
+      if (boom) g.pos.set(h.x + h.nx * 0.3, h.y + h.ny * 0.3, h.z + h.nz * 0.3); else g.pos.addScaledVector(g.vel, dt);
+      if (g.pos.y < 0.2) { g.pos.y = 0.2; boom = true; }
+      for (const o of this.fighters) if (o !== g.f && o.alive && o.updateCenter().distanceTo(g.pos) < 1.3) boom = true;
+      for (const e of this.foes) if (e.alive && e.center.distanceTo(g.pos) < e.hitRadius + 0.4) boom = true;
+      if (g.t > 1.6) boom = true;
+      g.m.position.copy(g.pos);
+      if (boom) { this.scene.remove(g.m); this.grenades.splice(i, 1); this.makeWell(g.f, g.pos.clone()); }
+    }
+  }
+  makeWell(f, pos) {
+    const K = SKILLS.gravity;
+    const m = new THREE.Mesh(this.wellGeo, new THREE.MeshBasicMaterial({ color: 0x16161a, transparent: true, opacity: 0.18, depthWrite: false }));
+    m.position.copy(pos); this.scene.add(m);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48), new THREE.MeshBasicMaterial({ color: f.color, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(pos.x, Math.max(0.06, pos.y - 0.9), pos.z); ring.scale.setScalar(7.5); this.scene.add(ring);
+    this.wells.push({ f, pos, t: 0, dur: K.dur, r: 7.5, m, ring });
+    this.spatial(pos, () => this.audio.slam());
+    this.parts.emit(pos, 24, { color: [[0.08, 0.08, 0.1], [0.5, 0.5, 0.55]], speed: 6, life: 0.5, gravity: 0 });
+    this.noise(f, pos, 35);
+  }
+  tickWells(dt) {
+    for (let i = this.wells.length - 1; i >= 0; i--) {
+      const w = this.wells[i]; w.t += dt;
+      const k = w.t / w.dur;
+      w.m.scale.setScalar(w.r * (0.25 + 0.15 * Math.sin(w.t * 18)) * (1 - k * 0.5));
+      w.m.material.opacity = 0.22 * (1 - k);
+      w.ring.scale.setScalar(w.r * (1 - k * 0.6)); w.ring.material.opacity = 0.7 * (1 - k);
+      const pull = (B, cx, cy, cz) => {
+        const dx = w.pos.x - cx, dy = w.pos.y - cy, dz = w.pos.z - cz, d = Math.hypot(dx, dy, dz);
+        if (d > w.r || d < 0.3) return false;
+        const a = 52 * (1 - d / w.r * 0.5) * dt;
+        B.vel.x += dx / d * a; B.vel.z += dz / d * a; B.vel.y += (dy / d * a) * 0.5 + 9 * dt;
+        return true;
+      };
+      for (const o of this.fighters) {
+        if (o === w.f || !o.alive || o.reflectT > 0) continue;
+        const B = o.body;
+        if (pull(B, B.pos.x, B.pos.y + 1, B.pos.z)) { B.grounded = false; if (o === this.me && Math.random() < dt * 4) this.shake(0.05); }
+      }
+      for (const e of this.foes) if (e.alive) pull(e, e.center.x, e.center.y, e.center.z);
+      if (w.t >= w.dur) { this.scene.remove(w.m); this.scene.remove(w.ring); this.wells.splice(i, 1); }
+    }
+  }
+  // sounds you make tell nearby bots where you are
+  noise(f, pos, radius) {
+    for (const o of this.fighters) if (o.brain && o !== f && o.alive && o.body.pos.distanceTo(pos) < radius * o.brain.S.hear) o.brain.hear(f, pos);
+  }
+  // little chat line from a bot: bubble over the head + the chat box
+  chat(f, kind, p = 0.3) {
+    if (!f.brain || !CHAT[kind] || Math.random() > p * f.brain.p.chatty) return;
+    if (this.gameTime - (f.lastChat || -9) < 2.5) return;
+    f.lastChat = this.gameTime;
+    const text = pick(CHAT[kind]);
+    f.say(text);
+    const box = this.el('chat'); if (box === DUMMY_EL) return;
+    const row = document.createElement('div');
+    const n = document.createElement('b'); n.textContent = f.name; n.style.color = f.css;
+    const tx = document.createElement('span'); tx.textContent = text;
+    row.append(n, tx); box.append(row);
+    this.chatLines.push({ el: row, t: 0 });
+    while (this.chatLines.length > 4) this.chatLines.shift().el.remove();
+  }
+
   // ======================= VERSUS: 1V1 / FFA against bots =======================
   setupVersus() {
     const duel = this.mode === 'duel';
@@ -890,10 +1035,12 @@ export class Game {
     const roster = BOT_ROSTER.slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < (duel ? 1 : 5); i++) {
       const r = roster[i];
-      const f = new Fighter(this, { name: r.name, color: r.color, isBot: true });
-      f.brain = new BotBrain(this, f, skill);
+      const per = PERSONAS[(Math.random() * PERSONAS.length) | 0];
+      const f = new Fighter(this, { name: r.name, color: r.color, isBot: true, weapon: per.weapons[(Math.random() * per.weapons.length) | 0], skill: per.skills[(Math.random() * per.skills.length) | 0] });
+      f.brain = new BotBrain(this, f, skill, per);
       this.fighters.push(f);
     }
+    setTimeout(() => { for (const f of this.fighters) if (f.brain && this.versus) this.chat(f, 'start', 0.55); }, 900);
     for (const f of this.fighters) f.alive = false;
     for (const f of this.fighters) this.respawn(f, true);
     this.match = { limit: duel ? 5 : 15, timeLeft: duel ? 0 : 240, over: false };
@@ -926,6 +1073,7 @@ export class Game {
     const p = this.pickSpawn(f), B = f.body;
     B.reset(p, Math.atan2(p.x, p.z));
     f.hp = 100; f.alive = true; f.protT = initial ? 0.6 : 1.5; f.invulnT = 0; f.regenT = 0; f.respawnT = 0;
+    f.reflectT = f.overT = f.healT = 0; B.speedMul = 1;
     if (f.disc.state !== 'hand') f.disc.caught();
     f.disc.catchCd = 0; f.disc.trail.reset();
     if (f.brain) f.brain.reset();
@@ -933,34 +1081,59 @@ export class Game {
     if (!initial) this.rings.add(new THREE.Vector3(p.x, p.y + 0.06, p.z), f.color, 2.6, 0.5);
   }
   sweepFighters(d, a, b, dir, leg) {
+    const attacker = d.reflectedBy || d.owner;
     for (const t of this.fighters) {
-      if (t === d.owner || !t.alive || d.hit.has(t)) continue;
+      if (t === attacker || !t.alive || d.hit.has(t)) continue;
+      if (t === d.owner && !d.reflectedBy) continue;
       const B = t.body;
       _c1.set(B.pos.x, B.pos.y + 0.4, B.pos.z); _c2.set(B.pos.x, B.pos.y + Math.max(0.6, B.h - 0.4), B.pos.z);
-      if (segSeg(a, b, _c1, _c2, _ss).d >= T.radius + DISC.radius + (d.bonus || 0)) continue;
+      if (segSeg(a, b, _c1, _c2, _ss).d >= T.radius + d.w.radius + (d.bonus || 0) + (t.reflectT > 0 ? 0.6 : 0)) continue;
       d.hit.add(t);
+      // reflect bubble: the disc flies back at whoever threw it and now hurts THEM
+      if (t.reflectT > 0 && t !== d.owner) {
+        const at = new THREE.Vector3().lerpVectors(a, b, _ss.s);
+        const o = d.owner, sp = Math.max(d.vel.length(), d.w.speed) * 1.15;
+        const back = o.alive ? _b.subVectors(o.updateCenter(), at).normalize() : _b.copy(d.vel).negate().normalize();
+        d.vel.copy(back).multiplyScalar(sp);
+        d.state = 'out'; d.t = Math.min(d.t, 0.3); d.hit.clear(); d.hit.add(t); d.reflectedBy = t; d.leg++;
+        d.homing = 0; d.bonus = t === this.me ? this.assistCfg().bonus : 0;
+        t.st.reflects = (t.st.reflects || 0) + 1;
+        this.reflectFx(t, at);
+        if (o.brain) this.chat(o, 'reflected', 0.45);
+        return at.addScaledVector(back, 0.05);
+      }
       if (t.invuln) {
         t.st.dodges++;
         if (t === this.me) this.popup('회피!');
-        else if (d.owner === this.me) this.popupWorld(t.updateCenter(), '회피');
+        else if (attacker === this.me) this.popupWorld(t.updateCenter(), '회피');
         continue;
       }
+      const w = d.w;
       const dmg = leg === 'out'
-        ? DISC.dmg * (1 + 0.35 * d.bounces) * (0.75 + 0.25 * d.speedMul())
-        : DISC.returnDmg * (1 + 0.2 * d.bounces);
-      this.damageFighter(t, dmg, d.owner, leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', dir, d.bounces);
+        ? w.dmg * (1 + w.bounceMul * d.bounces) * (0.75 + 0.25 * d.speedMul()) * (d.reflectedBy ? 1.2 : 1)
+        : w.returnDmg * (1 + 0.2 * d.bounces);
+      this.damageFighter(t, dmg, attacker, d.reflectedBy ? 'reflect' : leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', dir, d.bounces);
     }
+    return null;
+  }
+  reflectFx(t, at) {
+    this.rings.add(at.clone(), t.color, 2.2, 0.3, null);
+    this.parts.emit(at, 16, { color: [[1, 1, 1], [0.9, 0.9, 0.95]], speed: 9, life: 0.3, gravity: 0 });
+    if (t === this.me) { this.audio.shieldClang(); this.popup('반사!'); this.flashFx = Math.max(this.flashFx, 0.4); }
+    else this.spatial(at, () => this.audio.shieldClang());
   }
   damageFighter(t, dmg, by, kind, dir, bounces = 0) {
     if (!t.alive || t.invuln) return null;
     dmg = Math.round(dmg);
-    t.hp -= dmg; t.regenT = 4; t.lastHitBy = by; t.lastHitT = this.gameTime;
-    const B = t.body, push = kind === 'slam' ? 9 : 5;
+    t.hp -= dmg; t.regenT = 5; t.lastHitBy = by; t.lastHitT = this.gameTime;
+    const kn = by ? by.disc.w.knock : 5;
+    const B = t.body, push = kind === 'slam' ? 8 + kn * 0.3 : kn;
     B.vel.x += dir.x * push; B.vel.z += dir.z * push; B.vel.y = Math.max(B.vel.y, kind === 'slam' ? 5 : 2.5); B.grounded = false;
     const c = t.updateCenter().clone(), col = new THREE.Color(t.color);
     this.parts.emit(c, 14, { color: [[0.1, 0.1, 0.12], [col.r, col.g, col.b]], speed: 8, dir, spread: 0.9, life: 0.4 });
     const killed = t.hp <= 0;
     if (by) { by.st.hits++; if (kind === 'bank') by.st.bank++; if (kind === 'return') by.st.ret++; }
+    if (t.brain) t.brain.onHurt(by, kind);
     if (t === this.me) { this.dmgFx = 1; this.shake(0.22); this.audio.hurt(); if (by) this.hurtDir(by.updateCenter()); }
     if (by === this.me) {
       this.audio.discHit(bounces + 1); this.stats.hits++;
@@ -977,6 +1150,7 @@ export class Game {
   }
   killFighter(v, k, kind, n, dir) {
     v.alive = false; v.hp = 0; v.deaths++; v.streak = 0;
+    v.reflectT = v.overT = v.healT = 0; v.body.speedMul = 1;
     v.respawnT = this.mode === 'duel' ? 2.2 : 2.8;
     if (v.disc.state !== 'hand') v.disc.caught();
     v.disc.trail.reset();
@@ -994,6 +1168,8 @@ export class Game {
       k.body.dashCharges = Math.min(k.body.dashMax, k.body.dashCharges + 1);
     }
     this.feedKill(k, v, tag);
+    if (k && k.brain && k !== v) { k.brain.onKill(v); this.chat(k, k.streak === 3 ? 'streak' : kind === 'bank' ? 'bank' : kind === 'slam' ? 'slam' : 'kill', v === this.me ? 0.4 : 0.22); }
+    if (v.brain) { v.brain.onDeath(k); this.chat(v, 'death', k === this.me ? 0.35 : 0.15); }
     if (k === this.me) {
       this.popup(k.streak >= 3 ? `${k.streak}연속 처치!` : (tag || '처치!'));
       this.audio.kill(Math.min(k.streak, 8)); this.shake(0.12); this.kills++;
@@ -1046,6 +1222,7 @@ export class Game {
     this.saveRecords && this.saveRecords();
     this.banner(title, sub, 1.8);
     if (myRank === 1) this.audio.checkpoint(true); else this.audio.wave();
+    for (const f of this.fighters) if (f.brain) this.chat(f, rank[0] === f ? 'win' : 'lose', 0.6);
     const stats = rank.map((f, i) => [`${i + 1}. ${f.name}`, `${f.kills} 킬 · ${f.deaths} 데스`]);
     stats.push(['봇 실력', SKILL[this.botSkill].name], ['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H']);
     this.result = { title, stats, rank: myRank };
@@ -1165,7 +1342,7 @@ export class Game {
     for (const o of this.orbs) o.halo.scale.setScalar(1.7 + Math.sin(o.t * 18) * 0.25);
     this.updateLasers();
     this.updateBlinkGhost();
-    this.lines.update(this.camera.position, P.vel, this.state === 'play' && this.me.alive ? THREE.MathUtils.clamp((P.speed - 17) / 20, 0, 1) : 0);
+    this.lines.update(this.camera.position, P.vel, this.state === 'play' && this.me.alive ? Math.max(this.me.overT > 0 ? 0.6 : 0, THREE.MathUtils.clamp((P.speed - 17) / 20, 0, 1)) : 0);
 
     this.hand.update(this.state === 'play' ? rawDt * Math.max(this.timeScale, 0.4) : rawDt, {
       mx: this.mouseDX || 0, my: this.mouseDY || 0, hs: P.hSpeed, vy: P.vel.y, grounded: P.grounded, discOut: this.disc.out,
@@ -1232,6 +1409,18 @@ export class Game {
     this.txt('discTxt', st === 'hand' ? `${kn('throw')} 던지기` : st === 'out' ? `${kn('throw')} 회수 · ${kn('blink')} 순간이동` : `돌아오는 중 · ${kn('blink')} 순간이동`);
     this.txt('discPow', d.out && d.bounces > 0 ? `튕김 ${d.bounces} · 피해 ${power}%` : '');
     this.cls('cross', 'out', d.out); this.cls('cross', 'hidden', !this.me.alive);
+    // skill
+    const me = this.me, K = SKILLS[me.skill];
+    if (K) {
+      this.txt('skillKey', keyName(this.S.binds.skill && this.S.binds.skill[0]));
+      this.txt('skillName', K.name);
+      this.txt('skillCd', me.skillCd > 0 ? me.skillCd.toFixed(1) + 's' : '준비');
+      this.css('skillFill', 'width', ((1 - me.skillCd / K.cd) * 100).toFixed(1) + '%');
+      this.cls('skillBox', 'ready', me.skillCd <= 0);
+      this.cls('skillBox', 'active', me.reflectT > 0 || me.overT > 0 || me.healT > 0);
+    }
+    this.cls('hud', 'over', me.overT > 0); this.cls('hud', 'refl', me.reflectT > 0);
+    for (let i = this.chatLines.length - 1; i >= 0; i--) { const c = this.chatLines[i]; c.t += dt; if (c.t > 6) { c.el.remove(); this.chatLines.splice(i, 1); } else if (c.t > 5) c.el.style.opacity = String(6 - c.t); }
     // lock-on marker: who your next throw will track
     let lock = null;
     if (this.me.alive && this.state === 'play' && d.state === 'hand') {
@@ -1257,7 +1446,7 @@ export class Game {
       this.cls('discMark', 'edge', edge); this.cls('discMark', 'show', true);
       // your disc is next to an enemy: tell the player to blink NOW (shockwave)
       let cue = false;
-      for (const t of this.assistTargets()) { if (this.tInfo(t).c.distanceTo(d.pos) < DISC.blinkRadius + 0.3 && !(t.protT > 0)) { cue = true; break; } }
+      for (const t of this.assistTargets()) { if (this.tInfo(t).c.distanceTo(d.pos) < d.w.blinkRadius + 0.3 && !(t.protT > 0)) { cue = true; break; } }
       this.cls('discMark', 'cue', cue);
       if (cue) this.txt('slamCue', `${keyName(this.S.binds.blink[0])}!`);
     } else this.cls('discMark', 'show', false);

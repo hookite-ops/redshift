@@ -30,7 +30,7 @@ function startMode(mode) {
   $('clickTo').classList.add('hidden');
   if (S.full && !document.fullscreenElement) {
     const p = document.documentElement.requestFullscreen?.();
-    p && p.then(() => navigator.keyboard?.lock?.(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'Space', 'ShiftLeft']).catch(() => { })).catch(() => { });
+    p && p.then(() => navigator.keyboard?.lock?.(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyQ', 'KeyF', 'Space', 'ShiftLeft']).catch(() => { })).catch(() => { });
   }
   input.lock();
 }
@@ -82,7 +82,11 @@ document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click',
 function renderDifficulty() {
   document.querySelectorAll('#difficulty button').forEach(b => b.classList.toggle('on', b.dataset.df === S.difficulty));
   document.querySelectorAll('#botskill button').forEach(b => b.classList.toggle('on', b.dataset.bs === S.botSkill));
+  document.querySelectorAll('#weapons button').forEach(b => b.classList.toggle('on', b.dataset.wp === S.weapon));
+  document.querySelectorAll('#skills button').forEach(b => b.classList.toggle('on', b.dataset.sk === S.skill));
 }
+document.querySelectorAll('#weapons button').forEach(b => b.addEventListener('click', () => { S.weapon = b.dataset.wp; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
+document.querySelectorAll('#skills button').forEach(b => b.addEventListener('click', () => { S.skill = b.dataset.sk; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 document.querySelectorAll('#botskill button').forEach(b => b.addEventListener('click', () => { S.botSkill = b.dataset.bs; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 document.querySelectorAll('#difficulty button').forEach(b => b.addEventListener('click', () => { S.difficulty = b.dataset.df; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 renderDifficulty();
@@ -128,7 +132,7 @@ function renderBinds() {
 }
 function renderKeyHints() {
   const k = a => (S.binds[a] && S.binds[a][0]) ? keyName(S.binds[a][0]) : '—';
-  const items = [['throw', '던지기 / 회수'], ['blink', '순간이동'], ['dash', '대시'], ['jump', '점프 ×2']];
+  const items = [['throw', '던지기 / 회수'], ['blink', '순간이동'], ['skill', '스킬'], ['dash', '대시'], ['jump', '점프 ×2']];
   $('keyHints').innerHTML = items.map(([a, n]) => `<span><b>${k(a)}</b>${n}</span>`).join('');
   $('keyHints').classList.toggle('hidden', !S.keyHints);
   // the menu cheat-sheet uses the same binds
