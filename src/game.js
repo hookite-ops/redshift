@@ -10,7 +10,7 @@ import { Particles, Rings, SpeedLines } from './fx.js';
 import { Fighter, BOT_ROSTER } from './fighter.js';
 import { BotBrain, SKILL } from './bot.js';
 import { Audio } from './audio.js';
-import { QUALITY, keyName } from './settings.js';
+import { QUALITY, ASSIST, keyName } from './settings.js';
 
 const TICK = 1 / 120;
 export const DIFF = {
@@ -422,11 +422,13 @@ export class Game {
 
   // ======================= the disc =======================
   throwDisc() {
-    const P = this.player;
+    const P = this.player, A = this.assistCfg();
     const dir = P.lookDir(new THREE.Vector3());
     const origin = new THREE.Vector3().copy(P.eye); origin.y -= 0.15;
-    this.aimAssist(origin, dir);
-    this.throwFor(this.me, dir);
+    const lock = this.aimAssist(origin, dir);
+    if (!this.throwFor(this.me, dir)) return;
+    const d = this.disc;
+    d.homing = A.homing; d.cone = A.cone; d.range = A.range; d.bonus = A.bonus; d.lock = lock;
   }
   throwFor(f, dir) {
     const B = f.body, d = f.disc;
@@ -446,19 +448,83 @@ export class Game {
     if (f === this.me) { this.audio.discBounce(0); this.train('recall'); }
     return true;
   }
-  // gentle magnetism toward an enemy right under the crosshair
-  aimAssist(origin, dir) {
-    let best = null, bestA = this.D.assist * (this.versus ? 0.7 : 1);
-    const list = this.versus ? this.fighters.filter(f => f !== this.me && f.alive).map(f => { f.updateCenter(); return f; }) : this.foes;
-    for (const f of list) {
-      if (!f.alive) continue;
-      _a.subVectors(f.center, origin); const dist = _a.length();
-      if (dist < 1.5 || dist > 70) continue;
-      _a.divideScalar(dist);
-      const ang = Math.acos(THREE.MathUtils.clamp(_a.dot(dir), -1, 1));
-      if (ang < bestA && this.los(origin, f.center)) { bestA = ang; best = _a.clone(); }
+  // ---------- aim help for YOUR throws (settings → 조준 보조) ----------
+  assistCfg() { return ASSIST[this.S.aimAssist] || ASSIST.strong; }
+  assistTargets() {
+    if (this.versus) return this.fighters.filter(f => f !== this.me && f.alive);
+    return this.foes.filter(f => f.alive);
+  }
+  // where to aim: chest + velocity, airborne fighters follow gravity
+  tInfo(t) {
+    if (t instanceof Fighter) { const B = t.body; return { c: t.updateCenter(), v: B.vel, air: !B.grounded }; }
+    return { c: t.center, v: t.vel, air: false };
+  }
+  leadPoint(origin, t, out) {
+    const { c, v, air } = this.tInfo(t), P = this.player;
+    let tt = origin.distanceTo(c) / DISC.speed;
+    for (let k = 0; k < 3; k++) {
+      out.copy(c).addScaledVector(v, tt);
+      if (air) { out.y += -0.5 * T.gravity * tt * tt; if (out.y < 0.8) out.y = 0.8; } else out.y = c.y;
+      const d = origin.distanceTo(out);
+      _d.subVectors(out, origin).divideScalar(d || 1);
+      tt = d / (DISC.speed + Math.max(0, P.vel.dot(_d)) * DISC.carry);
     }
-    if (best) dir.lerp(best, 0.85).normalize();
+    return out;
+  }
+  // point roughly at someone and the throw leads them for you. Returns the locked target.
+  aimAssist(origin, dir, apply = true) {
+    const A = this.assistCfg(); if (!A.snap) return null;
+    let best = null, bestA = A.snap; const bestDir = new THREE.Vector3(), lp = new THREE.Vector3();
+    for (const t of this.assistTargets()) {
+      const { c } = this.tInfo(t);
+      _b.subVectors(c, origin); const dist = _b.length();
+      if (dist < 1.2 || dist > 80) continue;
+      _b.divideScalar(dist);
+      this.leadPoint(origin, t, lp);
+      _a.subVectors(lp, origin).normalize();
+      // aiming at the body OR at the lead point both count
+      const ang = Math.min(Math.acos(THREE.MathUtils.clamp(_a.dot(dir), -1, 1)), Math.acos(THREE.MathUtils.clamp(_b.dot(dir), -1, 1)));
+      if (ang >= bestA) continue;
+      if (this.los(origin, lp)) { bestA = ang; best = t; bestDir.copy(_a); }
+      else if (this.los(origin, c)) { bestA = ang; best = t; bestDir.copy(_b); }
+    }
+    if (best && apply) dir.copy(bestDir);
+    return best;
+  }
+  // your disc bends toward the enemy it is flying at. Acquire inside a cone; once locked it keeps
+  // tracking anywhere in front of it, and steers harder the closer it gets (so it finishes the job).
+  discHoming(d, dt) {
+    const sp = d.vel.length(); if (sp < 1) return;
+    const dir = _a.copy(d.vel).divideScalar(sp);
+    const valid = t => t && t.alive && !d.hit.has(t) && !(t.protT > 0);
+    let best = null;
+    if (valid(d.lock)) {
+      const { c } = this.tInfo(d.lock);
+      _b.subVectors(c, d.pos); const dist = _b.length();
+      if (dist < d.range && _b.dot(dir) > dist * 0.15) best = d.lock; // still roughly ahead (< ~80°)
+    }
+    if (!best) {
+      let bestS = 1e9;
+      for (const t of this.assistTargets()) {
+        if (!valid(t)) continue;
+        const { c } = this.tInfo(t);
+        _b.subVectors(c, d.pos); const dist = _b.length();
+        if (dist > d.range || dist < 0.4) continue;
+        const ang = Math.acos(THREE.MathUtils.clamp(_b.dot(dir) / dist, -1, 1));
+        if (ang < d.cone && ang < bestS) { bestS = ang; best = t; }
+      }
+      if (best) d.lock = best;
+    }
+    if (!best) return;
+    const { c, v } = this.tInfo(best);
+    if (!this.los(d.pos, c)) return; // never steer into cover
+    const dist = d.pos.distanceTo(c), tt = dist / sp;
+    _c.copy(c).addScaledVector(v, tt * 0.7).sub(d.pos).normalize();
+    const ang = Math.acos(THREE.MathUtils.clamp(_c.dot(dir), -1, 1));
+    if (ang < 1e-4) return;
+    const rate = Math.min(14, d.homing * (1 + 8 / Math.max(1.5, dist)));
+    dir.lerp(_c, Math.min(1, rate * dt / ang)).normalize();
+    d.vel.copy(dir).multiplyScalar(sp);
   }
   onDiscBounce(d, p, n) {
     if (d.owner === this.me) this.audio.discBounce(d.bounces);
@@ -482,7 +548,7 @@ export class Game {
     for (const f of this.foes) {
       if (!f.alive || d.hit.has(f) || f.spawnT > 0.25) continue;
       const t = segParam(a, b, f.center);
-      if (segDist(a, b, f.center, t) < f.hitRadius + DISC.radius) hits.push({ f, t });
+      if (segDist(a, b, f.center, t) < f.hitRadius + DISC.radius + (d.bonus || 0)) hits.push({ f, t });
     }
     hits.sort((x, y) => x.t - y.t);
     for (const { f, t } of hits) {
@@ -555,7 +621,7 @@ export class Game {
     B.vel.set(fw.x * sp, Math.max(B.vel.y, 4), fw.z * sp);
     B.grounded = false; B.airJumps = T.airJumps;
     B.dashCharges = Math.min(B.dashMax, B.dashCharges + 1);
-    f.invulnT = 0.3; f.st.blinks++;
+    f.invulnT = this.versus ? 0 : 0.3; f.st.blinks++;
     // shockwave
     const c = new THREE.Vector3(spot.x, spot.y + 0.9, spot.z);
     let slammed = 0;
@@ -871,7 +937,7 @@ export class Game {
       if (t === d.owner || !t.alive || d.hit.has(t)) continue;
       const B = t.body;
       _c1.set(B.pos.x, B.pos.y + 0.4, B.pos.z); _c2.set(B.pos.x, B.pos.y + Math.max(0.6, B.h - 0.4), B.pos.z);
-      if (segSeg(a, b, _c1, _c2, _ss).d >= T.radius + DISC.radius) continue;
+      if (segSeg(a, b, _c1, _c2, _ss).d >= T.radius + DISC.radius + (d.bonus || 0)) continue;
       d.hit.add(t);
       if (t.invuln) {
         t.st.dodges++;
@@ -1166,6 +1232,17 @@ export class Game {
     this.txt('discTxt', st === 'hand' ? `${kn('throw')} 던지기` : st === 'out' ? `${kn('throw')} 회수 · ${kn('blink')} 순간이동` : `돌아오는 중 · ${kn('blink')} 순간이동`);
     this.txt('discPow', d.out && d.bounces > 0 ? `튕김 ${d.bounces} · 피해 ${power}%` : '');
     this.cls('cross', 'out', d.out); this.cls('cross', 'hidden', !this.me.alive);
+    // lock-on marker: who your next throw will track
+    let lock = null;
+    if (this.me.alive && this.state === 'play' && d.state === 'hand') {
+      const org = (this._lockO || (this._lockO = new THREE.Vector3())).copy(P.eye); org.y -= 0.15;
+      lock = this.aimAssist(org, P.lookDir(this._lockD || (this._lockD = new THREE.Vector3())), false);
+    } else if (d.out && d.lock && (d.lock.alive) && !d.hit.has(d.lock)) lock = d.lock;
+    if (lock) {
+      _a.copy(this.tInfo(lock).c).project(this.camera);
+      this.css('lock', 'transform', `translate(${((_a.x + 1) / 2 * W).toFixed(1)}px,${((1 - _a.y) / 2 * H).toFixed(1)}px)`);
+      this.cls('lock', 'show', true); this.cls('cross', 'lock', d.state === 'hand');
+    } else { this.cls('lock', 'show', false); this.cls('cross', 'lock', false); }
     // disc marker on screen (where a blink would take you)
     const mk = this.el('discMark');
     if (d.out && this.state === 'play') {
@@ -1178,6 +1255,11 @@ export class Game {
       if (edge) { const m = Math.max(Math.abs(x) / 0.94, Math.abs(y) / 0.9); x /= m; y /= m; }
       this.css('discMark', 'transform', `translate(${((x + 1) / 2 * W).toFixed(1)}px,${((1 - y) / 2 * H).toFixed(1)}px)`);
       this.cls('discMark', 'edge', edge); this.cls('discMark', 'show', true);
+      // your disc is next to an enemy: tell the player to blink NOW (shockwave)
+      let cue = false;
+      for (const t of this.assistTargets()) { if (this.tInfo(t).c.distanceTo(d.pos) < DISC.blinkRadius + 0.3 && !(t.protT > 0)) { cue = true; break; } }
+      this.cls('discMark', 'cue', cue);
+      if (cue) this.txt('slamCue', `${keyName(this.S.binds.blink[0])}!`);
     } else this.cls('discMark', 'show', false);
     // threat chevrons for anything winding up
     this.updateThreats();

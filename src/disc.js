@@ -50,6 +50,7 @@ export class Disc {
   throw(origin, dir, playerVel) {
     if (this.state !== 'hand' || this.catchCd > 0) return false;
     this.state = 'out'; this.t = 0; this.bounces = 0; this.hit.clear(); this.blinked = false; this.kills = 0; this.leg++;
+    this.homing = 0; this.bonus = 0; this.lock = null; this.cone = 0; this.range = 0;
     const carry = Math.max(0, playerVel.dot(dir)) * DISC.carry;
     this.pos.copy(origin); this.vel.copy(dir).multiplyScalar(DISC.speed + carry);
     this.holder.visible = true; this.trail.reset(); this.trail.width = 0.25;
@@ -74,6 +75,7 @@ export class Disc {
     const G = this.game, col = G.arena.col;
     this.t += dt;
     if (this.state === 'out') {
+      if (this.homing > 0) G.discHoming(this, dt);
       let remain = this.vel.length() * dt;
       for (let guard = 0; guard < 5 && remain > 1e-4; guard++) {
         const sp = this.vel.length(); v1.copy(this.vel).divideScalar(sp);

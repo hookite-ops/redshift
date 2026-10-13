@@ -7,10 +7,10 @@ import { DISC } from './disc.js';
 import { T } from './player.js';
 
 export const SKILL = {
-  easy: { name: '쉬움', react: 0.42, err: 0.075, turn: 5, align: 0.12, lead: 0.5, gravity: false, bank: 0, lob: 0, recall: 0.2, slam: 0.12, dodge: 0.05, dodgeLead: 0.06, bhop: 0.15, strafe: 0.55, strafeMin: 0.9, strafeMax: 2.0, think: 0.3, pause: 0.6, escape: 0, mobility: 0 },
-  normal: { name: '보통', react: 0.26, err: 0.04, turn: 8, align: 0.07, lead: 0.85, gravity: true, bank: 0.25, lob: 0.2, recall: 0.5, slam: 0.4, dodge: 0.3, dodgeLead: 0.08, bhop: 0.45, strafe: 0.8, strafeMin: 0.6, strafeMax: 1.5, think: 0.18, pause: 0.3, escape: 0.4, mobility: 0.3 },
-  hard: { name: '어려움', react: 0.15, err: 0.018, turn: 14, align: 0.04, lead: 1, gravity: true, bank: 0.8, lob: 0.6, recall: 0.85, slam: 0.75, dodge: 0.62, dodgeLead: 0.1, bhop: 0.75, strafe: 1, strafeMin: 0.35, strafeMax: 1.1, think: 0.1, pause: 0.12, escape: 0.8, mobility: 0.6 },
-  max: { name: '최강', react: 0.06, err: 0.006, turn: 30, align: 0.02, lead: 1, gravity: true, bank: 1, lob: 1, recall: 1, slam: 1, dodge: 0.93, dodgeLead: 0.11, bhop: 1, strafe: 1, strafeMin: 0.22, strafeMax: 0.9, think: 0.05, pause: 0.02, escape: 1, mobility: 1 },
+  easy: { name: '쉬움', react: 0.42, err: 0.075, turn: 5, align: 0.12, lead: 0.5, gravity: false, bank: 0, lob: 0, recall: 0.2, slam: 0.12, dodge: 0.03, dodgeLead: 0.06, bhop: 0.15, strafe: 0.55, strafeMin: 0.9, strafeMax: 2.0, think: 0.3, pause: 0.6, escape: 0, mobility: 0 },
+  normal: { name: '보통', react: 0.26, err: 0.04, turn: 8, align: 0.07, lead: 0.85, gravity: true, bank: 0.25, lob: 0.2, recall: 0.5, slam: 0.4, dodge: 0.1, dodgeLead: 0.08, bhop: 0.45, strafe: 0.8, strafeMin: 0.6, strafeMax: 1.5, think: 0.18, pause: 0.3, escape: 0.4, mobility: 0.3 },
+  hard: { name: '어려움', react: 0.15, err: 0.018, turn: 14, align: 0.04, lead: 1, gravity: true, bank: 0.8, lob: 0.6, recall: 0.85, slam: 0.75, dodge: 0.22, dodgeLead: 0.1, bhop: 0.75, strafe: 1, strafeMin: 0.35, strafeMax: 1.1, think: 0.1, pause: 0.12, escape: 0.8, mobility: 0.6 },
+  max: { name: '최강', react: 0.06, err: 0.006, turn: 30, align: 0.02, lead: 1, gravity: true, bank: 1, lob: 1, recall: 1, slam: 1, dodge: 0.35, dodgeLead: 0.11, bhop: 1, strafe: 1, strafeMin: 0.22, strafeMax: 0.9, think: 0.05, pause: 0.02, escape: 1, mobility: 1 },
 };
 
 const GRAV = T.gravity;

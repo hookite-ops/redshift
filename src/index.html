@@ -45,6 +45,17 @@ b{font-weight:700}
 #discMark::before{content:'';position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;border:2.5px solid var(--or);box-shadow:0 0 0 2px rgba(255,255,255,.8)}
 #discMark::after{content:'';position:absolute;left:-3px;top:-3px;width:6px;height:6px;border-radius:50%;background:var(--or)}
 #discMark.edge::before{border-style:dashed}
+#slamCue{position:absolute;left:18px;top:-30px;white-space:nowrap;font-size:18px;font-weight:900;color:#fff;background:var(--red);padding:2px 8px;opacity:0;transform:scale(.7);transition:all .06s}
+#discMark.cue #slamCue{opacity:1;transform:scale(1)}
+#discMark.cue::before{border-color:var(--red);transform:scale(1.35)}
+#lock{position:absolute;left:0;top:0;width:0;height:0;opacity:0;transition:opacity .08s}
+#lock.show{opacity:1}
+#lock i{position:absolute;width:10px;height:10px;border:2.5px solid var(--red)}
+#lock i:nth-child(1){left:-22px;top:-22px;border-right:0;border-bottom:0}
+#lock i:nth-child(2){left:12px;top:-22px;border-left:0;border-bottom:0}
+#lock i:nth-child(3){left:-22px;top:12px;border-right:0;border-top:0}
+#lock i:nth-child(4){left:12px;top:12px;border-left:0;border-top:0}
+#cross.lock .ring{border-color:var(--red)}
 #dnums{position:absolute;inset:0;overflow:hidden}
 .dn{position:absolute;left:0;top:0;font-family:'Space Grotesk';font-weight:700;font-size:20px;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff;white-space:nowrap}
 .dn.big{color:var(--or);font-size:28px}
@@ -184,7 +195,8 @@ b{font-weight:700}
   <div id="dmgDir"></div>
   <div id="dnums"></div>
   <div id="threats"></div>
-  <div id="discMark"></div>
+  <div id="discMark"><b id="slamCue"></b></div>
+  <div id="lock"><i></i><i></i><i></i><i></i></div>
   <div id="cross"><div class="ring"></div><div class="dot"></div></div>
   <div id="hit"><i></i><i></i><i></i><i></i></div>
   <div id="topL"><div id="modeTxt">WAVE —</div><div id="subTxt"></div></div>
@@ -244,7 +256,7 @@ b{font-weight:700}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 3.1 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 3.2 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="pause" class="screen clear hidden">
@@ -263,6 +275,7 @@ b{font-weight:700}
     <h2>SETTINGS</h2>
     <h3>조작</h3>
     <div class="row"><span>마우스 감도<br><small id="cm360" style="color:var(--dim);font-size:11px"></small></span><input type="range" id="sSens" min="0.05" max="5" step="0.01"><span class="val" id="vSens"></span></div>
+    <div class="row">조준 보조 (내 원반만) <select id="sAimAssist"><option value="strong">강함 · 예측 조준 + 유도 (추천)</option><option value="normal">보통</option><option value="off">끄기</option></select></div>
     <div class="row">Space 꾹 = 착지할 때마다 자동 점프 <select id="sAutoHop"><option value="1">켜기</option><option value="0">끄기</option></select></div>
     <div class="row">화면 아래 조작 안내 <select id="sKeyHints"><option value="1">켜기</option><option value="0">끄기</option></select></div>
     <h3>카메라</h3>

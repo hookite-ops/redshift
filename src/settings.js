@@ -12,13 +12,20 @@ export const DEFAULT_BINDS = {
 export const DEFAULTS = {
   sens: 0.8, fov: 103, fovFx: 14, shake: 0.5, tilt: 0.5, bob: 0.4,
   sfx: 0.8, music: 0.4, quality: 'high', fps: 0, full: 1, autoHop: 1,
-  difficulty: 'easy', botSkill: 'max', keyHints: 1,
+  difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', keyHints: 1,
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {
   low: { pr: 0.75, shadows: false, shadowSize: 1024, aa: false, particles: 800 },
   medium: { pr: 1.0, shadows: true, shadowSize: 1024, aa: true, particles: 1800 },
   high: { pr: 1.5, shadows: true, shadowSize: 2048, aa: true, particles: 3000 },
+};
+// your throws only: snap = cone (rad) in which the throw auto-leads the target,
+// homing = how hard the disc bends toward the enemy in front of it (rad/s), bonus = extra hit radius (m)
+export const ASSIST = {
+  strong: { snap: 0.17, homing: 3.4, cone: 0.62, range: 48, bonus: 0.55 },
+  normal: { snap: 0.09, homing: 1.7, cone: 0.45, range: 36, bonus: 0.25 },
+  off: { snap: 0, homing: 0, cone: 0, range: 0, bonus: 0 },
 };
 const KEY = 'redshift4_settings', REC = 'redshift4_records';
 export function loadSettings() {
