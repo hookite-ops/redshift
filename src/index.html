@@ -2,8 +2,10 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#f3f3f1">
 <title>REDSHIFT — 원반 아레나</title>
+<link rel="icon" href="icon.png"><link rel="apple-touch-icon" href="icon.png"><meta name="theme-color" content="#16161a">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
@@ -163,6 +165,65 @@ b{font-weight:700}
 .btn.main{background:var(--or);border-color:var(--or);color:#fff}.btn.main small{color:rgba(255,255,255,.85)}
 .btn.main:hover{background:var(--ink);border-color:var(--ink)}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.btn.online{background:var(--ink);border-color:var(--ink);color:#fff}.btn.online small{color:#bbb}
+.btn.online:hover{background:var(--or);border-color:var(--or)}
+/* online screen */
+.oform{display:grid;grid-template-columns:90px 1fr;gap:8px 12px;align-items:center;font-size:14px;margin-bottom:10px}
+.oform input,.oform select,.codebox input{font:inherit;font-size:15px;padding:8px 10px;border:1.5px solid var(--line);background:#fff;width:100%}
+#oStatus{font-size:13px;color:var(--dim);margin:0 0 12px;min-height:18px}
+#oStatus.ok{color:#16a864}#oStatus.bad{color:var(--red)}
+.codebox{display:grid;grid-template-columns:90px 1fr;gap:8px}
+.codebox input{text-transform:uppercase;text-align:center;font-family:'Space Grotesk';font-weight:700;letter-spacing:3px}
+#oRooms{display:flex;flex-direction:column;gap:6px;max-height:190px;overflow:auto}
+#oRooms .room{display:flex;justify-content:space-between;align-items:center;border:1.5px solid var(--line);padding:8px 12px;font-size:14px;cursor:pointer;background:#fff}
+#oRooms .room:hover{border-color:var(--ink)}
+#oRooms .room b{font-family:'Space Grotesk'}
+#oRooms .empty{font-size:13px;color:var(--dim)}
+#oCreateOpts{border:1.5px solid var(--line);padding:12px;margin:4px 0 10px}
+.hide-online .online-only,.show-online .offline-only{display:none!important}
+#feed div.kf.sys{font-weight:500;color:var(--ink2)}
+/* ================= touch ================= */
+body:not(.touch) .touch-only{display:none!important}
+body.touch .cheat:not(.touch-only){display:none}
+body.touch canvas#c,#touch{touch-action:none}
+#touch{position:fixed;inset:0;z-index:5;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#touch .joy{position:absolute;width:26vmin;height:26vmin;margin:-13vmin 0 0 -13vmin;border-radius:50%;border:2px solid rgba(22,22,26,.25);background:rgba(255,255,255,.25);opacity:0;pointer-events:none}
+#touch .joy.on{opacity:1}
+#touch .joy .knob{position:absolute;left:50%;top:50%;width:11vmin;height:11vmin;border-radius:50%;background:rgba(22,22,26,.55);transform:translate(-50%,-50%)}
+#touch .tb{position:absolute;border-radius:50%;border:2px solid rgba(22,22,26,.55);background:rgba(255,255,255,.55);color:var(--ink);font:inherit;font-weight:900;display:flex;align-items:center;justify-content:center;padding:0;-webkit-tap-highlight-color:transparent}
+#touch .tb b{font-size:2.6vmin;pointer-events:none}
+#touch .tb.on{background:rgba(22,22,26,.75);color:#fff}
+#touch .throw{right:5vmin;bottom:9vmin;width:24vmin;height:24vmin;border-color:var(--or);background:rgba(255,90,31,.25)}
+#touch .throw b{font-size:3.4vmin}
+#touch .blink{right:31vmin;bottom:5vmin;width:15vmin;height:15vmin;border-color:var(--or)}
+#touch .jump{right:7vmin;bottom:36vmin;width:15vmin;height:15vmin}
+#touch .dash{right:25vmin;bottom:24vmin;width:13vmin;height:13vmin}
+#touch .skill{right:47vmin;bottom:5vmin;width:13vmin;height:13vmin;position:absolute}
+#touch .skill i{position:absolute;font-style:normal;font-family:'Space Grotesk';font-weight:700;font-size:4vmin}
+#touch .skill.cool{opacity:.55}#touch .skill.cool b{display:none}
+/* raised layout: every button is above the usual left-thumb height */
+body.raised #touch .throw{bottom:33vmin;right:6vmin}
+body.raised #touch .blink{bottom:40vmin;right:32vmin}
+body.raised #touch .jump{bottom:62vmin;right:9vmin}
+body.raised #touch .dash{bottom:60vmin;right:29vmin}
+body.raised #touch .skill{bottom:53vmin;right:47vmin}
+#touch .tpause{position:absolute;left:50%;top:1.5vmin;transform:translateX(-50%);width:9vmin;height:7vmin;border:2px solid rgba(22,22,26,.5);background:rgba(255,255,255,.6);font:inherit;font-weight:900;font-size:3vmin}
+body.touch #keyHints,body.touch #discBox,body.touch #skillBox{display:none}
+body.touch #hpBox{left:18px;bottom:auto;top:62px;width:34vw;max-width:260px}
+body.touch #hpRow{margin-bottom:2px}
+body.touch #board{top:112px;left:18px}
+body.touch #speedo{bottom:6px}
+body.touch #speedNum{font-size:28px}
+body.touch #topL{left:18px;top:10px}body.touch #modeTxt{font-size:22px}
+body.touch #topR{right:18px;top:10px}body.touch #scoreTxt{font-size:28px}
+body.touch #feed{top:70px;right:12px;width:46vw}
+body.touch #chat{bottom:40vmin;left:12px}
+body.touch #tut{top:112px;left:18px;width:300px;transform:scale(.85);transform-origin:top left}
+body.touch #bannerBig{font-size:44px}
+#rotate{display:none}
+@media (orientation:portrait){body.touch.playing #rotate{display:flex;position:fixed;inset:0;z-index:50;background:var(--paper);align-items:center;justify-content:center;font-size:20px;font-weight:900;text-align:center;line-height:1.6}}
+}
 .lo{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .lo button{font:inherit;font-weight:700;font-size:15px;padding:9px 6px;background:#fff;border:1.5px solid var(--line);cursor:pointer;color:var(--ink)}
 .lo button small{display:block;font-size:11px;font-weight:400;color:var(--dim);margin-top:2px}
@@ -201,6 +262,19 @@ b{font-weight:700}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--paper);z-index:30;font-family:'Space Grotesk';font-weight:700;letter-spacing:8px;font-size:22px}
 #loading .err{font-family:'Noto Sans KR';letter-spacing:0;font-size:16px;text-align:center;line-height:1.8}
 .credits{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:var(--dim);letter-spacing:2px}
+/* small screens (phones in landscape, small windows): compact menu */
+@media (max-width:900px),(max-height:560px){
+  .menuGrid{gap:18px;padding:14px 18px;max-height:96vh;overflow:auto;width:min(1000px,98vw)}
+  .logo{font-size:40px}.tag{font-size:14px;margin-top:6px}.tag2{display:none}
+  .cheat{margin-top:8px;font-size:12px;gap:4px 10px}
+  .menuGrid .btn{padding:7px 12px;font-size:15px;margin-bottom:5px}.btn small{font-size:11px}
+  .menuGrid h3{margin:8px 0 4px}
+  .lo button{font-size:13px;padding:5px 4px}.lo button small{font-size:10px}
+  .panel{padding:16px 18px;max-height:96vh}
+  .credits{display:none}
+}
+@media (max-width:640px){ .menuGrid{grid-template-columns:1fr} }
+body.touch .kbonly{display:none}
 </style>
 </head>
 <body>
@@ -234,6 +308,7 @@ b{font-weight:700}
   <div id="discBox"><div><div id="discTxt"></div><div id="discPow"></div></div><div id="discIcon" class="hand"></div></div>
 </div>
 <div id="clickTo" class="hidden">클릭해서 계속</div>
+<div id="rotate">📱 휴대폰을 가로로 돌려 주세요</div>
 
 <div id="menu" class="screen hidden">
   <div class="panel menuGrid">
@@ -249,6 +324,7 @@ b{font-weight:700}
         <kbd class="o" data-key="blink">우클릭</kbd><span><b>원반 위치로 순간이동</b> · 속도 유지 + 주변 충격파</span>
         <kbd class="o" data-key="skill">Q</kbd><span><b>스킬</b> · 반사막 / 오버드라이브 / 중력탄 / 재생 중 하나</span>
       </div>
+      <div class="cheat touch-only"><kbd>왼쪽 엄지</kbd><span>이동 (닿은 곳에 스틱이 생겨요)</span><kbd>오른쪽 화면</kbd><span>끌어서 시점 · 던지기 버튼도 끌면 조준</span><kbd class="o">버튼</kbd><span>던지기/회수 · 순간이동 · 점프 · 대시 · 스킬</span></div>
 <div class="leftsel">
       <h3>봇 실력 (1V1 · FFA)</h3>
       <div class="lo four" id="botskill">
@@ -268,11 +344,12 @@ b{font-weight:700}
     </div>
     <div>
       <button class="btn main" data-act="arena">아레나<small>포탑 · 추적자 · 방패병 웨이브 생존</small></button>
-      <div class="row2">
-        <button class="btn vs" data-act="duel">1V1<small>봇 1명과 맞대결 · 5킬 먼저</small></button>
-        <button class="btn vs" data-act="ffa">FFA<small>봇 5명 개인전 · 15킬 / 4분</small></button>
+      <button class="btn online" data-act="online">온라인 대전<small>다른 사람들과 멀티 · PC·모바일·앱 같이</small></button>
+      <div class="row3">
+        <button class="btn vs" data-act="duel">1V1<small>봇과 5킬</small></button>
+        <button class="btn vs" data-act="ffa">FFA<small>봇 5명</small></button>
+        <button class="btn" data-act="practice">연습장<small>안 죽음</small></button>
       </div>
-      <button class="btn" data-act="practice">연습장<small>처음이면 여기부터 · 체크리스트 9개 · 안 죽음</small></button>
       <h3>무기</h3>
       <div class="lo four" id="weapons">
         <button data-wp="disc">원반<small>기본 · 튕길수록 강함</small></button>
@@ -280,7 +357,7 @@ b{font-weight:700}
         <button data-wp="rail">레일<small>아주 빠름 · 원거리</small></button>
         <button data-wp="boomerang">부메랑<small>왕복 2타</small></button>
       </div>
-      <h3>스킬 (<span data-key="skill">Q</span>)</h3>
+      <h3>스킬<span class="kbonly"> (<span data-key="skill">Q</span>)</span></h3>
       <div class="lo four" id="skills">
         <button data-sk="reflect">반사막<small>원반 되받아치기</small></button>
         <button data-sk="overdrive">오버드라이브<small>속도 · 대시 무한</small></button>
@@ -293,14 +370,44 @@ b{font-weight:700}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 3.3 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.0 · 오리지널 웹게임 · three.js</div>
+</div>
+
+<div id="online" class="screen clear hidden">
+  <div class="panel" style="width:min(700px,94vw)">
+    <h2>ONLINE</h2>
+    <div class="oform">
+      <span>이름</span><input id="oName" maxlength="12" autocomplete="off">
+      <span>서버 주소</span><input id="oServer" placeholder="https://redshift-xxxx.run.app" autocomplete="off" spellcheck="false">
+    </div>
+    <div id="oStatus">연결 전</div>
+    <button class="btn main" id="oQuick">빠른 참가<small>사람 있는 방에 바로 들어가요 · 없으면 새 방 (봇 3명)</small></button>
+    <div class="row2">
+      <button class="btn" id="oCreateBtn">방 만들기<small>코드로 친구 초대 · 봇 수 조절</small></button>
+      <div><div class="codebox"><input id="oCode" maxlength="4" placeholder="ABCD" autocomplete="off"><button class="btn" id="oJoin" style="margin:0">코드로 참가</button></div></div>
+    </div>
+    <div id="oCreateOpts" class="hidden">
+      <div class="oform">
+        <span>방 이름</span><input id="oRoomName" maxlength="24" placeholder="자유 대전">
+        <span>봇</span><select id="oBots"><option value="0">없음 (사람만)</option><option value="1">1명</option><option value="2">2명</option><option value="3" selected>3명</option><option value="4">4명</option><option value="5">5명</option><option value="6">6명</option></select>
+        <span>봇 실력</span><select id="oBotSkill"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard" selected>어려움</option><option value="max">최강</option></select>
+        <span>목표</span><select id="oLimit"><option value="10">10킬</option><option value="15" selected>15킬</option><option value="25">25킬</option></select>
+        <span>공개</span><select id="oPriv"><option value="0">공개 (방 목록에 보임)</option><option value="1">비공개 (코드로만)</option></select>
+      </div>
+      <button class="btn main" id="oCreate" style="margin:0">이대로 만들기</button>
+    </div>
+    <h3>열린 방 <button class="key" id="oRefresh" style="margin-left:8px">새로고침</button></h3>
+    <div id="oRooms"><div class="empty">서버에 연결하면 방 목록이 보여요</div></div>
+    <button class="btn" data-act="back" style="margin-top:14px">뒤로</button>
+  </div>
 </div>
 
 <div id="pause" class="screen clear hidden">
   <div class="panel">
     <h2>PAUSED</h2>
     <button class="btn" data-act="resume">계속하기</button>
-    <button class="btn" data-act="restart">재시작</button>
+    <button class="btn offline-only" data-act="restart">재시작</button>
+    <div class="online-only" id="pauseRoom" style="font-size:13px;color:var(--dim);margin:-8px 0 12px">온라인 중엔 게임이 멈추지 않아요</div>
     <button class="btn" data-act="controls">조작법</button>
     <button class="btn" data-act="settings">설정</button>
     <button class="btn" data-act="quit">타이틀로</button>
@@ -312,6 +419,9 @@ b{font-weight:700}
     <h2>SETTINGS</h2>
     <h3>조작</h3>
     <div class="row"><span>마우스 감도<br><small id="cm360" style="color:var(--dim);font-size:11px"></small></span><input type="range" id="sSens" min="0.05" max="5" step="0.01"><span class="val" id="vSens"></span></div>
+    <div class="row">화면 터치 조작 <select id="sTouchUI"><option value="auto">자동 (폰·태블릿이면 켜기)</option><option value="on">항상 켜기</option><option value="off">끄기</option></select></div>
+    <div class="row">터치 버튼 위치 <select id="sTouchLayout"><option value="auto">자동 (태블릿은 위로)</option><option value="normal">아래 (폰 기본)</option><option value="raised">위로 (두 손가락 터치가 씹힐 때)</option></select></div>
+    <div class="row">터치 시점 감도<input type="range" id="sTouchSens" min="0.3" max="3" step="0.05"><span class="val" id="vTouchSens"></span></div>
     <div class="row">조준 보조 (내 원반만) <select id="sAimAssist"><option value="strong">강함 · 예측 조준 + 유도 (추천)</option><option value="normal">보통</option><option value="off">끄기</option></select></div>
     <div class="row">Space 꾹 = 착지할 때마다 자동 점프 <select id="sAutoHop"><option value="1">켜기</option><option value="0">끄기</option></select></div>
     <div class="row">화면 아래 조작 안내 <select id="sKeyHints"><option value="1">켜기</option><option value="0">끄기</option></select></div>
@@ -337,6 +447,7 @@ b{font-weight:700}
   <div class="panel" style="width:min(760px,94vw)">
     <h2>CONTROLS</h2>
     <div class="grid2" id="ctrlGrid"></div>
+    <div class="tips touch-only" style="border-left:3px solid var(--or);padding-left:10px;margin-bottom:10px"><b>폰/태블릿</b> — 아래 설명의 <b>좌클릭 = 던지기 버튼</b>, <b>우클릭 = 순간이동 버튼</b>, Space = 점프, Shift = 대시, Q = 스킬 버튼. 왼쪽 엄지로 이동, 오른쪽 화면을 끌어서 시점. 감도는 설정에서.</div>
     <h3>원반 — 무기는 이것 하나</h3>
     <div class="tips">
       <b>던지기</b> — 좌클릭. 보는 방향으로 날아가고, 적을 <em>관통</em>해요. 내가 빠를수록 원반도 빨라요.<br>
@@ -352,7 +463,7 @@ b{font-weight:700}
       <b>레일</b> — 아주 빠르고 멀리 감(52). 벽에 맞으면 바로 돌아옴 — 원거리 저격용.<br>
       <b>부메랑</b> — 금방 크게 휘어서 돌아오며 <em>가는 길·오는 길 둘 다</em> 같은 피해.
     </div>
-    <h3>스킬 (Q)</h3>
+    <h3>스킬<span class="kbonly"> (Q · 폰은 스킬 버튼)</span></h3>
     <div class="tips">
       <b>반사막</b> — 0.6초 동안 날아오는 원반을 <em>던진 사람에게 되돌려</em> 보내고, 충격파도 튕겨냄. 쿨 7초.<br>
       <b>오버드라이브</b> — 4초간 더 빠르게 달리고 대시 무한, 원반 +25% 속도. 쿨 13초.<br>
@@ -390,6 +501,7 @@ b{font-weight:700}
   </div>
 </div>
 
+<script src="config.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

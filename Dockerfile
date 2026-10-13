@@ -1,5 +1,10 @@
-# REDSHIFT — 정적 웹게임을 nginx로 서빙 (Cloud Run, 포트 8080)
-FROM nginx:1.27-alpine
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY public /usr/share/nginx/html
+# REDSHIFT — 게임 파일 + 멀티플레이 서버(WebSocket)를 Node로 한 번에 (Cloud Run, 포트 8080)
+FROM node:22-alpine
+WORKDIR /app
+COPY server/package.json server/package-lock.json ./server/
+RUN cd server && npm ci --omit=dev
+COPY server/index.js ./server/index.js
+COPY public ./public
+ENV PORT=8080 NODE_ENV=production
 EXPOSE 8080
+CMD ["node", "server/index.js"]

@@ -32,10 +32,13 @@ gcloud run deploy "$SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --port 8080 \
-  --cpu 1 --memory 256Mi \
-  --min-instances 0 --max-instances 3 \
-  --concurrency 200 \
+  --cpu 1 --memory 512Mi \
+  --min-instances 0 --max-instances 1 \
+  --concurrency 500 \
+  --timeout 3600 \
+  --session-affinity \
   --quiet
+# 멀티플레이: 모든 방이 한 서버(인스턴스 1개)에 있어야 서로 보이고, 웹소켓은 최대 60분 유지(끊기면 게임이 자동 재접속)
 }
 if ! deploy; then
   echo "▶ 권한 적용이 늦을 수 있어 60초 뒤 한 번 더 시도합니다…"
@@ -43,5 +46,5 @@ if ! deploy; then
   deploy
 fi
 echo
-echo "✅ 완료! 아래 주소를 PC 크롬에서 열면 됩니다:"
+echo "✅ 완료! 아래 주소가 게임 주소예요 (PC·폰 브라우저). APK/EXE 앱은 이 주소를 server.txt 에 넣으면 자동으로 붙어요:"
 gcloud run services describe "$SERVICE" --region "$REGION" --format 'value(status.url)'

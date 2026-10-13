@@ -4,6 +4,7 @@ export class Input {
     this.canvas = canvas; this.S = S;
     this.down = new Set(); this.edges = new Set(); this.releases = new Set();
     this.dx = 0; this.dy = 0; this.locked = false;
+    this.touch = false; this.axis = { x: 0, y: 0 }; // on-screen stick (touch.js)
     this.capture = null; // rebinding callback
     this.onKey = null; // ui hook (escape etc.)
     const codeOfMouse = b => 'Mouse' + b;
@@ -42,9 +43,9 @@ export class Input {
     } catch { try { this.canvas.requestPointerLock(); } catch { } }
   }
   unlock() { if (document.pointerLockElement) document.exitPointerLock(); }
-  is(a) { const b = this.S.binds[a]; for (let i = 0; i < b.length; i++) if (this.down.has(b[i])) return true; return false; }
-  pressed(a) { const b = this.S.binds[a]; for (let i = 0; i < b.length; i++) if (this.edges.has(b[i])) return true; return false; }
-  released(a) { const b = this.S.binds[a]; for (let i = 0; i < b.length; i++) if (this.releases.has(b[i])) return true; return false; }
+  is(a) { if (this.down.has('T_' + a)) return true; const b = this.S.binds[a] || []; for (let i = 0; i < b.length; i++) if (this.down.has(b[i])) return true; return false; }
+  pressed(a) { if (this.edges.has('T_' + a)) return true; const b = this.S.binds[a] || []; for (let i = 0; i < b.length; i++) if (this.edges.has(b[i])) return true; return false; }
+  released(a) { if (this.releases.has('T_' + a)) return true; const b = this.S.binds[a] || []; for (let i = 0; i < b.length; i++) if (this.releases.has(b[i])) return true; return false; }
   consumeEdges() { this.edges.clear(); this.releases.clear(); }
   takeMouse() { const r = [this.dx, this.dy]; this.dx = 0; this.dy = 0; return r; }
 }

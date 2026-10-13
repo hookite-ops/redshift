@@ -10,6 +10,8 @@ import { Hand } from './hand.js';
 import { Particles, Rings, SpeedLines } from './fx.js';
 import { Fighter, BOT_ROSTER } from './fighter.js';
 import { BotBrain, SKILL, PERSONAS } from './bot.js';
+import { Net } from './net.js';
+import { installOnline } from './online.js';
 import { Audio } from './audio.js';
 import { QUALITY, ASSIST, keyName } from './settings.js';
 
@@ -36,6 +38,8 @@ const TUTORIAL = [
   { k: 'air', a: 'jump', t: '공중에서 한 번 더 점프' },
   { k: 'skill', a: 'skill', t: '스킬 쓰기 (메뉴에서 바꿀 수 있어요)' },
 ];
+
+const TOUCH_NAME = { throw: '던지기', blink: '순간이동', jump: '점프', dash: '대시', skill: '스킬' };
 
 function segParam(a, b, p) {
   const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z;
@@ -118,6 +122,7 @@ export class Game {
     this.nadeGeo = new THREE.SphereGeometry(0.24, 14, 10);
     this.wellGeo = new THREE.SphereGeometry(1, 28, 18);
     this.versus = false; this.match = { limit: 0, timeLeft: 0, over: true };
+    this.net = new Net(this); this.online = false; this.byId = new Map(); this.menuOpen = false;
     this.foes = []; this.orbs = []; this.debris = []; this.respawns = []; this.dnums = [];
 
     // enemy orb visuals + aim lasers
@@ -176,8 +181,9 @@ export class Game {
   }
 
   start(mode) {
-    this.mode = ['practice', 'duel', 'ffa'].includes(mode) ? mode : 'arena';
-    this.versus = this.mode === 'duel' || this.mode === 'ffa';
+    this.mode = ['practice', 'duel', 'ffa', 'online'].includes(mode) ? mode : 'arena';
+    this.versus = this.mode === 'duel' || this.mode === 'ffa' || this.mode === 'online';
+    if (this.mode !== 'online') { if (this.online) this.leaveOnline(); this.online = false; }
     this.D = DIFF[this.S.difficulty] || DIFF.easy;
     this.clear(); this.resetRun();
     const P = this.player; P.easy = true; P.noWall = true;
@@ -194,7 +200,7 @@ export class Game {
     Object.assign(this.camState, { dip: 0, dipV: 0, tilt: 0, fov: this.S.fov, kick: 0, trauma: 0 });
     this.buildDashPips();
     if (this.mode === 'practice') { this.setupPractice(); this.banner('연습장', '체크리스트를 따라 해보세요 · 맞아도 안 죽어요', 2.6); }
-    else if (this.versus) this.setupVersus();
+    else if (this.versus && this.mode !== 'online') this.setupVersus();
     else { this.banner('아레나', '원반 하나로 끝까지 버티기', 2.4); }
     this.cls('deathMsg', 'show', false); this.cls('board', 'hidden', !this.versus); this._boardT = 0;
     this.el('feed').innerHTML = ''; this.el('dnums').innerHTML = '';
@@ -216,6 +222,7 @@ export class Game {
     this.blinkGhost.visible = false;
     if (this.disc) { this.disc.caught(); this.trail.reset(); }
     if (this.fighters) { for (const f of this.fighters) if (f !== this.me) f.dispose(); this.fighters = [this.me]; }
+    if (this.byId) this.byId.clear();
   }
   clearWorld() { this.clear(); }
 
@@ -267,15 +274,18 @@ export class Game {
     if (this.mode !== 'practice' || this.tut.has(k)) return;
     this.tut.add(k); this.renderTut(k);
     this.audio.checkpoint(this.tut.size === TUTORIAL.length);
-    if (this.tut.size === TUTORIAL.length) this.banner('완료!', '이제 아레나에서 써먹어 보세요 (ESC → 메뉴)', 3);
+    if (this.tut.size === TUTORIAL.length) this.banner('완료!', `이제 실전에서 써먹어 보세요 (${this.input.touch ? 'II' : 'ESC'} → 메뉴)`, 3);
   }
   renderTut(flash) {
     const box = this.el('tut');
     if (this.mode !== 'practice') { box.innerHTML = ''; this.cls('tut', 'hidden', true); return; }
     this.cls('tut', 'hidden', false);
-    const kn = a => a ? `<b>${keyName(this.S.binds[a] && this.S.binds[a][0])}</b>` : '';
+    const touch = this.input.touch;
+    const kn = a => a ? `<b>${touch ? TOUCH_NAME[a] : keyName(this.S.binds[a] && this.S.binds[a][0])}</b>` : '';
+    // on phones only the next few steps are listed so the checklist stays out of the thumb zone
+    const list = touch ? TUTORIAL.filter(s => !this.tut.has(s.k) || s.k === flash).slice(0, 3) : TUTORIAL;
     box.innerHTML = `<h4>연습 체크리스트 <span>${this.tut.size}/${TUTORIAL.length}</span></h4>` +
-      TUTORIAL.map(s => `<div class="${this.tut.has(s.k) ? 'done' : ''}${flash === s.k ? ' pop' : ''}">${kn(s.a)}${s.t}</div>`).join('');
+      list.map(s => `<div class="${this.tut.has(s.k) ? 'done' : ''}${flash === s.k ? ' pop' : ''}">${kn(s.a)}${s.t}</div>`).join('');
   }
 
   // ======================= player events =======================
@@ -358,8 +368,8 @@ export class Game {
   readInput() {
     const I = this.input;
     const inp = {
-      fwd: (I.is('forward') ? 1 : 0) - (I.is('back') ? 1 : 0),
-      right: (I.is('right') ? 1 : 0) - (I.is('left') ? 1 : 0),
+      fwd: THREE.MathUtils.clamp((I.is('forward') ? 1 : 0) - (I.is('back') ? 1 : 0) + I.axis.y, -1, 1),
+      right: THREE.MathUtils.clamp((I.is('right') ? 1 : 0) - (I.is('left') ? 1 : 0) + I.axis.x, -1, 1),
       jumpPressed: I.pressed('jump'), jumpHeld: I.is('jump'),
       crouch: false, dashPressed: I.pressed('dash'),
       grapplePressed: false, grappleHeld: false,
@@ -381,7 +391,9 @@ export class Game {
     this.gameTime += dt;
     const P = this.player, d = this.disc, me = this.me;
     let inp = this.readInput();
+    if (this.menuOpen) { inp.fwd = inp.right = 0; inp.jumpPressed = inp.jumpHeld = inp.dashPressed = inp.throwPressed = inp.blinkPressed = inp.skillPressed = false; }
     if (me.brain) inp = me.brain.tick(dt); // autopilot (used by the automated tests)
+    if (this.online) this.updateRemotes();
     if (me.alive) {
       P.tick(dt, inp, this.pctx);
       this.clampBounds(P);
@@ -401,19 +413,20 @@ export class Game {
     }
     // ---------- bots ----------
     for (const f of this.fighters) {
-      if (f === me || !f.alive) continue;
+      if (f === me || !f.alive || f.remote || !f.brain) continue;
       const bi = this.match.over && this.versus ? f.brain.inp : f.brain.tick(dt);
       f.body.tick(dt, bi, this.pctx);
       this.clampBounds(f.body);
     }
-    for (const f of this.fighters) f.disc.tick(dt);
+    for (const f of this.fighters) if (!f.remote) f.disc.tick(dt);
     this.tickSkills(dt);
 
     // ---------- vitals ----------
     for (const f of this.fighters) {
       f.invulnT -= dt; f.protT = Math.max(0, f.protT - dt);
       if (!this.versus) continue;
-      if (!f.alive) { if (!this.match.over) { f.respawnT -= dt; if (f.respawnT <= 0) this.respawn(f); } continue; }
+      if (!f.alive) { if (!this.match.over && !f.remote) { f.respawnT -= dt; if (f.respawnT <= 0) this.respawn(f); } continue; }
+      if (this.online) continue; // the server owns health online
       f.regenT -= dt;
       if (f.regenT <= 0 && f.hp < 100) f.hp = Math.min(100, f.hp + 8 * dt);
     }
@@ -426,6 +439,7 @@ export class Game {
 
     // ---------- world ----------
     this.tickDebris(dt);
+    if (this.online) this.netTick(dt);
     if (this.versus) { this.tickMatch(dt); return; }
     const ctx = this.ctx();
     for (const f of this.foes) if (f.alive) { if (f.dummy) this.tickDummy(f, dt, ctx); else f.update(dt, ctx); }
@@ -450,6 +464,7 @@ export class Game {
     if (!d.throw(origin, dir, B.vel, f.overT > 0 ? 1.25 : 1)) return false;
     f.st.throws++;
     this.noise(f, origin, 30);
+    if (this.online) this.netFx({ k: 'throw', id: f.netId });
     if (f === this.me) {
       this.stats.throws++;
       this.audio.discThrow(1); this.hand.throwAnim();
@@ -464,7 +479,11 @@ export class Game {
     return true;
   }
   // ---------- aim help for YOUR throws (settings → 조준 보조) ----------
-  assistCfg() { return ASSIST[this.S.aimAssist] || ASSIST.strong; }
+  assistCfg() {
+    const A = ASSIST[this.S.aimAssist] || ASSIST.strong;
+    // thumbs are less precise than a mouse: a wider snap cone on touch screens
+    return this.input.touch && A.snap ? (this._touchA || (this._touchA = {})) && Object.assign(this._touchA, A, { snap: A.snap * 1.6, cone: A.cone * 1.15 }) : A;
+  }
   assistTargets() {
     if (this.versus) return this.fighters.filter(f => f !== this.me && f.alive);
     return this.foes.filter(f => f.alive);
@@ -543,6 +562,7 @@ export class Game {
     d.vel.copy(dir).multiplyScalar(sp);
   }
   onDiscBounce(d, p, n) {
+    if (this.online && d.owner && !d.owner.remote) this.netFx({ k: 'bounce', id: d.owner.netId, p: [p.x, p.y, p.z].map(v => Math.round(v * 100) / 100), n: [n.x, n.y, n.z].map(v => Math.round(v * 100) / 100), b: d.bounces });
     if (d.owner === this.me) this.audio.discBounce(d.bounces);
     else this.spatial(p, () => this.audio.discBounce(d.bounces));
     d.trail.width = 0.25 + Math.min(4, d.bounces) * 0.07;
@@ -680,6 +700,7 @@ export class Game {
     }
     this.rings.add(new THREE.Vector3(spot.x, spot.y + 0.06, spot.z), slammed ? 0x16161a : f.color, slammed ? d.w.blinkRadius * 1.3 : 2.2, 0.45);
     this.noise(f, spot, 38);
+    if (this.online) this.netFx({ k: 'blink', id: f.netId, a: [from.x, from.y, from.z].map(v => Math.round(v * 100) / 100), b: [spot.x, spot.y, spot.z].map(v => Math.round(v * 100) / 100), s: slammed ? 1 : 0 });
     if (isMe) {
       this.audio.blink(); this.hand.blinkAnim();
       this.camState.kick = Math.max(this.camState.kick, 1.3); this.flashFx = Math.max(this.flashFx, 0.6);
@@ -936,6 +957,7 @@ export class Game {
     }
     if (isMe) { this.train('skill'); this.hand.blinkAnim(); if (f.skill === 'overdrive') this.camState.kick = Math.max(this.camState.kick, 1); }
     this.noise(f, c, 25);
+    if (this.online) { this.netFx({ k: 'skill', id: f.netId, s: f.skill }); if (f.skill === 'heal') this.net.send({ t: 'heal', id: f.netId }); }
     return true;
   }
   tickSkills(dt) {
@@ -947,11 +969,14 @@ export class Game {
     }
     this.tickGrenades(dt); this.tickWells(dt);
   }
-  throwGrenade(f, dir = null) {
+  throwGrenade(f, dir = null, pos = null, vel = null) {
     const B = f.body;
-    dir = dir || B.lookDir(new THREE.Vector3());
-    const pos = new THREE.Vector3().copy(B.eye); pos.y -= 0.2; pos.addScaledVector(dir, 0.5);
-    const vel = dir.clone().multiplyScalar(24).add(new THREE.Vector3(0, 4, 0)).addScaledVector(B.vel, 0.4);
+    if (!pos) {
+      dir = dir || B.lookDir(new THREE.Vector3());
+      pos = new THREE.Vector3().copy(B.eye); pos.y -= 0.2; pos.addScaledVector(dir, 0.5);
+      vel = dir.clone().multiplyScalar(24).add(new THREE.Vector3(0, 4, 0)).addScaledVector(B.vel, 0.4);
+      if (this.online) this.netFx({ k: 'nade', id: f.netId, p: [pos.x, pos.y, pos.z], v: [vel.x, vel.y, vel.z] });
+    }
     const m = new THREE.Mesh(this.nadeGeo, new THREE.MeshStandardMaterial({ color: 0x16161a, emissive: new THREE.Color(f.color).multiplyScalar(0.6) }));
     m.position.copy(pos); m.castShadow = true; this.scene.add(m);
     this.grenades.push({ f, pos, vel, t: 0, m });
@@ -1017,6 +1042,10 @@ export class Game {
     if (this.gameTime - (f.lastChat || -9) < 2.5) return;
     f.lastChat = this.gameTime;
     const text = pick(CHAT[kind]);
+    this.sayLine(f, text);
+    if (this.online && !f.remote) this.netFx({ k: 'say', id: f.netId, text });
+  }
+  sayLine(f, text) {
     f.say(text);
     const box = this.el('chat'); if (box === DUMMY_EL) return;
     const row = document.createElement('div');
@@ -1079,6 +1108,7 @@ export class Game {
     if (f.brain) f.brain.reset();
     if (f === this.me) { this.deathInfo = null; this.cls('deathMsg', 'show', false); this.camState.fov = this.S.fov; this.throwBuf = 0; }
     if (!initial) this.rings.add(new THREE.Vector3(p.x, p.y + 0.06, p.z), f.color, 2.6, 0.5);
+    if (this.online && !f.remote && f.netId) this.net.send({ t: 'respawn', id: f.netId });
   }
   sweepFighters(d, a, b, dir, leg) {
     const attacker = d.reflectedBy || d.owner;
@@ -1116,13 +1146,15 @@ export class Game {
     }
     return null;
   }
-  reflectFx(t, at) {
+  reflectFx(t, at, fromNet = false) {
+    if (this.online && !fromNet && !t.remote) this.netFx({ k: 'refl', id: t.netId, p: [at.x, at.y, at.z] });
     this.rings.add(at.clone(), t.color, 2.2, 0.3, null);
     this.parts.emit(at, 16, { color: [[1, 1, 1], [0.9, 0.9, 0.95]], speed: 9, life: 0.3, gravity: 0 });
     if (t === this.me) { this.audio.shieldClang(); this.popup('반사!'); this.flashFx = Math.max(this.flashFx, 0.4); }
     else this.spatial(at, () => this.audio.shieldClang());
   }
   damageFighter(t, dmg, by, kind, dir, bounces = 0) {
+    if (this.online) return this.netHit(t, dmg, by, kind, dir, bounces);
     if (!t.alive || t.invuln) return null;
     dmg = Math.round(dmg);
     t.hp -= dmg; t.regenT = 5; t.lastHitBy = by; t.lastHitT = this.gameTime;
@@ -1148,8 +1180,8 @@ export class Game {
     _c.copy(from).applyMatrix4(this.camera.matrixWorldInverse);
     this.dirAng = Math.atan2(_c.x, -_c.z); this.dirT = 1;
   }
-  killFighter(v, k, kind, n, dir) {
-    v.alive = false; v.hp = 0; v.deaths++; v.streak = 0;
+  killFighter(v, k, kind, n, dir, net = false) {
+    v.alive = false; v.hp = 0; v.streak = 0; if (!net) v.deaths++;
     v.reflectT = v.overT = v.healT = 0; v.body.speedMul = 1;
     v.respawnT = this.mode === 'duel' ? 2.2 : 2.8;
     if (v.disc.state !== 'hand') v.disc.caught();
@@ -1161,7 +1193,7 @@ export class Game {
     this.rings.add(new THREE.Vector3(v.body.pos.x, v.body.pos.y + 0.06, v.body.pos.z), v.color, 3, 0.45);
     let tag = kind === 'bank' ? (n >= 2 ? `${n}쿠션 뱅크샷` : '뱅크샷') : kind === 'return' ? '회수 타격' : kind === 'slam' ? '순간이동 충격' : '';
     if (k && !k.body.grounded && k.body.airTime > 0.3) tag = tag ? tag + ' · 공중' : '공중';
-    const counts = !this.match.over;
+    const counts = !this.match.over && !net;
     if (k && k !== v && counts) {
       k.kills++; k.streak++;
       k.hp = Math.min(100, k.hp + 25);
@@ -1177,6 +1209,13 @@ export class Game {
     } else this.spatial(c, () => this.audio.kill(1));
     if (v === this.me) { this.deathInfo = { by: k, pos: this.player.pos.clone(), t: 0 }; this.throwBuf = 0; }
     if (counts && k && k.kills >= this.match.limit) this.endMatch();
+    if (net && v === this.me) this.audio.hurt();
+  }
+  feedText(text) {
+    const box = this.el('feed'); if (box === DUMMY_EL) return;
+    const row = document.createElement('div'); row.className = 'kf sys'; row.textContent = text;
+    box.prepend(row); while (box.children.length > 6) box.lastChild.remove();
+    setTimeout(() => row.classList.add('out'), 3800); setTimeout(() => row.remove(), 4300);
   }
   feedKill(k, v, tag) {
     const box = this.el('feed'); if (box === DUMMY_EL) return;
@@ -1199,9 +1238,10 @@ export class Game {
     const M = this.match;
     if (this.deathInfo) this.deathInfo.t += dt;
     if (M.over) return;
-    if (M.timeLeft > 0) { M.timeLeft -= dt; if (M.timeLeft <= 0) { M.timeLeft = 0; this.endMatch(); } }
+    if (M.timeLeft > 0) { M.timeLeft -= dt; if (M.timeLeft <= 0) { M.timeLeft = 0; if (!this.online) this.endMatch(); } }
   }
   endMatch() {
+    if (this.online) return; // the server decides
     const M = this.match; if (M.over) return; M.over = true;
     this.slowT = Math.max(this.slowT, 1.0);
     const me = this.me, rank = this.ranking(), myRank = rank.indexOf(me) + 1, rec = this.records;
@@ -1420,6 +1460,7 @@ export class Game {
       this.cls('skillBox', 'active', me.reflectT > 0 || me.overT > 0 || me.healT > 0);
     }
     this.cls('hud', 'over', me.overT > 0); this.cls('hud', 'refl', me.reflectT > 0);
+    if (this.touchUI) this.touchUI.update(this);
     for (let i = this.chatLines.length - 1; i >= 0; i--) { const c = this.chatLines[i]; c.t += dt; if (c.t > 6) { c.el.remove(); this.chatLines.splice(i, 1); } else if (c.t > 5) c.el.style.opacity = String(6 - c.t); }
     // lock-on marker: who your next throw will track
     let lock = null;
@@ -1478,7 +1519,7 @@ export class Game {
       this.txt('modeTxt', this.wave ? `WAVE ${this.wave}` : 'WAVE —');
       this.txt('subTxt', this.waveState === 'break' ? `다음 웨이브 ${Math.max(0, Math.ceil(this.breakT))}초` : `남은 적 ${this.queue.length + this.foes.length}`);
     } else {
-      this.txt('modeTxt', '연습장'); this.txt('subTxt', `난이도 무관 · 체력 무한 · ESC 메뉴`);
+      this.txt('modeTxt', '연습장'); this.txt('subTxt', `난이도 무관 · 체력 무한 · ${this.input.touch ? 'II' : 'ESC'} 메뉴`);
     }
     // timers for transient ui
     if (this.bannerT > 0) { this.bannerT -= dt; if (this.bannerT <= 0) this.el('banner').classList.remove('show'); }
@@ -1487,7 +1528,13 @@ export class Game {
 
   updateVersusHud(dt) {
     const me = this.me, M = this.match, skill = SKILL[this.botSkill] ? SKILL[this.botSkill].name : '';
-    if (this.mode === 'duel') {
+    if (this.online) {
+      const t = Math.max(0, Math.ceil(M.timeLeft || 0)), people = this.fighters.filter(f => !f.netBot).length;
+      this.txt('modeTxt', `온라인 · ${this.roomCode || ''}`);
+      this.txt('subTxt', `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} · ${M.limit}킬 먼저 · ${people}명${this.fighters.length - people ? ` + 봇 ${this.fighters.length - people}` : ''} · ${Math.round(this.net.rtt)}ms${this.net.status === 'reconnecting' ? ' · 재연결 중…' : ''}`);
+      this.txt('scoreTxt', `${me.kills} 킬`);
+      this.txt('comboTxt', `현재 ${this.ranking().indexOf(me) + 1}위`);
+    } else if (this.mode === 'duel') {
       const bot = this.fighters[1];
       this.txt('modeTxt', '1V1');
       this.txt('subTxt', `${M.limit}킬 먼저 · ${bot ? bot.name : ''} (${skill})`);
@@ -1551,3 +1598,5 @@ export class Game {
     for (; k < this._thr.length; k++) this._thr[k].style.opacity = '0';
   }
 }
+
+installOnline(Game);

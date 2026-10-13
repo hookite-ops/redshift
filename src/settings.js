@@ -11,8 +11,8 @@ export const DEFAULT_BINDS = {
 };
 export const DEFAULTS = {
   sens: 0.8, fov: 103, fovFx: 14, shake: 0.5, tilt: 0.5, bob: 0.4,
-  sfx: 0.8, music: 0.4, quality: 'high', fps: 0, full: 1, autoHop: 1,
-  difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', weapon: 'disc', skill: 'reflect', keyHints: 1,
+  sfx: 0.8, music: 0.4, quality: 'auto', fps: 0, full: 1, autoHop: 1, touchSens: 1, touchUI: 'auto', touchLayout: 'auto',
+  difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', weapon: 'disc', skill: 'reflect', keyHints: 1, name: '',
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {
@@ -32,7 +32,8 @@ export function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     const S = { ...DEFAULTS, ...s, binds: { ...DEFAULT_BINDS, ...(s.binds || {}) } };
-    if (!QUALITY[S.quality]) S.quality = 'high';
+    if (!QUALITY[S.quality]) S.quality = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || window.REDSHIFT_APP === 'android' ? 'low' : 'high';
+    if (!S.name) S.name = '플레이어' + Math.floor(10 + Math.random() * 90);
     return S;
   } catch { return JSON.parse(JSON.stringify(DEFAULTS)); }
 }

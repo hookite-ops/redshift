@@ -1,23 +1,50 @@
-REDSHIFT 3.3 — Google Cloud Run 자동 배포
-======================================
+REDSHIFT 4.0 — 웹(Cloud Run) · 안드로이드 APK · 윈도우 EXE, 셋 다 같은 방에서 멀티
+=====================================================================
 
 [A] GitHub 자동 배포 (한 번만 설정하면 main 에 올라올 때마다 저절로 새 버전 배포)
- 저장소: https://github.com/hookite-ops/REDSHIFT
+ 저장소: https://github.com/hookite-ops/redshift
  1) console.cloud.google.com → Cloud Run → 위쪽 [저장소 연결]
     (서비스 이름 redshift, 리전 asia-northeast3 서울, "인증되지 않은 호출 허용" 체크)
- 2) 저장소 제공업체 GitHub → Google Cloud Build 앱에 hookite-ops/REDSHIFT 권한 추가 → 저장소 선택 → [다음]
+ 2) 저장소 제공업체 GitHub → Google Cloud Build 앱에 hookite-ops/redshift 권한 추가 → 저장소 선택 → [다음]
  3) 브랜치 ^main$ · 빌드 유형 Dockerfile · 소스 위치 /Dockerfile → [저장]
  4) 3~5분 뒤 화면에 나오는 https://redshift-....run.app 주소가 게임 주소
  ※ 'storage.objects.get denied' 403 이 나오면 Cloud Shell 에서 deploy.sh 를 한 번 돌리면 권한이 자동으로 들어갑니다.
 
+ ★ 멀티플레이용 설정 — 딱 한 번 (이거 안 하면 방이 서로 안 보이거나 5분마다 끊겨요)
+   Cloud Shell([>_])에 한 줄:
+     gcloud run services update redshift --region asia-northeast3 --timeout 3600 --max-instances 1 --session-affinity --concurrency 500 --memory 512Mi
+   (콘솔로 하려면: redshift → [새 버전 수정 및 배포] → 요청 시간 제한 3600 · 최대 인스턴스 1 · 세션 어피니티 체크 → 배포)
+   이후 자동 배포가 돌아도 이 설정은 그대로 유지돼요.
+
 [B] 직접 한 번 올리기 (Cloud Shell)
  1) console.cloud.google.com → 오른쪽 위 [>_] Cloud Shell
- 2) 한 줄 실행:
-    rm -rf ~/REDSHIFT && git clone https://github.com/hookite-ops/REDSHIFT && bash REDSHIFT/deploy.sh
-    (zip으로 올릴 때: Cloud Shell ⋮ → [업로드] → REDSHIFT-deploy.zip →  unzip -o REDSHIFT-deploy.zip && bash REDSHIFT/deploy.sh )
+ 2) 한 줄 실행 (위 멀티플레이 설정까지 같이 들어감):
+    rm -rf ~/redshift && git clone https://github.com/hookite-ops/redshift && bash redshift/deploy.sh
+
+[C] 앱 — dist/REDSHIFT.apk (안드로이드) · dist/REDSHIFT.exe (윈도우 10/11)
+ - APK: 폰·패드로 옮겨서 누르면 설치 ("출처를 알 수 없는 앱" 허용). 가로 전체화면, 뒤로가기 = 일시정지/메뉴.
+ - EXE: 더블클릭하면 창으로 실행 (설치 없음). 처음에 "Windows의 PC 보호"가 뜨면 [추가 정보] → [실행].
+   게임 중엔 테두리 없는 전체화면, F11 로 전환. 설정·기록은 %LOCALAPPDATA%\REDSHIFT 에 저장.
+ - 서버 연결 (멀티): 앱은 아래 순서로 서버를 찾아요
+     ① 온라인 화면 "서버 주소" 칸에 직접 넣은 주소 (한 번 넣으면 기억)
+     ② 빌드할 때 넣은 주소 (SERVER_URL)
+     ③ GitHub 저장소의 server.txt — 여기에 Cloud Run 주소 한 줄만 적어 두면
+        이미 깔린 앱들도 다시 설치할 필요 없이 그 서버로 붙어요. (적용까지 최대 5분)
+ - 웹·APK·EXE 모두 같은 서버 → 같은 방 목록, 방 코드로 친구 초대 가능.
+
+[D] 앱 다시 만들기 (리눅스/맥/Cloud Shell, 인터넷 필요)
+    npm install
+    bash tools/build-apk.sh          → dist/REDSHIFT.apk  (Android SDK 도구는 자동으로 받음, Java 17+ 필요)
+    bash tools/build-exe.sh          → dist/REDSHIFT.exe  (Go 1.22+ 필요)
+    주소를 앱에 박으려면: SERVER_URL=https://redshift-....run.app bash tools/build-apk.sh
+ - APK 서명 키: android/redshift.keystore (비번 redshift). 같은 키라서 새 버전이 기존 앱 위에 덮어 설치돼요.
 
 알아둘 점
-- 정적 게임이라 서버는 파일만 보내 줍니다. 아무도 안 들어오면 꺼져서 요금이 거의 안 나옵니다.
-- 게임 코드는 src/, 실제로 배포되는 파일은 public/ (npm install && npm run build 로 다시 만듦).
-- 내 컴퓨터에서 바로 해보기: public/index.html 을 크롬으로 열면 됩니다 (인터넷 없으면 글꼴만 기본 글꼴로 바뀜).
-- 테스트: npm test (충돌·이동) · python3 tests/disc_smoke.py / disc_edge.py (브라우저에서 원반·순간이동·웨이브 자동 검사) · python3 tests/versus_sim.py (봇끼리 실제 대전시켜 실력 측정) · python3 tests/aim_test.py (조준 보조별 명중률) · python3 tests/skills_test.py (무기 4종·스킬 4종 동작)
+- 서버(server/index.js)는 게임 파일 + 멀티플레이(웹소켓 /ws)를 같이 맡아요. 체력·킬·부활·시간은 서버가 정하고,
+  움직임과 맞히기 판정은 각자 화면에서 해서 서버로 보내요. 방의 봇은 방장 화면이 돌리고, 방장이 나가면 다음 사람이 이어받아요.
+- 연결이 잠깐 끊겨도 12초 안에 같은 방, 같은 점수로 자동 복귀.
+- 아무도 안 들어오면 서버가 꺼져서 요금이 거의 안 나와요 (첫 접속 때 몇 초 걸릴 수 있음).
+- 게임 코드는 src/, 실제로 배포되는 파일은 public/ (npm run build 로 다시 만듦).
+- 내 컴퓨터에서 서버까지 돌려 보기: cd server && npm install && cd .. && node server/index.js → http://localhost:8080
+- 테스트: npm test (충돌·이동) · python3 tests/disc_smoke.py / disc_edge.py · versus_sim.py · aim_test.py · skills_test.py
+         멀티: tests/net_test.py (2명 + 봇, 재접속, 방장 넘김) · tests/app_test.py (APK·EXE·웹 한 방) · tests/mobile_test.py (터치)
