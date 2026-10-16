@@ -30,21 +30,26 @@ export const DISC = WEAPONS.disc; // the baseline numbers (some systems still re
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 const _hit = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
 
-export function discModel(color, w, s = 1) {
-  const g = new THREE.Group();
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.34 * s, 0.06 * s * (w.id === 'heavy' ? 1.5 : 1), 10, 40), new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: new THREE.Color(color).multiplyScalar(0.25) }));
-  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3 * s, 0.3 * s, 0.05 * s * (w.id === 'heavy' ? 2 : 1), 32), new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.4 }));
+export function discModel(color, w, s = 1, glowMul = 1) {
+  const g = new THREE.Group(), glow = Math.max(1, (Disc.glow || 1) * glowMul), heavy = w.id === 'heavy';
+  // glowing rim (blooms with post-processing on), dark brushed-metal face, white ceramic blades
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.34 * s, 0.06 * s * (heavy ? 1.5 : 1), 12, 48),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.1, emissive: color, emissiveIntensity: glow > 1 ? 1.2 * glow : 0.3 }));
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3 * s, 0.3 * s, 0.05 * s * (heavy ? 2 : 1), 40), new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.28, metalness: 0.75 }));
   face.rotation.x = Math.PI / 2;
-  const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * s, 0.1 * s, 0.07 * s, 16), new THREE.MeshStandardMaterial({ color }));
+  const inner = new THREE.Mesh(new THREE.TorusGeometry(0.19 * s, 0.012 * s, 6, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(glow > 1 ? 1.4 * glow : 1) }));
+  inner.position.z = 0.03 * s * (heavy ? 2 : 1);
+  const inner2 = inner.clone(); inner2.position.z *= -1;
+  const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * s, 0.1 * s, 0.07 * s * (heavy ? 1.6 : 1), 20), new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: color, emissiveIntensity: glow > 1 ? 0.4 * glow : 0.2 }));
   dot.rotation.x = Math.PI / 2;
-  const bladeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const bladeMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f4, roughness: 0.25, metalness: 0.2 });
   const long = w.id === 'boomerang' ? 2.6 : w.id === 'rail' ? 1.8 : 1;
   for (let i = 0; i < w.blades; i++) {
     const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06 * s, 0.16 * s * long, 0.04 * s), bladeMat);
     const a = i / w.blades * Math.PI * 2, r = (0.42 + (long - 1) * 0.08) * s;
     blade.position.set(Math.cos(a) * r, Math.sin(a) * r, 0); blade.rotation.z = a; g.add(blade);
   }
-  g.add(rim, face, dot); rim.castShadow = face.castShadow = true;
+  g.add(rim, face, dot, inner, inner2); rim.castShadow = face.castShadow = true;
   return g;
 }
 

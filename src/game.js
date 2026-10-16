@@ -7,12 +7,14 @@ import { Foe, FOE } from './foes.js';
 import { Disc, DISC, WEAPONS } from './disc.js';
 import { SKILLS, CHAT, pick } from './skills.js';
 import { Hand } from './hand.js';
-import { Particles, Rings, SpeedLines } from './fx.js';
+import { Particles, Rings, SpeedLines, Ribbon } from './fx.js';
 import { Fighter, BOT_ROSTER } from './fighter.js';
 import { BotBrain, SKILL, PERSONAS } from './bot.js';
 import { Net } from './net.js';
 import { installOnline } from './online.js';
 import { Audio } from './audio.js';
+import { Post } from './post.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { QUALITY, ASSIST, keyName } from './settings.js';
 
 const TICK = 1 / 120;
@@ -76,6 +78,27 @@ function segDist(a, b, p, t) {
   return Math.sqrt(x * x + y * y + z * z);
 }
 
+// sky dome: cool blue overhead fading to a warm white haze at the horizon, with a soft glow around the sun
+function makeSky(sunPos) {
+  const m = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { sunDir: { value: sunPos.clone().normalize() } },
+    vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
+    fragmentShader: `varying vec3 vDir; uniform vec3 sunDir;
+      void main(){
+        float h = vDir.y;
+        vec3 horizon = vec3(0.93, 0.91, 0.87), zenith = vec3(0.52, 0.63, 0.78), ground = vec3(0.86, 0.85, 0.82);
+        vec3 c = h > 0.0 ? mix(horizon, zenith, pow(smoothstep(0.0, 0.9, h), 0.7)) : mix(horizon, ground, smoothstep(0.0, -0.2, h));
+        float s = max(dot(vDir, sunDir), 0.0);
+        c += vec3(1.0, 0.85, 0.65) * (pow(s, 12.0) * 0.25 + pow(s, 400.0) * 2.0);
+        gl_FragColor = vec4(c, 1.0);
+      }`,
+  });
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), m);
+  sky.frustumCulled = false; sky.renderOrder = -1;
+  return sky;
+}
+
 export class Game {
   constructor(canvas, S, input) {
     this.canvas = canvas; this.S = S; this.input = input;
@@ -84,21 +107,28 @@ export class Game {
     this._el = {}; this._txt = {};
     this.audio = new Audio();
 
-    const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: this.Q.aa, powerPreference: 'high-performance', stencil: false });
-    r.setPixelRatio(Math.min(devicePixelRatio, this.Q.pr));
+    const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: this.Q.aa && !this.Q.post, powerPreference: 'high-performance', stencil: false });
+    // render scale: starts at the quality's ceiling and drops automatically if the frame rate does
+    this.prMax = Math.min(devicePixelRatio, this.Q.pr); this.pr = this.prMax; this.perf = { t: 0, n: 0, good: 0 };
+    r.setPixelRatio(this.pr);
     r.setSize(innerWidth, innerHeight);
-    r.toneMapping = THREE.NeutralToneMapping; r.toneMappingExposure = 1.0;
+    r.toneMapping = THREE.NeutralToneMapping; r.toneMappingExposure = 1.25; // scene is lit a bit dark so only real glows pass the bloom threshold
     r.autoClear = false;
     r.shadowMap.enabled = this.Q.shadows; r.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const sc = this.scene = new THREE.Scene();
-    sc.background = new THREE.Color(0xf3f3f1);
-    sc.fog = new THREE.Fog(0xf3f3f1, 70, 170);
-    sc.add(new THREE.HemisphereLight(0xffffff, 0xd8d8d4, 1.5));
-    const sun = this.sun = new THREE.DirectionalLight(0xffffff, 2.0);
-    sun.position.set(30, 60, 20);
+    sc.background = new THREE.Color(0xf2f0eb);
+    sc.fog = new THREE.Fog(0xf2f0eb, 90, 300);
+    // image-based light: a soft studio room reflected in every material (cheap after this one-time bake)
+    const pm = new THREE.PMREMGenerator(r);
+    this.envMap = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose();
+    sc.environment = this.envMap; sc.environmentIntensity = 0.35;
+    sc.add(new THREE.HemisphereLight(0xf4f7ff, 0xd6d2ca, 0.5));
+    const sun = this.sun = new THREE.DirectionalLight(0xfff1e0, 2.5);
+    sun.position.set(34, 62, 18);
+    sc.add(this.sky = makeSky(sun.position));
     if (this.Q.shadows) {
-      sun.castShadow = true; sun.shadow.mapSize.set(this.Q.shadowSize, this.Q.shadowSize);
+      sun.castShadow = true; sun.shadow.mapSize.set(this.Q.shadowSize, this.Q.shadowSize); sun.shadow.radius = 3;
       const c = sun.shadow.camera; c.left = -62; c.right = 62; c.top = 62; c.bottom = -62; c.near = 1; c.far = 200;
       sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
     }
@@ -108,8 +138,10 @@ export class Game {
     sc.add(this.camera);
 
     this.arena = new Arena(sc, this.Q);
-    this.hand = new Hand();
-    this.parts = new Particles(sc, this.Q.particles);
+    this.hand = new Hand(); this.hand.scene.environment = this.envMap;
+    this.post = this.Q.post ? new Post(r, sc, this.camera, this.hand, this.Q) : null;
+    Disc.glow = Ribbon.glow = Foe.glow = this.Q.post ? 4 : 1;
+    this.parts = new Particles(sc, this.Q.particles); this.parts.mat.uniforms.boost.value = this.Q.post ? 3.5 : 1;
     this.rings = new Rings(sc);
     this.lines = new SpeedLines(sc, 90);
     this.player = new Player(this.arena, this.playerEvents());
@@ -162,7 +194,9 @@ export class Game {
   cls(id, c, on) { const key = id + '#' + c; if (this._txt[key] !== on) { this._txt[key] = on; this.el(id).classList.toggle(c, on); } }
 
   resize() {
+    this.renderer.setPixelRatio(this.pr);
     this.renderer.setSize(innerWidth, innerHeight);
+    if (this.post) this.post.setSize(innerWidth, innerHeight, this.pr);
     this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
     this.hand.resize(innerWidth / innerHeight);
     this.parts.mat.uniforms.scale.value = innerHeight * this.renderer.getPixelRatio() * 0.5;
@@ -1335,7 +1369,7 @@ export class Game {
     } else if (!inGame) {
       // menu: slow orbit over the arena
       const a = this.clockT * 0.06;
-      this.camera.position.set(Math.sin(a) * 58, 24 + Math.sin(this.clockT * 0.2) * 3, Math.cos(a) * 58);
+      this.camera.position.set(Math.sin(a) * 42, 15 + Math.sin(this.clockT * 0.2) * 3, Math.cos(a) * 42);
       this.camera.lookAt(0, 2, 0);
       this.camera.fov = 62; this.camera.updateProjectionMatrix();
     } else {
@@ -1392,10 +1426,30 @@ export class Game {
 
     if (inGame) this.updateHud(rawDt);
 
-    const r = this.renderer;
-    r.clear();
-    r.render(this.scene, this.camera);
-    if ((this.state === 'play' || this.state === 'paused') && this.me.alive) { r.clearDepth(); r.render(this.hand.scene, this.hand.camera); }
+    const r = this.renderer, hands = (this.state === 'play' || this.state === 'paused') && this.me.alive;
+    this.sky.position.copy(this.camera.position);
+    if (this.post) {
+      const sp = this.state === 'play' && this.me.alive ? THREE.MathUtils.clamp((P.speed - 20) / 26, 0, 1) * (this.S.fovFx > 0 ? 1 : 0.5) : 0;
+      this.post.render(rawDt, { hands, speed: sp, hurt: Math.min(1, this.dmgFx || 0) * 0.6, vignette: inGame ? 0.3 : 0.18 });
+    } else {
+      r.clear();
+      r.render(this.scene, this.camera);
+      if (hands) { r.clearDepth(); r.render(this.hand.scene, this.hand.camera); }
+    }
+    this.adaptRes(rawDt);
+  }
+  // keep the frame rate up: lower the render scale when frames run long, creep back up when there is headroom
+  adaptRes(dt) {
+    if (!this.S.adaptive || this.state !== 'play' || document.hidden) return;
+    const pf = this.perf; pf.t += dt; pf.n++;
+    if (pf.t < 1) return;
+    const avg = pf.t / pf.n; pf.t = 0; pf.n = 0;
+    const min = Math.min(this.prMax, 0.5);
+    let pr = this.pr;
+    if (avg > 1 / 48 && pr > min) { pr = Math.max(min, pr * 0.85); pf.good = 0; }
+    else if (avg < 1 / 57) { if (++pf.good >= 3 && pr < this.prMax) { pr = Math.min(this.prMax, pr * 1.1); pf.good = 0; } }
+    else pf.good = 0;
+    if (Math.abs(pr - this.pr) > 0.01) { this.pr = pr; this.resize(); }
   }
 
   updateLasers() {

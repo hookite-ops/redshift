@@ -17,7 +17,9 @@ function mats() {
   MAT.black = new THREE.MeshStandardMaterial({ color: 0x16161a, roughness: 0.45, metalness: 0.2 });
   MAT.dark = new THREE.MeshStandardMaterial({ color: 0x2c2c33, roughness: 0.5, metalness: 0.2 });
   MAT.red = new THREE.MeshStandardMaterial({ color: 0xe8202f, roughness: 0.4, emissive: 0x500008 });
-  MAT.hot = new THREE.MeshStandardMaterial({ color: 0xff3a3a, roughness: 0.3, emissive: 0xff2020, emissiveIntensity: 1.5 });
+  // with bloom on (Foe.glow > 1) the eyes / charging parts glow
+  MAT.red.emissiveIntensity = Foe.glow > 1 ? 4 : 1;
+  MAT.hot = new THREE.MeshStandardMaterial({ color: 0xff3a3a, roughness: 0.3, emissive: 0xff2020, emissiveIntensity: Foe.glow > 1 ? 7 : 1.5 });
   MAT.white = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.6 });
   MAT.flash = new THREE.MeshBasicMaterial({ color: 0xffffff });
   return MAT;

@@ -11,14 +11,14 @@ export const DEFAULT_BINDS = {
 };
 export const DEFAULTS = {
   sens: 0.8, fov: 103, fovFx: 14, shake: 0.5, tilt: 0.5, bob: 0.4,
-  sfx: 0.8, music: 0.4, quality: 'auto', fps: 0, full: 1, autoHop: 1, touchSens: 1, touchUI: 'auto', touchLayout: 'auto',
+  sfx: 0.8, music: 0.4, quality: 'auto', adaptive: 1, fps: 0, full: 1, autoHop: 1, touchSens: 1, touchUI: 'auto', touchLayout: 'auto',
   difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', weapon: 'disc', skill: 'reflect', keyHints: 1, name: '',
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {
-  low: { pr: 0.75, shadows: false, shadowSize: 1024, aa: false, particles: 800 },
-  medium: { pr: 1.0, shadows: true, shadowSize: 1024, aa: true, particles: 1800 },
-  high: { pr: 1.5, shadows: true, shadowSize: 2048, aa: true, particles: 3000 },
+  low: { pr: 0.85, shadows: false, shadowSize: 1024, aa: true, post: false, particles: 800 },
+  medium: { pr: 1.0, shadows: true, shadowSize: 2048, aa: true, post: true, bloom: 0.38, msaa: 0, particles: 1800 },
+  high: { pr: 1.5, shadows: true, shadowSize: 4096, aa: true, post: true, bloom: 0.42, msaa: 4, particles: 3000 },
 };
 // your throws only: snap = cone (rad) in which the throw auto-leads the target,
 // homing = how hard the disc bends toward the enemy in front of it (rad/s), bonus = extra hit radius (m)
@@ -32,7 +32,9 @@ export function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) || '{}');
     const S = { ...DEFAULTS, ...s, binds: { ...DEFAULT_BINDS, ...(s.binds || {}) } };
-    if (!QUALITY[S.quality]) S.quality = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || window.REDSHIFT_APP === 'android' ? 'low' : 'high';
+    if (s.gfx !== 2) { S.quality = 'auto'; S.gfx = 2; } // 4.1 graphics: everyone re-picks the best level once
+    // auto: phones/tablets start on medium (the render scale then adapts to keep the frame rate), PCs on high
+    if (!QUALITY[S.quality]) S.quality = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || window.REDSHIFT_APP === 'android' ? 'medium' : 'high';
     if (!S.name) S.name = '플레이어' + Math.floor(10 + Math.random() * 90);
     return S;
   } catch { return JSON.parse(JSON.stringify(DEFAULTS)); }

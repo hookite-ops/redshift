@@ -21,8 +21,8 @@ async def player(b, name, settings):
 async def main():
     async with async_playwright() as p:
         b = await p.chromium.launch(args=ARGS)
-        A, ea = await player(b, "A", {"quality": "low", "full": 0, "name": "ALPHA", "weapon": "disc", "skill": "reflect"})
-        B, eb = await player(b, "B", {"quality": "low", "full": 0, "name": "BRAVO", "weapon": "rail", "skill": "heal"})
+        A, ea = await player(b, "A", {"quality": "low", "gfx": 2, "full": 0, "name": "ALPHA", "weapon": "disc", "skill": "reflect"})
+        B, eb = await player(b, "B", {"quality": "low", "gfx": 2, "full": 0, "name": "BRAVO", "weapon": "rail", "skill": "heal"})
         # A creates a room with 2 bots through the real UI
         await A.click("[data-act=online]")
         await A.wait_for_timeout(1000)

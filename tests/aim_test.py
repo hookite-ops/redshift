@@ -41,7 +41,7 @@ async def main():
         pg = await b.new_page(viewport={"width":800,"height":450})
         errs = []
         pg.on("pageerror", lambda e: errs.append(str(e)))
-        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', full:0}))")
+        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', gfx:2, full:0}))")
         await pg.goto("http://localhost:8766/index.html")
         await pg.wait_for_timeout(1500)
         for a in ['off', 'normal', 'strong']:

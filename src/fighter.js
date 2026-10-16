@@ -37,21 +37,34 @@ export class Fighter {
 
   // ---------------- bot body ----------------
   buildModel() {
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1e1e24, roughness: 0.55, metalness: 0.1 });
-    const team = this.teamMat = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.4, emissive: new THREE.Color(this.color).multiplyScalar(0.3) });
-    const white = new THREE.MeshStandardMaterial({ color: 0xf2f2f0, roughness: 0.6 });
+    // suit: dark under-layer, white armour plates, team-coloured glow lines (visor, belt, spine) that bloom
+    const glowK = (this.game.Q && this.game.Q.post) ? 4 : 1.3;
+    const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.5, metalness: 0.35 });
+    const team = this.teamMat = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.35, emissive: new THREE.Color(this.color).multiplyScalar(0.3) });
+    const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f1, roughness: 0.32, metalness: 0.05 });
+    const glow = this.glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(this.color).multiplyScalar(glowK) });
+    this.glowK = glowK;
     const m = (g, mat, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.castShadow = true; return o; };
+    const rbox = (w, h, d) => { const g = new THREE.CapsuleGeometry(Math.min(w, d) / 2, h, 4, 10); g.scale(w / Math.min(w, d), 1, d / Math.min(w, d)); return g; };
     const root = this.model = new THREE.Group();
     const body = this.torso = new THREE.Group(); root.add(body);
-    body.add(m(new THREE.CapsuleGeometry(0.31, 0.55, 4, 12), dark, 0, 0.98, 0));
-    const belt = m(new THREE.TorusGeometry(0.32, 0.05, 8, 24), team, 0, 0.92, 0); belt.rotation.x = Math.PI / 2; body.add(belt);
-    body.add(m(new THREE.BoxGeometry(0.42, 0.22, 0.08), white, 0, 1.2, 0.27)); // back plate
-    this.head = m(new THREE.SphereGeometry(0.21, 16, 12), dark, 0, 1.64, 0); body.add(this.head);
-    this.head.add(m(new THREE.BoxGeometry(0.32, 0.08, 0.1), team, 0, 0.02, -0.17));
+    body.add(m(new THREE.CapsuleGeometry(0.29, 0.52, 4, 12), dark, 0, 0.98, 0));
+    body.add(m(rbox(0.5, 0.2, 0.2), white, 0, 1.2, -0.2));                  // chest plate
+    body.add(m(new THREE.BoxGeometry(0.06, 0.16, 0.02), glow, 0, 1.2, -0.31));  // chest light
+    for (const sx of [-1, 1]) { const sp = m(new THREE.SphereGeometry(0.15, 14, 10), white, sx * 0.33, 1.37, 0); sp.scale.set(1, 0.75, 1.1); body.add(sp); }
+    const belt = m(new THREE.TorusGeometry(0.3, 0.035, 8, 32), glow, 0, 0.84, 0); belt.rotation.x = Math.PI / 2; body.add(belt);
+    body.add(m(new THREE.BoxGeometry(0.4, 0.42, 0.16), dark, 0, 1.16, 0.27));  // pack
+    body.add(m(new THREE.BoxGeometry(0.42, 0.06, 0.17), team, 0, 1.38, 0.27));
+    body.add(m(new THREE.BoxGeometry(0.05, 0.3, 0.02), glow, 0, 1.15, 0.355)); // spine light
+    this.head = m(new THREE.SphereGeometry(0.21, 20, 14), white, 0, 1.64, 0); body.add(this.head);
+    this.head.add(m(new THREE.SphereGeometry(0.205, 16, 10, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), dark, 0, -0.005, 0)); // jaw
+    const visor = m(new THREE.CylinderGeometry(0.215, 0.215, 0.07, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76), glow, 0, 0.02, 0); this.head.add(visor);
     this.legs = [];
     for (const s of [-1, 1]) {
       const leg = new THREE.Group(); leg.position.set(s * 0.13, 0.55, 0);
       leg.add(m(new THREE.CapsuleGeometry(0.09, 0.36, 4, 8), dark, 0, -0.27, 0));
+      leg.add(m(rbox(0.13, 0.08, 0.1), white, 0, -0.24, -0.07));            // knee pad
+      leg.add(m(new THREE.BoxGeometry(0.15, 0.1, 0.26), white, 0, -0.52, -0.04)); // boot
       root.add(leg); this.legs.push(leg);
     }
     // throwing arm with a small copy of the disc
@@ -132,6 +145,8 @@ export class Fighter {
     this.dome.visible = this.reflectT > 0;
     if (this.dome.visible) { this.dome.scale.setScalar(0.9 + Math.sin(t * 30) * 0.05); this.dome.material.opacity = 0.1 + this.reflectT * 0.15; }
     this.teamMat.emissiveIntensity = this.overT > 0 ? 2.2 + Math.sin(t * 20) * 0.6 : 1;
+    const gk = this.overT > 0 ? 1.6 + Math.sin(t * 20) * 0.4 : 1;
+    if (this._gk !== gk) { this._gk = gk; this.glowMat.color.set(this.color).multiplyScalar(this.glowK * gk); }
     if (this.bubbleT > 0) { this.bubbleT -= dt; if (this.bubbleT <= 0) this.bubble.visible = false; }
     this.handDisc.rotation.z += dt * 2;
     this.drawTag();

@@ -14,10 +14,12 @@ export class Particles {
     g.setAttribute('size', new THREE.BufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage));
     this.mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false,
-      uniforms: { scale: { value: 300 } },
+      uniforms: { scale: { value: 300 }, boost: { value: 1 } },
       vertexShader: `attribute float alpha; attribute float size; attribute vec3 color; varying float vA; varying vec3 vC; uniform float scale;
         void main(){ vA = alpha; vC = color; vec4 mv = modelViewMatrix * vec4(position,1.); gl_PointSize = max(2.0, size * scale / -mv.z); gl_Position = projectionMatrix * mv; }`,
-      fragmentShader: `varying float vA; varying vec3 vC; void main(){ vec2 p = gl_PointCoord - .5; if (max(abs(p.x), abs(p.y)) > 0.5) discard; gl_FragColor = vec4(vC, vA); }`,
+      // saturated colours (sparks) get pushed above 1.0 so they bloom; greys and dust stay as they are
+      fragmentShader: `varying float vA; varying vec3 vC; uniform float boost; void main(){ vec2 p = gl_PointCoord - .5; if (max(abs(p.x), abs(p.y)) > 0.5) discard;
+        float sat = max(vC.r, max(vC.g, vC.b)) - min(vC.r, min(vC.g, vC.b)); gl_FragColor = vec4(vC * (1.0 + (boost - 1.0) * sat), vA); }`,
     });
     this.points = new THREE.Points(g, this.mat); this.points.frustumCulled = false; scene.add(this.points);
   }
@@ -89,9 +91,10 @@ export class Ribbon {
     const idx = []; for (let i = 0; i < n - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } g.setIndex(idx);
     this.mat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
-      uniforms: { color: { value: new THREE.Color(color) } },
+      uniforms: { color: { value: new THREE.Color(color) }, glow: { value: Ribbon.glow || 1 } },
       vertexShader: `attribute float alpha; varying float vA; void main(){ vA = alpha; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-      fragmentShader: `uniform vec3 color; varying float vA; void main(){ gl_FragColor = vec4(color, vA * 0.75); }`,
+      // hot head, cooler tail: with bloom on, the first part of the trail glows
+      fragmentShader: `uniform vec3 color; uniform float glow; varying float vA; void main(){ gl_FragColor = vec4(color * mix(1.0, glow, vA * vA), vA * 0.75); }`,
     });
     this.mesh = new THREE.Mesh(g, this.mat); this.mesh.frustumCulled = false; scene.add(this.mesh);
   }

@@ -217,7 +217,7 @@ function openSettings() {
   sl('Sfx', 'sfx', v => Math.round(v * 100)); sl('Music', 'music', v => Math.round(v * 100));
   const sel = (id, key, num = true, after) => { const el = $('s' + id); el.value = String(S[key]); el.onchange = () => { S[key] = num ? +el.value : el.value; saveSettings(S); applySettings(); after && after(); }; };
   sel('AimAssist', 'aimAssist', false); sel('AutoHop', 'autoHop'); sel('TouchUI', 'touchUI', false, () => { if (confirm('조작 방식을 바꾸려면 새로고침이 필요해요. 지금 할까요?')) { game.state = 'menu'; location.reload(); } });
-  sl('TouchSens', 'touchSens', v => (+v).toFixed(2)); sel('TouchLayout', 'touchLayout', false); sel('KeyHints', 'keyHints'); sel('Fps', 'fps'); sel('Full', 'full');
+  sl('TouchSens', 'touchSens', v => (+v).toFixed(2)); sel('TouchLayout', 'touchLayout', false); sel('KeyHints', 'keyHints'); sel('Fps', 'fps'); sel('Full', 'full'); sel('Adaptive', 'adaptive', true, () => { if (!S.adaptive) { game.pr = game.prMax; game.resize(); } });
   sel('Quality', 'quality', false, () => { if (confirm('그래픽 품질을 바꾸려면 새로고침이 필요해요. 지금 새로고침할까요?')) { game.state = 'menu'; location.reload(); } });
   renderBinds();
 }

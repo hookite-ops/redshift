@@ -19,7 +19,7 @@ async def open_client(b, p, name, url, phone):
     errs = []
     pg.on("pageerror", lambda e: errs.append(name + " PAGEERROR: " + str(e)))
     pg.on("console", lambda m: errs.append(name + " console." + m.type + ": " + m.text) if m.type == "error" else None)
-    await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', full:0, name:'" + name + "'}))")
+    await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', gfx:2, full:0, name:'" + name + "'}))")
     await pg.goto(url, timeout=120000); await pg.wait_for_timeout(2000)
     return pg, errs
 

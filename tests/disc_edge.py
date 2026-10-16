@@ -13,7 +13,7 @@ async def main():
         errs = []
         pg.on("console", lambda m: errs.append(m.type + ": " + m.text) if m.type in ('error', 'warning') else None)
         pg.on("pageerror", lambda e: errs.append("PAGEERROR: " + str(e)))
-        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', fps:1, full:0, difficulty:'hard'}))")
+        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', gfx:2, fps:1, full:0, difficulty:'hard'}))")
         await pg.goto("http://localhost:8766/index.html", timeout=120000)
         await pg.wait_for_timeout(2000)
         # menu button → practice

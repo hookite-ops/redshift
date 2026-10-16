@@ -6,7 +6,7 @@ async def main():
         b = await p.chromium.launch(args=["--use-gl=angle","--use-angle=swiftshader","--enable-unsafe-swiftshader","--ignore-gpu-blocklist"])
         pg = await b.new_page(viewport={"width":1280,"height":720})
         pg.on("pageerror", lambda e: print("PAGEERROR", e))
-        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', full:0, botSkill:'easy', skill:'gravity', weapon:'heavy'}))")
+        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', gfx:2, full:0, botSkill:'easy', skill:'gravity', weapon:'heavy'}))")
         await pg.goto("http://localhost:8766/index.html")
         await pg.wait_for_timeout(2000)
         await pg.screenshot(path="tests/shots/v33_menu.png", timeout=120000)

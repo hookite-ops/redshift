@@ -23,7 +23,7 @@ async def main():
         errs = []
         pg.on("pageerror", lambda e: errs.append("PAGEERROR: " + str(e)))
         pg.on("console", lambda m: errs.append(m.type + ": " + m.text) if m.type == 'error' else None)
-        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', full:0}))")
+        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', gfx:2, full:0}))")
         await pg.goto("http://localhost:8766/index.html", timeout=120000)
         await pg.wait_for_timeout(1500)
         plan = [a.split(':') for a in sys.argv[1:]] or [['duel','max','hard','120'],['duel','hard','max','120'],['duel','max','max','120'],['duel','hard','normal','120'],['duel','normal','easy','120'],['ffa','max','max','60']]

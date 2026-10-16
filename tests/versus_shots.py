@@ -8,7 +8,7 @@ async def main():
         errs=[]
         pg.on("pageerror", lambda e: errs.append("PAGEERROR: "+str(e)))
         pg.on("console", lambda m: errs.append(m.type+": "+m.text) if m.type=='error' else None)
-        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', full:0, fps:1}))")
+        await pg.add_init_script("localStorage.setItem('redshift4_settings', JSON.stringify({quality:'low', gfx:2, full:0, fps:1}))")
         await pg.goto("http://localhost:8766/index.html")
         await pg.wait_for_timeout(2000)
         await pg.screenshot(path="tests/shots/v31_menu.png", timeout=120000); print("menu shot", flush=True)
