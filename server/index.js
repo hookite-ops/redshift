@@ -17,8 +17,10 @@ const PORT = +process.env.PORT || 8080;
 const MAX_PLAYERS = 8;
 const COLORS = [0xff5a1f, 0x2f6bff, 0x16a864, 0x8a4dff, 0xe0a800, 0xff3fa4, 0x12a9b8, 0x6b7280];
 const BOT_NAMES = ['VEGA', 'NOVA', 'KITE', 'FLUX', 'ECHO', 'RAZE', 'ORBIT'];
-const PERSONAS = { rusher: [['heavy', 'disc'], ['overdrive', 'heal']], sniper: [['rail'], ['reflect', 'gravity']], trick: [['boomerang', 'disc'], ['gravity', 'overdrive']], guard: [['disc', 'heavy'], ['reflect', 'heal']] };
-const WEAPONS = ['disc', 'heavy', 'rail', 'boomerang'], SKILLS = ['reflect', 'overdrive', 'gravity', 'heal'];
+const PERSONAS = { rusher: [['heavy', 'disc', 'nova', 'saw'], ['overdrive', 'heal']], sniper: [['rail', 'prism'], ['reflect', 'gravity']], trick: [['boomerang', 'disc', 'splitter', 'prism'], ['gravity', 'overdrive']], guard: [['disc', 'heavy', 'seeker', 'saw'], ['reflect', 'heal']] };
+const WEAPONS = ['disc', 'heavy', 'rail', 'boomerang', 'splitter', 'saw', 'seeker', 'nova', 'prism'], SKILLS = ['reflect', 'overdrive', 'gravity', 'heal'];
+const MAPS = ['arena', 'spire', 'lanes', 'forest', 'orbit'];
+const nextMap = cur => { const o = MAPS.filter(m => m !== cur); return o[(Math.random() * o.length) | 0]; };
 const pick = a => a[(Math.random() * a.length) | 0];
 const now = () => Date.now() / 1000;
 const clean = (s, n) => String(s || '').replace(/[<>&"'`\\\u0000-\u001f]/g, '').trim().slice(0, n);
@@ -56,18 +58,21 @@ const tokens = new Map();     // resume token → client (kept for a grace perio
 let nextClient = 1;
 
 function code4() { let c; do { c = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join(''); } while (rooms.has(c)); return c; }
-function makeRoom({ name, priv = false, bots = 3, botSkill = 'hard', limit = 15, duration = 300 } = {}) {
+function makeRoom({ name, priv = false, bots = 3, botSkill = 'hard', limit = 15, duration = 300, map = 'rotate' } = {}) {
   const r = {
     code: code4(), name: clean(name, 24) || '자유 대전', priv: !!priv, botSkill: ['easy', 'normal', 'hard', 'max'].includes(botSkill) ? botSkill : 'hard',
     wantBots: Math.max(0, Math.min(6, bots | 0)), limit: Math.max(3, Math.min(50, limit | 0)), duration: Math.max(60, Math.min(900, duration | 0)),
     players: new Map(), clients: new Set(), host: null, state: 'play', timeLeft: 0, overT: 0, nextId: 1, created: now(),
   };
   r.timeLeft = r.duration;
+  // a fixed map, or 'rotate': a new map every round
+  r.mapMode = MAPS.includes(map) ? 'fixed' : 'rotate';
+  r.map = MAPS.includes(map) ? map : nextMap(null);
   rooms.set(r.code, r);
   return r;
 }
 function roomList() {
-  return [...rooms.values()].filter(r => !r.priv).map(r => ({ code: r.code, name: r.name, humans: humans(r).length, bots: [...r.players.values()].filter(p => p.bot).length, max: MAX_PLAYERS, state: r.state }));
+  return [...rooms.values()].filter(r => !r.priv).map(r => ({ code: r.code, name: r.name, humans: humans(r).length, bots: [...r.players.values()].filter(p => p.bot).length, max: MAX_PLAYERS, state: r.state, map: r.map }));
 }
 const humans = r => [...r.players.values()].filter(p => !p.bot);
 function freeColor(r) { const used = new Set([...r.players.values()].map(p => p.color)); return COLORS.find(c => !used.has(c)) ?? pick(COLORS); }
@@ -130,7 +135,7 @@ function leaveRoom(c, quiet = false) {
   if (r.host === c) setHost(r, [...r.clients][0]);
   fillBots(r);
 }
-function matchInfo(r) { return { state: r.state, limit: r.limit, timeLeft: Math.round(r.timeLeft), ranking: ranking(r) }; }
+function matchInfo(r) { return { state: r.state, limit: r.limit, timeLeft: Math.round(r.timeLeft), ranking: ranking(r), map: r.map }; }
 function ranking(r) { return [...r.players.values()].sort((a, b) => b.kills - a.kills || a.deaths - b.deaths).map(p => [p.id, p.kills, p.deaths]); }
 
 // ---------------------------------------------------------------- combat (server owns health)
@@ -160,6 +165,7 @@ function endMatch(r) {
 }
 function resetMatch(r) {
   r.state = 'play'; r.timeLeft = r.duration;
+  if (r.mapMode === 'rotate') r.map = nextMap(r.map);
   for (const p of r.players.values()) { p.kills = 0; p.deaths = 0; p.hp = 100; p.alive = true; p.prot = now() + 2; }
   cast(r, { t: 'match', ...matchInfo(r), reset: true, players: [...r.players.values()].map(pub) });
 }
@@ -184,7 +190,7 @@ function onMessage(c, raw) {
       joinRoom(c, open || makeRoom({ name: c.name + '의 방', bots: 3 }));
       break;
     }
-    case 'create': joinRoom(c, makeRoom({ name: m.name, priv: m.priv, bots: m.bots, botSkill: m.botSkill, limit: m.limit, duration: m.duration })); break;
+    case 'create': joinRoom(c, makeRoom({ name: m.name, priv: m.priv, bots: m.bots, botSkill: m.botSkill, limit: m.limit, duration: m.duration, map: m.map })); break;
     case 'join': {
       const x = rooms.get(String(m.code || '').toUpperCase());
       if (!x) send(c, { t: 'err', msg: '그 코드의 방이 없어요' }); else joinRoom(c, x);

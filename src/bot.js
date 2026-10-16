@@ -20,15 +20,14 @@ export const SKILL = {
 
 // personalities: how they like to fight. weapon/skill are drawn from these lists.
 export const PERSONAS = [
-  { id: 'rusher', name: '돌격형', aggro: 0.9, caution: 0.2, flair: 0.6, patience: 0.15, chatty: 1.0, band: [5, 12], weapons: ['heavy', 'disc'], skills: ['overdrive', 'heal'] },
-  { id: 'sniper', name: '저격형', aggro: 0.35, caution: 0.7, flair: 0.3, patience: 0.8, chatty: 0.6, band: [18, 32], weapons: ['rail'], skills: ['reflect', 'gravity'] },
-  { id: 'trick', name: '곡예형', aggro: 0.65, caution: 0.4, flair: 1.0, patience: 0.35, chatty: 0.9, band: [9, 18], weapons: ['boomerang', 'disc'], skills: ['gravity', 'overdrive'] },
-  { id: 'guard', name: '수비형', aggro: 0.45, caution: 0.85, flair: 0.4, patience: 0.6, chatty: 0.5, band: [12, 22], weapons: ['disc', 'heavy'], skills: ['reflect', 'heal'] },
+  { id: 'rusher', name: '돌격형', aggro: 0.9, caution: 0.2, flair: 0.6, patience: 0.15, chatty: 1.0, band: [5, 12], weapons: ['heavy', 'disc', 'nova', 'saw'], skills: ['overdrive', 'heal'] },
+  { id: 'sniper', name: '저격형', aggro: 0.35, caution: 0.7, flair: 0.3, patience: 0.8, chatty: 0.6, band: [18, 32], weapons: ['rail', 'prism'], skills: ['reflect', 'gravity'] },
+  { id: 'trick', name: '곡예형', aggro: 0.65, caution: 0.4, flair: 1.0, patience: 0.35, chatty: 0.9, band: [9, 18], weapons: ['boomerang', 'disc', 'splitter', 'prism'], skills: ['gravity', 'overdrive'] },
+  { id: 'guard', name: '수비형', aggro: 0.45, caution: 0.85, flair: 0.4, patience: 0.6, chatty: 0.5, band: [12, 22], weapons: ['disc', 'heavy', 'seeker', 'saw'], skills: ['reflect', 'heal'] },
 ];
 
 const GRAV = T.gravity;
 const PITCHES = [-0.12, -0.06, -0.02, 0.03, 0.09, 0.17];
-const COVER = [[-17, -17], [17, -17], [-17, 17], [17, 17], [0, -30], [0, 30], [-30, 0], [30, 0], [0, 0]];
 const _eye = new THREE.Vector3(), _org = new THREE.Vector3(), _aim = new THREE.Vector3(), _dir = new THREE.Vector3();
 const _look = new THREE.Vector3(), _des = new THREE.Vector3(), _p = new THREE.Vector3(), _sp = new THREE.Vector3(), _sv = new THREE.Vector3();
 const _q = new THREE.Vector3(), _w = new THREE.Vector3(), _t = new THREE.Vector3();
@@ -262,7 +261,7 @@ export class BotBrain {
     } else if (intent === 'retreat') {
       // run for the nearest cover on the far side from the threat, healing on the way
       let best = null, bs = 1e9;
-      for (const [cx, cz] of COVER) {
+      for (const [cx, cz] of this.G.arena.cover) {
         const ax = cx - tp.x, az = cz - tp.z, al = Math.hypot(ax, az) || 1;
         const px = cx + ax / al * 3.2, pz = cz + az / al * 3.2;
         const d = Math.hypot(px - B.pos.x, pz - B.pos.z);
@@ -274,7 +273,7 @@ export class BotBrain {
       travel = des.length() > 6;
     } else { // roam: drift toward cover points / the middle and listen
       this.wanderT -= dt;
-      if (this.wanderT <= 0) { this.wanderT = 2 + Math.random() * 3; const c = COVER[(Math.random() * COVER.length) | 0]; this.dest.set(c[0] + (Math.random() - 0.5) * 16, 0, c[1] + (Math.random() - 0.5) * 16); }
+      if (this.wanderT <= 0) { this.wanderT = 2 + Math.random() * 3; const CV = this.G.arena.cover, c = CV[(Math.random() * CV.length) | 0]; this.dest.set(c[0] + (Math.random() - 0.5) * 16, 0, c[1] + (Math.random() - 0.5) * 16); }
       des.set(this.dest.x - B.pos.x, 0, this.dest.z - B.pos.z);
       travel = des.length() > 12;
     }

@@ -2,6 +2,8 @@
 import { Game } from './game.js';
 import { Input } from './input.js';
 import { Net } from './net.js';
+import { MAPS } from './maps.js';
+const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
 import { Touch, isTouchDevice } from './touch.js';
 import { ACTIONS, DEFAULT_BINDS, loadSettings, saveSettings, loadRecords, saveRecords, keyName } from './settings.js';
 
@@ -166,7 +168,7 @@ function renderRooms(list) {
   for (const r of list) {
     const d = document.createElement('div'); d.className = 'room';
     const n = document.createElement('span'); n.textContent = r.name;
-    const i = document.createElement('b'); i.textContent = `${r.code} · ${r.humans}명${r.bots ? ' + 봇 ' + r.bots : ''} / ${r.max}`;
+    const i = document.createElement('b'); i.textContent = `${r.code} · ${MAP_NAME[r.map] || ''} · ${r.humans}명${r.bots ? ' + 봇 ' + r.bots : ''} / ${r.max}`;
     d.append(n, i); d.onclick = () => joinBy({ t: 'join', code: r.code });
     box.append(d);
   }
@@ -184,7 +186,7 @@ game.onNetDropped = () => { toMenu(); openOnline(); show('online'); oStatus('서
 game.net.onStatus = (st, msg) => { if (st === 'reconnecting') oStatus('다시 연결하는 중…'); };
 $('oQuick').onclick = () => joinBy({ t: 'quick' });
 $('oCreateBtn').onclick = () => $('oCreateOpts').classList.toggle('hidden');
-$('oCreate').onclick = () => joinBy({ t: 'create', name: $('oRoomName').value || `${cleanName($('oName').value)}의 방`, bots: +$('oBots').value, botSkill: $('oBotSkill').value, limit: +$('oLimit').value, priv: $('oPriv').value === '1' });
+$('oCreate').onclick = () => joinBy({ t: 'create', name: $('oRoomName').value || `${cleanName($('oName').value)}의 방`, bots: +$('oBots').value, botSkill: $('oBotSkill').value, limit: +$('oLimit').value, priv: $('oPriv').value === '1', map: $('oMap').value });
 $('oJoin').onclick = () => { const c = $('oCode').value.trim().toUpperCase(); if (c.length === 4) joinBy({ t: 'join', code: c }); else oStatus('코드 4글자를 넣어 주세요', 'bad'); };
 $('oRefresh').onclick = async () => { if (await connectOnline()) game.net.send({ t: 'list' }); };
 // only an address the player typed is remembered — otherwise the built-in / shared address keeps working when it moves
@@ -196,7 +198,9 @@ function renderDifficulty() {
   document.querySelectorAll('#botskill button').forEach(b => b.classList.toggle('on', b.dataset.bs === S.botSkill));
   document.querySelectorAll('#weapons button').forEach(b => b.classList.toggle('on', b.dataset.wp === S.weapon));
   document.querySelectorAll('#skills button').forEach(b => b.classList.toggle('on', b.dataset.sk === S.skill));
+  document.querySelectorAll('#maps button').forEach(b => b.classList.toggle('on', b.dataset.mp === (S.map || 'random')));
 }
+document.querySelectorAll('#maps button').forEach(b => b.addEventListener('click', () => { S.map = b.dataset.mp; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 document.querySelectorAll('#weapons button').forEach(b => b.addEventListener('click', () => { S.weapon = b.dataset.wp; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 document.querySelectorAll('#skills button').forEach(b => b.addEventListener('click', () => { S.skill = b.dataset.sk; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));
 document.querySelectorAll('#botskill button').forEach(b => b.addEventListener('click', () => { S.botSkill = b.dataset.bs; saveSettings(S); renderDifficulty(); game.audio.init(); game.audio.ui(); }));

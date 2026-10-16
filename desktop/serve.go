@@ -19,7 +19,7 @@ var site embed.FS
 
 // set at build time: -ldflags "-X main.serverURL=https://..."
 var serverURL = ""
-var version = "4.1"
+var version = "4.2"
 
 const discovery = "https://raw.githubusercontent.com/hookite-ops/redshift/main/server.txt"
 

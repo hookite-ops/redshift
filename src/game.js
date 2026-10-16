@@ -13,6 +13,7 @@ import { BotBrain, SKILL, PERSONAS } from './bot.js';
 import { Net } from './net.js';
 import { installOnline } from './online.js';
 import { Audio } from './audio.js';
+import { MAPS, MAP_IDS } from './maps.js';
 import { Post } from './post.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { QUALITY, ASSIST, keyName } from './settings.js';
@@ -25,6 +26,7 @@ export const DIFF = {
 };
 const SPAWN = new THREE.Vector3(0, 0, 22);
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
+const _UP = new THREE.Vector3(0, 1, 0);
 const _hit = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
 const DUMMY_EL = { style: { setProperty() { } }, classList: { toggle() { }, add() { }, remove() { }, contains() { return false; } }, textContent: '', innerHTML: '', children: [], appendChild() { }, querySelectorAll() { return []; } };
 
@@ -150,7 +152,7 @@ export class Game {
     this.disc = new Disc(this);
     this.me = new Fighter(this, { name: '나', color: 0xff5a1f, isBot: false, body: this.player, disc: this.disc });
     this.fighters = [this.me];
-    this.grenades = []; this.wells = []; this.chatLines = [];
+    this.grenades = []; this.wells = []; this.chatLines = []; this.shards = [];
     this.nadeGeo = new THREE.SphereGeometry(0.24, 14, 10);
     this.wellGeo = new THREE.SphereGeometry(1, 28, 18);
     this.versus = false; this.match = { limit: 0, timeLeft: 0, over: true };
@@ -220,8 +222,13 @@ export class Game {
     if (this.mode !== 'online') { if (this.online) this.leaveOnline(); this.online = false; }
     this.D = DIFF[this.S.difficulty] || DIFF.easy;
     this.clear(); this.resetRun();
+    // map: practice always uses the white arena (its dummies are placed for it); online uses the room's map
+    let mapId = this.mode === 'practice' ? 'arena' : this.mode === 'online' ? (this.netMap || 'arena') : this.S.map;
+    if (!MAPS[mapId]) mapId = MAP_IDS[(Math.random() * MAP_IDS.length) | 0];
+    this.loadMap(mapId);
     const P = this.player; P.easy = true; P.noWall = true;
-    P.reset(SPAWN.clone(), 0);
+    if (this.mode === 'practice') P.reset(SPAWN.clone(), 0);
+    else { const sp = this.pickSpawn(this.me); P.reset(sp, Math.atan2(sp.x, sp.z)); }
     const me = this.me;
     me.st = { throws: 0, hits: 0, blinks: 0, slams: 0, dodges: 0, bank: 0, ret: 0 };
     Object.assign(me, { kills: 0, deaths: 0, alive: true, protT: 0, invulnT: 0, regenT: 0, streak: 0, lastHitBy: null, respawnT: 0 });
@@ -235,7 +242,7 @@ export class Game {
     this.buildDashPips();
     if (this.mode === 'practice') { this.setupPractice(); this.banner('연습장', '체크리스트를 따라 해보세요 · 맞아도 안 죽어요', 2.6); }
     else if (this.versus && this.mode !== 'online') this.setupVersus();
-    else { this.banner('아레나', '원반 하나로 끝까지 버티기', 2.4); }
+    else { this.banner('아레나', `${this.mapName} · 원반 하나로 끝까지 버티기`, 2.4); }
     this.cls('deathMsg', 'show', false); this.cls('board', 'hidden', !this.versus); this._boardT = 0;
     this.el('feed').innerHTML = ''; this.el('dnums').innerHTML = '';
     this.renderTut();
@@ -252,6 +259,8 @@ export class Game {
     for (const g of this.grenades || []) this.scene.remove(g.m);
     for (const w of this.wells || []) { this.scene.remove(w.m); this.scene.remove(w.ring); }
     this.grenades = []; this.wells = [];
+    for (const s of this.shards || []) this.scene.remove(s.m);
+    this.shards = [];
     if (this.chatLines) { for (const c of this.chatLines) c.el.remove(); this.chatLines = []; }
     this.blinkGhost.visible = false;
     if (this.disc) { this.disc.caught(); this.trail.reset(); }
@@ -347,8 +356,10 @@ export class Game {
       },
       wallStart() { }, climb() { },
       mantle() { g.audio.mantle(); g.camState.dipV -= 1.5; },
-      hookFire() { }, hookMiss() { }, hookAttach() { }, hookRelease() { }, pad() { }, boost() { },
-      fell() { if (g.versus) g.respawn(g.me); else g.player.reset(SPAWN.clone(), 0); },
+      hookFire() { }, hookMiss() { }, hookAttach() { }, hookRelease() { },
+      pad(p) { g.audio.jump(); g.audio.boost(); g.camState.kick = Math.max(g.camState.kick, 1.2); g.rings.add(new THREE.Vector3(p.x, p.y + 0.15, p.z), g.arena.accent.getHex(), 3, 0.4); },
+      boost() { g.audio.boost(); g.camState.kick = Math.max(g.camState.kick, 1.5); g.shake(0.06); },
+      fell() { if (g.versus) g.respawn(g.me); else g.player.reset(g.mode === 'practice' ? SPAWN.clone() : g.pickSpawn(g.me), 0); },
     };
   }
   botEvents(f) {
@@ -453,7 +464,7 @@ export class Game {
       this.clampBounds(f.body);
     }
     for (const f of this.fighters) if (!f.remote) f.disc.tick(dt);
-    this.tickSkills(dt);
+    this.tickSkills(dt); this.tickShards(dt);
 
     // ---------- vitals ----------
     for (const f of this.fighters) {
@@ -604,6 +615,118 @@ export class Game {
     this.parts.emit(p, 10, { color: [[c.r, c.g, c.b], [0.15, 0.15, 0.17]], speed: 7, dir: n, spread: 0.8, life: 0.35, gravity: 10 });
     this.rings.add(p.clone().addScaledVector(n, 0.04), d.color, 1.1 + d.bounces * 0.35, 0.3, n);
   }
+  // ---- weapon tricks ----
+  // seeker: turn toward the best visible enemy in front, all the way
+  discSeek(d, dt) {
+    const sp = d.vel.length(); if (sp < 1) return;
+    const dir = _a.copy(d.vel).divideScalar(sp), owner = d.reflectedBy || d.owner;
+    const list = this.versus ? this.fighters : this.foes;
+    let best = null, bc = null, bs = 1e9;
+    for (const t of list) {
+      if (!t.alive || t === owner || (this.versus && (t === d.owner && !d.reflectedBy)) || t.protT > 0 || d.hit.has(t)) continue;
+      const c = t.updateCenter ? t.updateCenter() : t.center;
+      _b.subVectors(c, d.pos); const dist = _b.length(); if (dist > 70 || dist < 0.3) continue;
+      const cos = _b.dot(dir) / dist; if (cos < -0.1) continue;
+      const score = dist * (1.7 - cos) - (t === d.seekLock ? 10 : 0);
+      if (score < bs && this.los(d.pos, c)) { bs = score; best = t; bc = c; }
+    }
+    d.seekLock = best;
+    if (!best) return;
+    _c.subVectors(bc, d.pos).normalize();
+    const ang = Math.acos(THREE.MathUtils.clamp(_c.dot(dir), -1, 1));
+    if (ang < 1e-4) return;
+    dir.lerp(_c, Math.min(1, d.w.seek * dt / ang)).normalize();
+    d.vel.copy(dir).multiplyScalar(sp);
+  }
+  // damage everyone (but the thrower) within r of p; falloff to minK at the edge
+  discArea(d, p, r, dmg, kind, minK = 0.5, hit = d.hit) {
+    const by = d.reflectedBy || d.owner;
+    if (this.versus) {
+      for (const t of this.fighters) {
+        if (t === by || !t.alive || hit.has(t)) continue;
+        const c = t.updateCenter(), dist = c.distanceTo(p);
+        if (dist > r + T.radius || !this.los(p, c)) continue;
+        hit.add(t);
+        if (t.invuln) continue;
+        const dir = _b.subVectors(c, p).setY(0); if (dir.lengthSq() < 1e-4) dir.set(1, 0, 0); dir.normalize();
+        this.damageFighter(t, dmg * (1 - (1 - minK) * Math.min(1, dist / r)), by, kind, dir.clone(), 0);
+      }
+    } else {
+      for (const f of this.foes) {
+        if (!f.alive || hit.has(f) || f.spawnT > 0.25) continue;
+        const dist = f.center.distanceTo(p);
+        if (dist > r + f.hitRadius || !this.los(p, f.center)) continue;
+        hit.add(f);
+        const dir = _b.subVectors(f.center, p).normalize();
+        this.hitFoe(f, dmg * (1 - (1 - minK) * Math.min(1, dist / r)), dir.clone(), kind, 0);
+      }
+    }
+  }
+  // nova: explode where it first touches anything
+  discBlast(d, p, fromNet = false) {
+    const w = WEAPONS.nova;
+    if (!fromNet) {
+      if (this.online && d.owner) this.netFx({ k: 'blast', id: d.owner.netId, p: [p.x, p.y, p.z].map(v => Math.round(v * 100) / 100) });
+      this.discArea(d, p, w.blast.r, w.blast.dmg, 'blast', 0.45, new Set());
+    }
+    const c = new THREE.Color(d.color);
+    this.rings.add(p.clone(), d.color, w.blast.r * 2, 0.45, null);
+    this.rings.add(new THREE.Vector3(p.x, Math.max(0.06, p.y - 1), p.z), d.color, w.blast.r * 1.6, 0.5);
+    this.parts.emit(p, 46, { color: [[c.r, c.g, c.b], [1, 0.9, 0.7], [0.15, 0.15, 0.17]], speed: 16, life: 0.55, gravity: 8, size: 0.16 });
+    const near = this.player.pos.distanceTo(p);
+    if (near < 18) this.shake(0.3 * (1 - near / 18));
+    this.spatial(p, () => this.audio.slam());
+  }
+  // splitter: becomes three shards fanning out from the wall
+  discSplit(d, p) {
+    const sp = Math.max(d.vel.length(), 40) * 1.05, base = _a.copy(d.vel).normalize();
+    const vels = [];
+    for (const ang of [-0.5, 0, 0.5]) {
+      const v = base.clone().applyAxisAngle(_UP, ang); v.y += ang === 0 ? 0.08 : 0; v.normalize().multiplyScalar(sp);
+      vels.push(v);
+    }
+    for (const v of vels) this.spawnShard(d.owner, d.color, p, v, d.w.shardDmg, false);
+    if (this.online && d.owner) this.netFx({ k: 'split', id: d.owner.netId, p: [p.x, p.y, p.z].map(v => Math.round(v * 100) / 100), v: vels.map(v => [v.x, v.y, v.z].map(x => Math.round(x * 10) / 10)) });
+    d.recall();
+  }
+  spawnShard(owner, color, p, v, dmg, visual) {
+    if (!this.shardGeo) { this.shardGeo = new THREE.BoxGeometry(0.07, 0.07, 0.7); this.shardMats = new Map(); }
+    let mat = this.shardMats.get(color);
+    if (!mat) { mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(Disc.glow > 1 ? 5 : 1) }); this.shardMats.set(color, mat); }
+    const m = new THREE.Mesh(this.shardGeo, mat); m.position.copy(p); this.scene.add(m);
+    this.shards.push({ m, pos: p.clone(), vel: v.clone(), owner, dmg, visual: visual || (owner && owner.remote), life: 0.7, hit: new Set() });
+  }
+  tickShards(dt) {
+    const col = this.arena.col;
+    for (let i = this.shards.length - 1; i >= 0; i--) {
+      const s = this.shards[i]; s.life -= dt;
+      const step = s.vel.length() * dt, dir = _a.copy(s.vel).normalize();
+      const h = col.raycast(s.pos.x, s.pos.y, s.pos.z, dir.x, dir.y, dir.z, step, _hit);
+      const end = _d.copy(s.pos).addScaledVector(dir, h ? h.t : step);
+      if (!s.visual) {
+        if (this.versus) {
+          for (const t of this.fighters) {
+            if (t === s.owner || !t.alive || s.hit.has(t)) continue;
+            const B = t.body; _c1.set(B.pos.x, B.pos.y + 0.4, B.pos.z); _c2.set(B.pos.x, B.pos.y + Math.max(0.6, B.h - 0.4), B.pos.z);
+            if (segSeg(s.pos, end, _c1, _c2, _ss).d < T.radius + 0.25) { s.hit.add(t); if (!t.invuln) this.damageFighter(t, s.dmg, s.owner, 'shard', dir.clone(), 1); }
+          }
+        } else {
+          for (const f of this.foes) {
+            if (!f.alive || s.hit.has(f)) continue;
+            if (segDist(s.pos, end, f.center, segParam(s.pos, end, f.center)) < f.hitRadius + 0.25) { s.hit.add(f); this.hitFoe(f, s.dmg, dir.clone(), 'shard', 1); }
+          }
+        }
+      }
+      s.pos.copy(end);
+      if (h || s.life <= 0) {
+        if (h) this.parts.emit(s.pos, 6, { color: [[1, 1, 1], [0.15, 0.15, 0.17]], speed: 5, life: 0.25, gravity: 8 });
+        this.scene.remove(s.m); this.shards.splice(i, 1); continue;
+      }
+    }
+  }
+  renderShards() {
+    for (const s of this.shards) { s.m.position.copy(s.pos); s.m.lookAt(_d.copy(s.pos).add(s.vel)); }
+  }
   onDiscCatch(d) {
     if (d.state === 'hand') return;
     d.caught();
@@ -643,6 +766,7 @@ export class Game {
         ? d.w.dmg * (1 + d.w.bounceMul * d.bounces) * (0.75 + 0.25 * d.speedMul())
         : d.w.returnDmg * (1 + 0.2 * d.bounces);
       this.hitFoe(f, dmg, dir, leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', d.bounces);
+      if (d.w.blast && leg === 'out' && !d.blasted) { d.blasted = true; this.discBlast(d, at); d.recall(); return at; }
     }
     // the disc also swats enemy orbs out of the air
     for (let i = this.orbs.length - 1; i >= 0; i--) {
@@ -1108,20 +1232,28 @@ export class Game {
     for (const f of this.fighters) this.respawn(f, true);
     this.match = { limit: duel ? 5 : 15, timeLeft: duel ? 0 : 240, over: false };
     const bot = this.fighters[1];
-    if (duel) this.banner('1 V 1', `${bot.name} · 봇 실력 ${SKILL[skill].name} · 5킬 먼저`, 2.6);
-    else this.banner('FFA', `봇 5명 · ${SKILL[skill].name} · 15킬 먼저 (4분)`, 2.6);
+    if (duel) this.banner('1 V 1', `${this.mapName} · ${bot.name} · 봇 실력 ${SKILL[skill].name} · 5킬 먼저`, 2.6);
+    else this.banner('FFA', `${this.mapName} · 봇 5명 · ${SKILL[skill].name} · 15킬 먼저 (4분)`, 2.6);
     this._boardHtml = '';
     // compile the bots' materials now, not on the first frame they appear
     try { this.renderer.compile(this.scene, this.camera); } catch { }
   }
   spawnPoints() {
-    if (!this._spawns) {
-      const A = this.arena, all = [...A.spawnGround, ...A.spawnHigh];
-      for (const [x, z] of [[-24, 8], [24, -8], [8, 24], [-8, -24], [0, 15], [0, -15], [15, 0], [-15, 0]]) all.push(new THREE.Vector3(x, 0, z));
-      this._spawns = all.filter(p => A.col.capsuleFree(p.x, p.y + 0.05, p.z, 0.42, 1.8));
-    }
+    if (!this._spawns) { const A = this.arena; this._spawns = [...A.spawnGround, ...A.spawnHigh]; }
     return this._spawns;
   }
+  // swap the map (keeps everyone; callers respawn them)
+  loadMap(id) {
+    if (this.arena.mapId === id && this.arena.map) return false;
+    this.arena.load(id);
+    this._spawns = null;
+    for (const f of this.fighters) { if (f.disc.state !== 'hand' && !f.remote) f.disc.caught(); f.disc.trail.reset(); }
+    for (const s of this.shards || []) this.scene.remove(s.m);
+    this.shards = [];
+    try { this.renderer.compile(this.scene, this.camera); } catch { }
+    return true;
+  }
+  get mapName() { return (MAPS[this.arena.mapId] || MAPS.arena).name; }
   pickSpawn(f) {
     let best = null, bs = -1;
     for (const p of this.spawnPoints()) {
@@ -1176,7 +1308,9 @@ export class Game {
       const dmg = leg === 'out'
         ? w.dmg * (1 + w.bounceMul * d.bounces) * (0.75 + 0.25 * d.speedMul()) * (d.reflectedBy ? 1.2 : 1)
         : w.returnDmg * (1 + 0.2 * d.bounces);
+      const hitAt = new THREE.Vector3().lerpVectors(a, b, _ss.s);
       this.damageFighter(t, dmg, attacker, d.reflectedBy ? 'reflect' : leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', dir, d.bounces);
+      if (w.blast && leg === 'out' && !d.blasted) { d.blasted = true; this.discBlast(d, hitAt); d.recall(); return hitAt; }
     }
     return null;
   }
@@ -1193,8 +1327,8 @@ export class Game {
     dmg = Math.round(dmg);
     t.hp -= dmg; t.regenT = 5; t.lastHitBy = by; t.lastHitT = this.gameTime;
     const kn = by ? by.disc.w.knock : 5;
-    const B = t.body, push = kind === 'slam' ? 8 + kn * 0.3 : kn;
-    B.vel.x += dir.x * push; B.vel.z += dir.z * push; B.vel.y = Math.max(B.vel.y, kind === 'slam' ? 5 : 2.5); B.grounded = false;
+    const B = t.body, push = kind === 'slam' ? 8 + kn * 0.3 : kind === 'blast' ? 16 : kn;
+    B.vel.x += dir.x * push; B.vel.z += dir.z * push; B.vel.y = Math.max(B.vel.y, kind === 'slam' ? 5 : kind === 'blast' ? 7 : 2.5); B.grounded = false;
     const c = t.updateCenter().clone(), col = new THREE.Color(t.color);
     this.parts.emit(c, 14, { color: [[0.1, 0.1, 0.12], [col.r, col.g, col.b]], speed: 8, dir, spread: 0.9, life: 0.4 });
     const killed = t.hp <= 0;
@@ -1225,7 +1359,7 @@ export class Game {
     const c = v.updateCenter().clone(), col = new THREE.Color(v.color);
     this.parts.emit(c, 28, { color: [[0.08, 0.08, 0.1], [col.r, col.g, col.b], [1, 1, 1]], speed: 10, life: 0.6 });
     this.rings.add(new THREE.Vector3(v.body.pos.x, v.body.pos.y + 0.06, v.body.pos.z), v.color, 3, 0.45);
-    let tag = kind === 'bank' ? (n >= 2 ? `${n}쿠션 뱅크샷` : '뱅크샷') : kind === 'return' ? '회수 타격' : kind === 'slam' ? '순간이동 충격' : '';
+    let tag = kind === 'bank' ? (n >= 2 ? `${n}쿠션 뱅크샷` : '뱅크샷') : kind === 'return' ? '회수 타격' : kind === 'slam' ? '순간이동 충격' : kind === 'blast' ? '충격탄' : kind === 'saw' ? '톱날 덫' : kind === 'shard' ? '파편' : '';
     if (k && !k.body.grounded && k.body.airTime > 0.3) tag = tag ? tag + ' · 공중' : '공중';
     const counts = !this.match.over && !net;
     if (k && k !== v && counts) {
@@ -1410,6 +1544,7 @@ export class Game {
       f.disc.trail.update(f.disc.pos, this.camera.position, f.disc.out && this.state !== 'menu');
       if (f.isBot) f.renderModel(rawDt, alphaR, this.clockT);
     }
+    this.renderShards();
     this.parts.update(fxDt);
     this.rings.update(fxDt);
     this.arena.update(this.clockT, fxDt);

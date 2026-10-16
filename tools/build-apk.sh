@@ -25,7 +25,7 @@ CFG
 
 "$BT/aapt2" compile --dir android/res -o "$OUT/res.zip"
 "$BT/aapt2" link -o "$OUT/base.apk" -I "$JAR" --manifest android/AndroidManifest.xml \
-  -A "$OUT/assets" --min-sdk-version 24 --target-sdk-version 35 --version-code 41 --version-name 4.1 \
+  -A "$OUT/assets" --min-sdk-version 24 --target-sdk-version 35 --version-code 42 --version-name 4.2 \
   -0 js -0 html -0 png "$OUT/res.zip"
 javac -nowarn -Xlint:-options --release 11 -cp "$JAR" -d "$OUT/classes" $(find android/src -name '*.java')
 "$BT/d8" --release --min-api 24 --lib "$JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')

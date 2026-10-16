@@ -12,7 +12,7 @@ export const DEFAULT_BINDS = {
 export const DEFAULTS = {
   sens: 0.8, fov: 103, fovFx: 14, shake: 0.5, tilt: 0.5, bob: 0.4,
   sfx: 0.8, music: 0.4, quality: 'auto', adaptive: 1, fps: 0, full: 1, autoHop: 1, touchSens: 1, touchUI: 'auto', touchLayout: 'auto',
-  difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', weapon: 'disc', skill: 'reflect', keyHints: 1, name: '',
+  difficulty: 'easy', botSkill: 'max', aimAssist: 'strong', weapon: 'disc', skill: 'reflect', map: 'random', keyHints: 1, name: '',
   binds: DEFAULT_BINDS,
 };
 export const QUALITY = {

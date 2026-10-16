@@ -24,7 +24,39 @@ export const WEAPONS = {
     speed: 40, carry: 0.7, maxBounces: 2, outTime: 0.6, returnSpeed: 50, returnTurn: 3.2, catchDist: 1.9, radius: 0.42,
     dmg: 34, returnDmg: 34, bounceMul: 0.3, blinkSlam: 42, blinkRadius: 3.8, knock: 5, scale: 1.15, blades: 2, trail: 0.32,
   },
+  // ---- 4.2: weapons with their own trick ----
+  splitter: {
+    id: 'splitter', name: '분열', desc: '벽에 맞으면 셋으로 갈라짐',
+    speed: 44, carry: 0.7, maxBounces: 1, outTime: 0.9, returnSpeed: 56, returnTurn: 9, catchDist: 1.8, radius: 0.38,
+    dmg: 36, returnDmg: 24, bounceMul: 0.2, blinkSlam: 40, blinkRadius: 3.6, knock: 5, scale: 1.05, blades: 4, trail: 0.28,
+    split: 3, shardDmg: 24,
+  },
+  saw: {
+    id: 'saw', name: '톱날', desc: '벽에 박혀 2초간 도는 덫',
+    speed: 40, carry: 0.6, maxBounces: 0, outTime: 1.0, returnSpeed: 54, returnTurn: 9, catchDist: 1.8, radius: 0.4,
+    dmg: 34, returnDmg: 26, bounceMul: 0, blinkSlam: 44, blinkRadius: 3.8, knock: 4, scale: 1.1, blades: 8, trail: 0.22,
+    stick: 2.0, sawDmg: 15, sawR: 2.0,
+  },
+  seeker: {
+    id: 'seeker', name: '추적', desc: '느리지만 적을 끝까지 따라감',
+    speed: 28, carry: 0.5, maxBounces: 2, outTime: 1.6, returnSpeed: 52, returnTurn: 8, catchDist: 1.8, radius: 0.32,
+    dmg: 21, returnDmg: 14, bounceMul: 0.15, blinkSlam: 36, blinkRadius: 3.4, knock: 3, scale: 0.9, blades: 3, trail: 0.2,
+    seek: 3.0,
+  },
+  nova: {
+    id: 'nova', name: '충격탄', desc: '처음 닿는 곳에서 폭발 · 넉백',
+    speed: 38, carry: 0.6, maxBounces: 0, outTime: 1.0, returnSpeed: 52, returnTurn: 9, catchDist: 1.9, radius: 0.4,
+    dmg: 28, returnDmg: 20, bounceMul: 0, blinkSlam: 40, blinkRadius: 3.6, knock: 6, scale: 1.2, blades: 0, trail: 0.35,
+    blast: { r: 5, dmg: 36, knock: 16 },
+  },
+  prism: {
+    id: 'prism', name: '프리즘', desc: '6번까지 튕기며 매번 빨라짐',
+    speed: 40, carry: 0.7, maxBounces: 6, outTime: 1.1, returnSpeed: 60, returnTurn: 10, catchDist: 1.7, radius: 0.3,
+    dmg: 24, returnDmg: 18, bounceMul: 0.3, blinkSlam: 38, blinkRadius: 3.4, knock: 4, scale: 0.85, blades: 6, trail: 0.2,
+    bounceSpeed: 1.12,
+  },
 };
+export const WEAPON_IDS = Object.keys(WEAPONS);
 export const DISC = WEAPONS.disc; // the baseline numbers (some systems still reason in these)
 
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
@@ -43,7 +75,12 @@ export function discModel(color, w, s = 1, glowMul = 1) {
   const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * s, 0.1 * s, 0.07 * s * (heavy ? 1.6 : 1), 20), new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: color, emissiveIntensity: glow > 1 ? 0.4 * glow : 0.2 }));
   dot.rotation.x = Math.PI / 2;
   const bladeMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f4, roughness: 0.25, metalness: 0.2 });
-  const long = w.id === 'boomerang' ? 2.6 : w.id === 'rail' ? 1.8 : 1;
+  const long = w.id === 'boomerang' ? 2.6 : w.id === 'rail' ? 1.8 : w.id === 'saw' ? 0.75 : w.id === 'prism' ? 0.7 : 1;
+  const hot = c => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(glow > 1 ? 1.4 * glow : 1) });
+  if (w.id === 'nova') { const core = new THREE.Mesh(new THREE.SphereGeometry(0.15 * s, 16, 12), hot(color)); g.add(core); }
+  if (w.id === 'prism') { const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.17 * s), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0.9, emissive: color, emissiveIntensity: glow > 1 ? 0.8 : 0.15 })); gem.scale.z = 0.6; g.add(gem); }
+  if (w.id === 'seeker') for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2, e = new THREE.Mesh(new THREE.SphereGeometry(0.035 * s, 8, 6), hot(0xffffff)); e.position.set(Math.cos(a) * 0.24 * s, Math.sin(a) * 0.24 * s, 0.035 * s); g.add(e); }
+  if (w.id === 'splitter') for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2 + 0.5, cut = new THREE.Mesh(new THREE.BoxGeometry(0.02 * s, 0.24 * s, 0.07 * s), hot(color)); cut.position.set(Math.cos(a) * 0.15 * s, Math.sin(a) * 0.15 * s, 0); cut.rotation.z = a; g.add(cut); }
   for (let i = 0; i < w.blades; i++) {
     const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06 * s, 0.16 * s * long, 0.04 * s), bladeMat);
     const a = i / w.blades * Math.PI * 2, r = (0.42 + (long - 1) * 0.08) * s;
@@ -82,6 +119,7 @@ export class Disc {
     const w = this.w;
     this.state = 'out'; this.t = 0; this.bounces = 0; this.hit.clear(); this.blinked = false; this.kills = 0; this.leg++;
     this.homing = 0; this.bonus = 0; this.lock = null; this.cone = 0; this.range = 0; this.reflectedBy = null;
+    this.stuckT = 0; this.sawT = 0; this.blasted = false; this.splitDone = false; this.seekLock = null;
     const carry = Math.max(0, playerVel.dot(dir)) * w.carry;
     this.pos.copy(origin); this.vel.copy(dir).multiplyScalar((w.speed + carry) * speedMul);
     this.holder.visible = true; this.trail.reset(); this.trail.width = w.trail;
@@ -90,7 +128,7 @@ export class Disc {
 
   recall() {
     if (this.state !== 'out') return false;
-    this.state = 'return'; this.hit.clear(); this.leg++;
+    this.state = 'return'; this.hit.clear(); this.leg++; this.stuckT = 0;
     if (this.reflectedBy) this.hit.add(this.reflectedBy);
     return true;
   }
@@ -106,8 +144,14 @@ export class Disc {
     if (this.state === 'hand') return;
     const G = this.game, col = G.arena.col, w = this.w, R = w.radius;
     this.t += dt;
-    if (this.state === 'out') {
+    if (this.state === 'out' && this.stuckT > 0) {
+      // saw: stuck in a wall, spinning — shreds whoever comes close, then flies home
+      this.stuckT -= dt; this.sawT -= dt;
+      if (this.sawT <= 0) { this.sawT = 0.3; this.hit.clear(); G.discArea(this, this.pos, w.sawR, w.sawDmg, 'saw', 0.4); }
+      if (this.stuckT <= 0) this.recall();
+    } else if (this.state === 'out') {
       if (this.homing > 0) G.discHoming(this, dt);
+      if (w.seek) G.discSeek(this, dt);
       let remain = this.vel.length() * dt;
       for (let guard = 0; guard < 5 && remain > 1e-4; guard++) {
         const sp = this.vel.length(); v1.copy(this.vel).divideScalar(sp);
@@ -118,18 +162,26 @@ export class Disc {
         const end = v2.copy(this.pos).addScaledVector(v1, travel);
         // enemies along the way (a shield or a reflect can bat the disc back)
         const block = G.discSweep(this, this.pos, end, 'out');
-        if (block) { remain -= this.pos.distanceTo(block); this.pos.copy(block); continue; }
+        if (block) { remain -= this.pos.distanceTo(block); this.pos.copy(block); if (this.state !== 'out') break; continue; }
         this.pos.copy(end); remain -= travel;
         if (!hitWall) break;
         const n = new THREE.Vector3(nx, ny, nz);
+        if (w.stick && n.y < 0.7) { // saw bites into walls (it still skims off floors)
+          this.stuckT = w.stick; this.sawT = 0; this.vel.copy(n).multiplyScalar(0.01);
+          G.onDiscBounce(this, new THREE.Vector3(hx, hy, hz), n);
+          break;
+        }
+        if (w.blast && !this.blasted) { this.blasted = true; G.discBlast(this, new THREE.Vector3(hx, hy, hz).addScaledVector(n, 0.3)); this.recall(); break; }
         const vn = this.vel.dot(n); this.vel.addScaledVector(n, -2 * vn);
         if (n.y > 0.7) this.vel.y = Math.abs(this.vel.y) * 0.6; // skim off floors instead of rocketing up
+        if (w.bounceSpeed && this.vel.length() < w.speed * 2.2) this.vel.multiplyScalar(w.bounceSpeed);
         this.bounces++;
+        if (w.split && !this.splitDone) { this.splitDone = true; G.discSplit(this, new THREE.Vector3(hx, hy, hz).addScaledVector(n, 0.3)); }
         G.onDiscBounce(this, new THREE.Vector3(hx, hy, hz), n);
         if (this.bounces > w.maxBounces) { this.recall(); break; }
       }
       // invisible glass above the outer walls and under the ceiling keeps it in the arena
-      if (this.state === 'out') {
+      if (this.state === 'out' && !(this.stuckT > 0)) {
         const A = G.arena, lim = A.half - R;
         let nx = 0, ny = 0, nz = 0;
         if (this.pos.y > A.ceiling && this.vel.y > 0) { this.pos.y = A.ceiling; this.vel.y = -this.vel.y; ny = -1; }
@@ -141,7 +193,7 @@ export class Disc {
           if (this.bounces > w.maxBounces) this.recall();
         }
       }
-      if (this.state === 'out' && this.t > w.outTime + this.bounces * 0.12) this.recall();
+      if (this.state === 'out' && !(this.stuckT > 0) && this.t > w.outTime + this.bounces * 0.12) this.recall();
     }
     if (this.state === 'return') {
       const B = this.body;
@@ -181,6 +233,6 @@ export class Disc {
     // lie roughly flat in the plane of travel and spin
     const d = v1.copy(this.vel).normalize();
     this.holder.rotation.set(-Math.PI / 2 + d.y * 0.6, 0, 0);
-    this.spinner.rotation.z += dt * (this.w.id === 'heavy' ? 16 : 30);
+    this.spinner.rotation.z += dt * (this.w.id === 'heavy' ? 16 : this.stuckT > 0 ? 55 : 30);
   }
 }

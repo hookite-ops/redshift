@@ -60,6 +60,13 @@ export class CollisionWorld {
     }
   }
 
+  // forget every triangle (a new map is about to be added)
+  clear() {
+    this.cells = new Array(this.n * this.n);
+    this.tris = []; this.nrm = []; this.box = []; this.flags = [];
+    this.count = 0; this.stamp = 0; this.marks = null;
+  }
+
   build() {
     this.T = new Float32Array(this.tris);
     this.N = new Float32Array(this.nrm);

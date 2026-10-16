@@ -20,6 +20,7 @@ export function installOnline(Game) {
   // ---------------------------------------------------------------- lifecycle
   G.startOnline = function (m) {
     const S = this.S;
+    this.netMap = (m.match && m.match.map) || 'arena';
     this.start('online');
     this.online = true; this.versus = true; this.roomCode = m.code; this.roomName = m.name;
     this.isHost = !!m.host; this.netBotSkill = m.botSkill || 'hard'; this.botSkill = this.netBotSkill;
@@ -31,7 +32,7 @@ export function installOnline(Game) {
     if (mine) { me.color = mine.color; me.css = '#' + mine.color.toString(16).padStart(6, '0'); me.kills = mine.kills; me.deaths = mine.deaths; }
     this.applyMatch(m.match);
     this.respawn(me, true);
-    this.banner('온라인', `방 ${m.code} · ${m.players.filter(p => !p.bot).length}명 접속 · ${this.match.limit}킬 먼저`, 2.6);
+    this.banner('온라인', `방 ${m.code} · ${this.mapName} · ${m.players.filter(p => !p.bot).length}명 접속 · ${this.match.limit}킬 먼저`, 2.6);
     this.cls('board', 'hidden', false);
     this._boardHtml = '';
     try { this.renderer.compile(this.scene, this.camera); } catch { }
@@ -125,10 +126,11 @@ export function installOnline(Game) {
         this.applyMatch(m);
         if (m.state === 'over' && !wasOver) this.netMatchOver(m);
         if (m.reset) {
+          if (m.map && m.map !== this.arena.mapId) { this.netMap = m.map; this.loadMap(m.map); }
           for (const p of m.players || []) { const f = by(p.id); if (f) { f.kills = 0; f.deaths = 0; f.hp = 100; f.alive = true; } }
           for (const f of this.fighters) if (!f.remote) { this.respawn(f, true); f.alive = true; f.protT = 2; }
           this.deathInfo = null;
-          this.banner('새 라운드', `${this.match.limit}킬 먼저`, 2);
+          this.banner('새 라운드', `${this.mapName} · ${this.match.limit}킬 먼저`, 2);
         }
         return;
       }
@@ -142,8 +144,8 @@ export function installOnline(Game) {
     const dir = V(m.dir);
     const c = t.updateCenter().clone(), col = new THREE.Color(t.color);
     if (!t.remote) {
-      const kn = by ? by.disc.w.knock : 5, B = t.body, push = m.kind === 'slam' ? 8 + kn * 0.3 : kn;
-      B.vel.x += dir.x * push; B.vel.z += dir.z * push; B.vel.y = Math.max(B.vel.y, m.kind === 'slam' ? 5 : 2.5); B.grounded = false;
+      const kn = by ? by.disc.w.knock : 5, B = t.body, push = m.kind === 'slam' ? 8 + kn * 0.3 : m.kind === 'blast' ? 16 : kn;
+      B.vel.x += dir.x * push; B.vel.z += dir.z * push; B.vel.y = Math.max(B.vel.y, m.kind === 'slam' ? 5 : m.kind === 'blast' ? 7 : 2.5); B.grounded = false;
       if (t.brain) t.brain.onHurt(by, m.kind);
     }
     if (t === this.me) { this.dmgFx = 1; this.shake(0.22); this.audio.hurt(); if (by) this.hurtDir(by.updateCenter()); }
@@ -196,6 +198,8 @@ export function installOnline(Game) {
       }
       case 'refl': this.reflectFx(f, at, true); break;
       case 'nade': this.throwGrenade(f, null, V(m.p), V(m.v)); break;
+      case 'blast': this.discBlast(f.disc, V(m.p), true); break;
+      case 'split': for (const v of m.v || []) this.spawnShard(f, f.color, V(m.p), V(v), 0, true); break;
       case 'say': if (typeof m.text === 'string') this.sayLine(f, m.text.slice(0, 40)); break;
     }
   };

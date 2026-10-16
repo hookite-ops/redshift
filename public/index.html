@@ -229,6 +229,9 @@ body.touch #bannerBig{font-size:44px}
 .lo button small{display:block;font-size:11px;font-weight:400;color:var(--dim);margin-top:2px}
 .lo button.on{border-color:var(--or);background:#fff4ee}
 .lo.four{grid-template-columns:repeat(4,1fr)}
+.lo.six,.lo.weapons{grid-template-columns:repeat(3,1fr)}
+.lo.weapons button,.lo.six button{padding:6px 4px;font-size:14px}
+h3 .sub{font-size:11px;letter-spacing:0;color:var(--dim);font-weight:400}
 .btn.vs{border-color:var(--ink);background:#fff}
 .btn.vs:hover{background:var(--ink)}
 .menuGrid{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;width:min(1000px,96vw);padding:30px 38px}
@@ -350,12 +353,26 @@ body.touch .kbonly{display:none}
         <button class="btn vs" data-act="ffa">FFA<small>봇 5명</small></button>
         <button class="btn" data-act="practice">연습장<small>안 죽음</small></button>
       </div>
+      <h3>맵 <span class="sub">(1V1 · FFA · 아레나)</span></h3>
+      <div class="lo six" id="maps">
+        <button data-mp="random">랜덤<small>매번 다른 맵</small></button>
+        <button data-mp="arena">화이트 아레나<small>무대 · 기둥</small></button>
+        <button data-mp="spire">스파이어<small>탑 · 점프대</small></button>
+        <button data-mp="lanes">회랑<small>세 갈래 · 가속</small></button>
+        <button data-mp="forest">기둥 숲<small>튕기기 천국</small></button>
+        <button data-mp="orbit">궤도<small>둥근 트랙</small></button>
+      </div>
       <h3>무기</h3>
-      <div class="lo four" id="weapons">
+      <div class="lo weapons" id="weapons">
         <button data-wp="disc">원반<small>기본 · 튕길수록 강함</small></button>
         <button data-wp="heavy">해머<small>느림 · 크고 묵직</small></button>
         <button data-wp="rail">레일<small>아주 빠름 · 원거리</small></button>
         <button data-wp="boomerang">부메랑<small>왕복 2타</small></button>
+        <button data-wp="splitter">분열<small>벽에서 셋으로</small></button>
+        <button data-wp="saw">톱날<small>벽에 박혀 덫</small></button>
+        <button data-wp="seeker">추적<small>끝까지 따라감</small></button>
+        <button data-wp="nova">충격탄<small>닿으면 폭발</small></button>
+        <button data-wp="prism">프리즘<small>6번 튕기며 가속</small></button>
       </div>
       <h3>스킬<span class="kbonly"> (<span data-key="skill">Q</span>)</span></h3>
       <div class="lo four" id="skills">
@@ -370,7 +387,7 @@ body.touch .kbonly{display:none}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.1 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.2 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">
@@ -389,6 +406,7 @@ body.touch .kbonly{display:none}
     <div id="oCreateOpts" class="hidden">
       <div class="oform">
         <span>방 이름</span><input id="oRoomName" maxlength="24" placeholder="자유 대전">
+        <span>맵</span><select id="oMap"><option value="rotate" selected>라운드마다 바뀜</option><option value="arena">화이트 아레나</option><option value="spire">스파이어</option><option value="lanes">회랑</option><option value="forest">기둥 숲</option><option value="orbit">궤도</option></select>
         <span>봇</span><select id="oBots"><option value="0">없음 (사람만)</option><option value="1">1명</option><option value="2">2명</option><option value="3" selected>3명</option><option value="4">4명</option><option value="5">5명</option><option value="6">6명</option></select>
         <span>봇 실력</span><select id="oBotSkill"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard" selected>어려움</option><option value="max">최강</option></select>
         <span>목표</span><select id="oLimit"><option value="10">10킬</option><option value="15" selected>15킬</option><option value="25">25킬</option></select>
@@ -457,12 +475,25 @@ body.touch .kbonly{display:none}
       <b>순간이동</b> — 우클릭. 원반이 있는 곳으로 바로 이동. 속도는 <em>유지되고 오히려 빨라지고</em>, 도착 지점 주변 적에게 충격파.<br>
       바닥의 <span style="color:var(--or)">주황 원</span>이 순간이동하면 떨어질 곳이에요.
     </div>
-    <h3>무기 (메뉴에서 선택 · 조작은 똑같음)</h3>
+    <h3>무기 9종 (메뉴에서 선택 · 조작은 똑같음)</h3>
     <div class="tips">
       <b>원반</b> — 기본. 튕길 때마다 +35%.<br>
       <b>해머</b> — 느리지만 판정이 크고 묵직함(58). 순간이동 충격파가 넓고 셈.<br>
       <b>레일</b> — 아주 빠르고 멀리 감(52). 벽에 맞으면 바로 돌아옴 — 원거리 저격용.<br>
-      <b>부메랑</b> — 금방 크게 휘어서 돌아오며 <em>가는 길·오는 길 둘 다</em> 같은 피해.
+      <b>부메랑</b> — 금방 크게 휘어서 돌아오며 <em>가는 길·오는 길 둘 다</em> 같은 피해.<br>
+      <b>분열</b> — 벽에 처음 맞는 순간 <em>파편 셋으로 갈라져</em> 부채꼴로 날아가요. 모퉁이 너머 적에게.<br>
+      <b>톱날</b> — 벽에 맞으면 <em>2초 동안 박혀서 돌며</em> 가까이 오는 적을 갈아요. 길목에 덫으로, 박힌 곳으로 순간이동도 가능.<br>
+      <b>추적</b> — 느리지만 <em>보이는 적을 끝까지 따라가요</em>. 피해는 약함.<br>
+      <b>충격탄</b> — 벽이든 적이든 <em>처음 닿는 곳에서 폭발</em>(반경 5m) · 크게 날려버림.<br>
+      <b>프리즘</b> — 작고 약하지만 <em>6번까지 튕기며 튕길 때마다 12% 빨라지고</em> 강해짐.
+    </div>
+    <h3>맵</h3>
+    <div class="tips">
+      <b>화이트 아레나</b> — 가운데 무대 · 기둥 4개 · 모서리 고지대.<br>
+      <b>스파이어</b> — 가운데 탑을 공중 데크가 둘러싸요. <em>점프대</em>로 데크와 탑 꼭대기에, 다리로 모서리 발판에.<br>
+      <b>회랑</b> — 벽으로 나뉜 세 갈래 길. 가운데 길 양 끝 <em>가속 발판</em>, 바깥 길엔 높은 통로.<br>
+      <b>기둥 숲</b> — 둥글고 네모난 기둥이 빽빽. 둥근 기둥은 예상 못 한 각도로 튕겨요.<br>
+      <b>궤도</b> — 2m 높이 둥근 트랙. <em>가속 발판</em>을 타고 돌면 엄청 빨라져요. 모서리 탑엔 점프대.
     </div>
     <h3>스킬<span class="kbonly"> (Q · 폰은 스킬 버튼)</span></h3>
     <div class="tips">
