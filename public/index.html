@@ -298,6 +298,143 @@ body.touch .kbonly{display:none}
 #labTrain.on{background:#e8202f}
 .labNote{font-size:13px;opacity:.65;line-height:1.45}
 @media (max-width:700px){.lo.five{grid-template-columns:repeat(3,1fr)}}
+/* ==================== 4.4 DESIGN — clean future sports ==================== */
+:root{--ink:#0e1116;--ink2:#3b414b;--dim:#7d8592;--line:rgba(14,17,22,.12);--paper:#eef1f4;--card:rgba(255,255,255,.86);--or:#ff4f14;--red:#ff2e43;
+  --dg:rgba(12,15,20,.74);--dg2:rgba(12,15,20,.56);--wline:rgba(255,255,255,.14);--sk:-10deg}
+body{background:var(--paper)}
+/* ---------- HUD: broadcast graphics ---------- */
+#topL{left:24px;top:18px}
+#modeTxt{display:inline-block;background:var(--ink);color:#fff;font-size:22px;letter-spacing:3px;padding:7px 16px 6px 14px;border-left:5px solid var(--or);transform:skewX(var(--sk));text-transform:uppercase}
+#subTxt{display:inline-block;margin:6px 0 0 6px;background:var(--dg2);color:#e6e9ee;font-size:12px;padding:3px 10px;transform:skewX(var(--sk));backdrop-filter:blur(6px)}
+#topR{right:24px;top:16px}
+#scoreTxt{display:inline-block;background:var(--ink);color:#fff;font-size:34px;padding:6px 18px 5px;transform:skewX(var(--sk));border-right:5px solid var(--or)}
+#comboTxt{margin-top:6px;font-size:13px;letter-spacing:1px;text-shadow:0 1px 0 #fff}
+#board{left:24px;top:92px;width:220px;background:var(--dg);border:0;padding:4px 0;color:#fff;backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.18)}
+#board div{padding:4px 12px;font-size:13px}
+#board div b{color:#fff}
+#board div small{color:rgba(255,255,255,.5)}
+#board div.me{background:linear-gradient(90deg,rgba(255,79,20,.35),rgba(255,79,20,0))}
+#board div.me span{color:#fff}
+#feed{right:24px;top:84px}
+#feed div{background:var(--dg);border:0;color:#fff;backdrop-filter:blur(6px);padding:5px 12px;font-size:12.5px}
+#feed div.kf em{color:rgba(255,255,255,.55)}
+#feed div.kf.mine{background:var(--or)}
+#feed div.kf.mine small,#feed div.kf.mine b{color:#fff}
+#feed div.kf.sys{color:#d8dce2}
+#chat{left:24px}
+#chat div{background:var(--dg2);color:#fff;backdrop-filter:blur(6px);padding:4px 10px}
+#hpBox{left:24px;bottom:24px;width:290px;background:var(--dg);padding:10px 14px 12px;backdrop-filter:blur(8px);clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%)}
+#hpRow{color:rgba(255,255,255,.55);align-items:flex-end}
+#hpNum{color:#fff;font-size:26px;line-height:1}
+#hpBar{height:9px;background:rgba(255,255,255,.12)}
+#hpFill{background:#fff;-webkit-mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%);mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%)}
+#hpBar.low #hpFill{background:var(--red)}
+#speedo{bottom:20px}
+#speedNum{font-size:44px;color:var(--ink);text-shadow:0 0 12px rgba(255,255,255,.9),0 0 2px #fff}
+#speedUnit{color:var(--ink2);font-weight:700;text-shadow:0 0 6px #fff}
+#dashPips{gap:5px}
+#dashPips i{width:28px;height:7px;background:rgba(14,17,22,.18);transform:skewX(var(--sk))}
+#dashPips i.on{background:var(--or)}
+#discBox{right:24px;bottom:24px;background:var(--dg);padding:8px 10px 8px 18px;backdrop-filter:blur(8px);color:#fff;clip-path:polygon(14px 0,100% 0,100% 100%,0 100%)}
+#discTxt{color:#fff;font-size:13px}
+#discIcon{border-color:var(--or);background:#1c2027;width:42px;height:42px}
+#skillBox{right:24px;bottom:86px;width:236px;background:var(--dg2);padding:8px 12px;backdrop-filter:blur(8px);color:#fff}
+#skillBox .sk b{border-color:rgba(255,255,255,.6)}
+#skillBox .sk em{color:rgba(255,255,255,.5)}
+#skillBox .bar{background:rgba(255,255,255,.15)}
+#skillBox .bar i{background:#fff}
+#keyHints{bottom:112px;gap:8px}
+#keyHints span{background:var(--dg2);color:#e6e9ee;padding:3px 9px 3px 4px;backdrop-filter:blur(6px)}
+#keyHints b{border:0;background:#fff;color:var(--ink)!important;padding:1px 6px}
+#cross .ring{border-color:var(--ink);box-shadow:0 0 0 1px rgba(255,255,255,.8),inset 0 0 0 1px rgba(255,255,255,.6)}
+#bannerBig{font-size:60px;text-transform:uppercase;letter-spacing:4px;text-shadow:0 2px 0 #fff,0 0 22px rgba(255,255,255,.9)}
+#bannerBig::after{content:'';display:block;width:84px;height:5px;background:var(--or);margin:12px auto 0;transform:skewX(var(--sk))}
+#bannerSmall{display:inline-block;background:var(--ink);color:#fff;padding:5px 14px;font-size:14px;transform:skewX(var(--sk))}
+#popup{text-shadow:0 0 10px #fff,0 1px 0 #fff;letter-spacing:1px}
+#hint{background:var(--ink);border-left:4px solid var(--or)}
+#deathBy{text-shadow:0 0 14px #fff,0 1px 0 #fff}
+#tut{background:var(--dg);border:0;color:#fff;backdrop-filter:blur(8px)}
+#tut div{color:#d5d9df}#tut div.done{color:rgba(255,255,255,.4)}
+#tut div::before{border-color:rgba(255,255,255,.5)}
+#tut div b{border-color:rgba(255,255,255,.7);color:#fff}
+/* touch controls: dark glass */
+#touch .tb{border:1.5px solid rgba(255,255,255,.35);background:rgba(12,15,20,.42);color:#fff;backdrop-filter:blur(4px);box-shadow:0 4px 14px rgba(0,0,0,.15)}
+#touch .tb.on{background:rgba(255,79,20,.85);border-color:#fff}
+#touch .throw{border:2.5px solid var(--or);background:rgba(255,79,20,.32)}
+#touch .blink{border:2px solid var(--or)}
+#touch .joy{border:2px solid rgba(255,255,255,.55);background:rgba(12,15,20,.18)}
+#touch .joy .knob{background:rgba(12,15,20,.6);border:2px solid rgba(255,255,255,.7)}
+#touch .tpause{background:rgba(12,15,20,.55);color:#fff;border:1.5px solid rgba(255,255,255,.35)}
+body.touch #hpBox{top:58px;bottom:auto;width:30vw;max-width:240px;padding:6px 10px 8px}
+body.touch #hpNum{font-size:18px}
+body.touch #board{top:118px}
+body.touch #modeTxt{font-size:16px;padding:5px 12px 4px 10px}
+body.touch #scoreTxt{font-size:24px;padding:4px 14px}
+body.touch #speedNum{font-size:26px}
+/* ---------- screens ---------- */
+.screen{background:linear-gradient(100deg,rgba(238,241,244,.94) 0%,rgba(238,241,244,.72) 48%,rgba(238,241,244,.25) 100%)}
+.screen.clear{background:rgba(232,236,240,.8);backdrop-filter:blur(10px)}
+.panel{background:rgba(255,255,255,.9);border:0;border-radius:4px;box-shadow:0 24px 70px rgba(14,17,22,.14),0 1px 0 rgba(14,17,22,.05);position:relative}
+.panel::before{content:'';position:absolute;left:0;top:0;width:72px;height:4px;background:var(--or)}
+.panel h2{font-size:28px;letter-spacing:4px;text-transform:uppercase}
+.panel h3{font-family:'Space Grotesk','Noto Sans KR';font-weight:700;font-size:11px;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
+.btn{border:1px solid var(--line);border-radius:3px;background:#fff;font-size:17px;box-shadow:0 1px 0 rgba(14,17,22,.04);position:relative}
+.btn:hover{background:var(--ink);border-color:var(--ink)}
+.btn.main{background:var(--or);border-color:var(--or)}
+.btn.main::after,.btn.online::after,.btn.vs::after{content:'→';position:absolute;right:14px;top:50%;transform:translateY(-50%);font-family:'Space Grotesk';font-weight:700;opacity:.6}
+.btn.online{background:var(--ink);border-color:var(--ink)}
+.btn.vs{border-color:var(--line);background:#fff}
+.btn:disabled:hover{background:#fff;color:var(--ink)}
+.lo{gap:5px}
+.lo button{border:1px solid var(--line);border-radius:3px;background:#fff;transition:background .1s,color .1s}
+.lo button:hover{border-color:var(--ink)}
+.lo button.on{background:var(--ink);border-color:var(--ink);color:#fff}
+.lo button.on small{color:var(--or)}
+#botskill button.ai{border-color:var(--or)}
+#botskill button.ai.on{background:var(--or);border-color:var(--or)}#botskill button.ai.on small{color:#fff}
+/* main menu: logo over the live arena on the left, a control card on the right */
+#menu{background:linear-gradient(100deg,rgba(238,241,244,.96) 0%,rgba(238,241,244,.86) 38%,rgba(238,241,244,.2) 70%,rgba(238,241,244,0) 100%)}
+#menu .menuGrid{background:transparent;box-shadow:none;padding:0;width:min(1120px,96vw);grid-template-columns:1fr 470px;align-items:center}
+#menu .menuGrid::before{display:none}
+#menu .menuGrid>div:last-child{background:rgba(255,255,255,.92);border-radius:4px;padding:22px 24px;box-shadow:0 24px 70px rgba(14,17,22,.16);max-height:92vh;overflow:auto;position:relative}
+#menu .menuGrid>div:last-child::before{content:'';position:absolute;left:0;top:0;width:72px;height:4px;background:var(--or)}
+.logo{font-size:96px;letter-spacing:-3px;line-height:.82}
+.logo span{display:inline-block;transform:skewX(var(--sk))}
+.tag{font-size:19px;margin-top:18px}
+.tag2{font-size:13px}
+.cheat{border-top:1px solid var(--line);max-width:470px}
+.cheat kbd{border:0;background:var(--ink);color:#fff;border-radius:2px;padding:3px 8px}
+.cheat kbd.o{background:var(--or);color:#fff}
+.leftsel{max-width:470px}
+#best{font-family:'Space Grotesk','Noto Sans KR'}
+.credits{letter-spacing:3px;color:var(--ink2);opacity:.6}
+#loading{background:var(--ink);color:#fff}
+#loading::after{content:'';position:absolute;left:50%;top:calc(50% + 30px);width:60px;height:3px;margin-left:-30px;background:var(--or);animation:ld 1s ease-in-out infinite alternate}
+@keyframes ld{from{transform:scaleX(.2)}to{transform:scaleX(1)}}
+#clickTo{border-left:4px solid var(--or)}
+#oRooms .room{border:1px solid var(--line);border-radius:3px}
+.oform input,.oform select,.codebox input{border:1px solid var(--line);border-radius:3px}
+.key{border:1px solid var(--ink);border-radius:3px}
+.labChart{border-radius:3px}
+#comboTxt:not(:empty){display:inline-block;background:var(--dg2);color:#fff;padding:2px 10px;transform:skewX(var(--sk));text-shadow:none}
+#menu .menuGrid>div:last-child .btn{padding:9px 14px;margin-bottom:6px}
+#menu .menuGrid>div:last-child h3{margin:10px 0 5px}
+#menu .menuGrid>div:last-child .lo button{padding:6px 4px;font-size:13.5px}
+#menu .menuGrid>div:last-child .lo button small{font-size:10.5px}
+#menu .row3[style]{margin-top:10px!important}
+#menu .row3 .btn{margin-bottom:0}
+.lo{align-items:stretch}
+.lo button{display:flex;flex-direction:column;align-items:center;justify-content:center}
+body.touch #chat{left:50%;bottom:17vmin;transform:translateX(-50%);width:auto;align-items:center}
+body.touch #chat div{align-self:center}
+body.touch #board{width:200px;transform:scale(.82);transform-origin:top left;top:112px}
+body.touch #feed{top:62px}
+@media (max-width:900px),(max-height:560px){
+  #menu .menuGrid{grid-template-columns:1fr 1.25fr;gap:14px;width:98vw}
+  #menu .menuGrid>div:last-child{padding:12px 14px;max-height:94vh}
+  .logo{font-size:44px}
+}
+@media (max-width:640px){#menu .menuGrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -409,7 +546,7 @@ body.touch .kbonly{display:none}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.3 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.4 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">

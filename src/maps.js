@@ -12,9 +12,10 @@ const Q4 = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 
 export const MAPS = {
   arena: {
-    id: 'arena', name: '화이트 아레나', desc: '가운데 무대 · 기둥 4개 · 모서리 고지대', accent: 0xff5a1f, seed: 42,
+    id: 'arena', label: 'WHITE ARENA', name: '화이트 아레나', desc: '가운데 무대 · 기둥 4개 · 모서리 고지대', accent: 0xff5a1f, seed: 42,
     build(A) {
       A.cyl(0, 0, 0, 7, 1, 'top');
+      A.logo(0, 1, 0, 12.6);
       const rim = new THREE.TorusGeometry(7.02, 0.06, 6, 96); rim.rotateX(Math.PI / 2);
       A.deco(rim, 0, 1.0, 0, 'glow');
       A.deco(new THREE.CylinderGeometry(7.04, 7.04, 0.3, 64, 1, true), 0, 0.15, 0, 'dark');
@@ -45,7 +46,7 @@ export const MAPS = {
   },
 
   spire: {
-    id: 'spire', name: '스파이어', desc: '탑과 공중 데크 · 점프대 · 높이 싸움', accent: 0x19c3ff, wallH: 14, headroom: 22, seed: 7,
+    id: 'spire', label: 'SPIRE', name: '스파이어', desc: '탑과 공중 데크 · 점프대 · 높이 싸움', accent: 0x19c3ff, wallH: 14, headroom: 22, seed: 7,
     build(A) {
       // the tower and the deck around it (top at 6 m), on dark columns
       A.box(0, 0, 0, 8, 16, 8, 'block', 0, { trim: true });
@@ -77,7 +78,7 @@ export const MAPS = {
   },
 
   lanes: {
-    id: 'lanes', name: '회랑', desc: '벽으로 나뉜 세 갈래 길 · 가속 발판 · 벽 튕기기', accent: 0xff2d8a, wallH: 10, seed: 19,
+    id: 'lanes', label: 'THE LANES', name: '회랑', desc: '벽으로 나뉜 세 갈래 길 · 가속 발판 · 벽 튕기기', accent: 0xff2d8a, wallH: 10, seed: 19,
     build(A) {
       // two divider walls with three doorways each
       for (const sz of [-1, 1]) for (const [x0, x1] of [[-36, -20], [-14, -3], [3, 14], [20, 36]]) A.box((x0 + x1) / 2, 0, sz * 12, x1 - x0, 4.5, 1, 'block', 0, { trim: true });
@@ -105,7 +106,7 @@ export const MAPS = {
   },
 
   forest: {
-    id: 'forest', name: '기둥 숲', desc: '빽빽한 기둥 사이 · 튕겨 맞히기 천국', accent: 0x26d97a, seed: 31,
+    id: 'forest', label: 'PILLAR FOREST', name: '기둥 숲', desc: '빽빽한 기둥 사이 · 튕겨 맞히기 천국', accent: 0x26d97a, seed: 31,
     build(A) {
       const r = rng(31), S = 12.5;
       for (let gx = -3; gx <= 3; gx++) for (let gz = -3; gz <= 3; gz++) {
@@ -134,7 +135,7 @@ export const MAPS = {
   },
 
   orbit: {
-    id: 'orbit', name: '궤도', desc: '둥근 고가 트랙 · 가속 발판으로 빙글빙글', accent: 0xffbf1a, seed: 57,
+    id: 'orbit', label: 'ORBIT', name: '궤도', desc: '둥근 고가 트랙 · 가속 발판으로 빙글빙글', accent: 0xffbf1a, seed: 57,
     build(A) {
       // raised ring track (r 29–39, 2 m high)
       const N = 36;

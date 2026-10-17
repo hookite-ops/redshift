@@ -38,39 +38,54 @@ export class Fighter {
   // ---------------- bot body ----------------
   buildModel() {
     // suit: dark under-layer, white armour plates, team-coloured glow lines (visor, belt, spine) that bloom
-    const glowK = (this.game.Q && this.game.Q.post) ? 4 : 1.3;
-    const dark = new THREE.MeshStandardMaterial({ color: 0x1c1c22, roughness: 0.5, metalness: 0.35 });
+    const glowK = (this.game.Q && this.game.Q.post) ? 2.4 : 1.3;
+    const dark = new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: 0.45, metalness: 0.45 });
     const team = this.teamMat = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.35, emissive: new THREE.Color(this.color).multiplyScalar(0.3) });
-    const white = new THREE.MeshStandardMaterial({ color: 0xf4f4f1, roughness: 0.32, metalness: 0.05 });
+    const white = new THREE.MeshStandardMaterial({ color: 0xf7f7f5, roughness: 0.22, metalness: 0.05, envMapIntensity: 1.3 });
     const glow = this.glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(this.color).multiplyScalar(glowK) });
     this.glowK = glowK;
     const m = (g, mat, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.castShadow = true; return o; };
     const rbox = (w, h, d) => { const g = new THREE.CapsuleGeometry(Math.min(w, d) / 2, h, 4, 10); g.scale(w / Math.min(w, d), 1, d / Math.min(w, d)); return g; };
     const root = this.model = new THREE.Group();
     const body = this.torso = new THREE.Group(); root.add(body);
-    body.add(m(new THREE.CapsuleGeometry(0.29, 0.52, 4, 12), dark, 0, 0.98, 0));
-    body.add(m(rbox(0.5, 0.2, 0.2), white, 0, 1.2, -0.2));                  // chest plate
-    body.add(m(new THREE.BoxGeometry(0.06, 0.16, 0.02), glow, 0, 1.2, -0.31));  // chest light
-    for (const sx of [-1, 1]) { const sp = m(new THREE.SphereGeometry(0.15, 14, 10), white, sx * 0.33, 1.37, 0); sp.scale.set(1, 0.75, 1.1); body.add(sp); }
-    const belt = m(new THREE.TorusGeometry(0.3, 0.035, 8, 32), glow, 0, 0.84, 0); belt.rotation.x = Math.PI / 2; body.add(belt);
-    body.add(m(new THREE.BoxGeometry(0.4, 0.42, 0.16), dark, 0, 1.16, 0.27));  // pack
-    body.add(m(new THREE.BoxGeometry(0.42, 0.06, 0.17), team, 0, 1.38, 0.27));
-    body.add(m(new THREE.BoxGeometry(0.05, 0.3, 0.02), glow, 0, 1.15, 0.355)); // spine light
-    this.head = m(new THREE.SphereGeometry(0.21, 20, 14), white, 0, 1.64, 0); body.add(this.head);
-    this.head.add(m(new THREE.SphereGeometry(0.205, 16, 10, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), dark, 0, -0.005, 0)); // jaw
-    const visor = m(new THREE.CylinderGeometry(0.215, 0.215, 0.07, 20, 1, true, Math.PI * 0.62, Math.PI * 0.76), glow, 0, 0.02, 0); this.head.add(visor);
+    const cap = (r, l, mat, x, y, z) => m(new THREE.CapsuleGeometry(r, l, 4, 10), mat, x, y, z);
+    // core: graphite bodysuit, white shell plates, a team-coloured stripe and glowing accents
+    body.add(cap(0.16, 0.22, dark, 0, 1.05, 0));                                     // waist
+    body.add(m(rbox(0.34, 0.12, 0.2), dark, 0, 0.93, 0));                            // pelvis
+    const chest = m(rbox(0.44, 0.26, 0.26), white, 0, 1.33, -0.01); body.add(chest);   // chest shell
+    body.add(m(new THREE.BoxGeometry(0.07, 0.3, 0.02), team, 0, 1.3, -0.145));        // front stripe
+    body.add(m(new THREE.BoxGeometry(0.26, 0.022, 0.02), glow, 0, 1.4, -0.152));      // chest light
+    const belt = m(new THREE.TorusGeometry(0.175, 0.016, 6, 32), glow, 0, 0.99, 0); belt.rotation.x = Math.PI / 2; belt.scale.set(1.05, 0.75, 1); body.add(belt);
+    for (const sx of [-1, 1]) { const sp = m(new THREE.SphereGeometry(0.1, 14, 10), white, sx * 0.26, 1.45, 0); sp.scale.set(1.15, 0.8, 1.1); body.add(sp); }
+    body.add(m(rbox(0.22, 0.3, 0.08), dark, 0, 1.3, 0.15));                          // back fin
+    body.add(m(new THREE.BoxGeometry(0.03, 0.26, 0.02), glow, 0, 1.3, 0.195));        // spine light
+    body.add(m(new THREE.CylinderGeometry(0.055, 0.065, 0.1, 10), dark, 0, 1.55, 0));  // neck
+    // helmet: smooth white shell, dark face plate, thin glowing visor slit
+    this.head = m(new THREE.SphereGeometry(0.15, 22, 16), white, 0, 1.7, 0); this.head.scale.set(0.95, 1.08, 1.05); body.add(this.head);
+    this.head.add(m(new THREE.SphereGeometry(0.152, 20, 12, Math.PI * 0.62, Math.PI * 0.76, Math.PI * 0.32, Math.PI * 0.36), dark, 0, 0, 0));
+    this.head.add(m(new THREE.CylinderGeometry(0.155, 0.155, 0.028, 22, 1, true, Math.PI * 0.68, Math.PI * 0.64), glow, 0, 0.012, 0));
+    this.head.add(m(new THREE.BoxGeometry(0.03, 0.02, 0.24), team, 0, 0.15, 0.02));    // crest
+    // off arm (static) — upper white, forearm graphite
+    const offArm = new THREE.Group(); offArm.position.set(-0.29, 1.43, 0); offArm.rotation.set(0.25, 0, 0.12); body.add(offArm);
+    offArm.add(cap(0.06, 0.2, white, 0, -0.14, 0)); offArm.add(cap(0.052, 0.2, dark, 0, -0.38, -0.02));
+    offArm.add(m(new THREE.BoxGeometry(0.11, 0.02, 0.11), glow, 0, -0.27, 0));
+    // legs: white thigh, knee cap, graphite shin, white boot with a glowing sole line
     this.legs = [];
     for (const s of [-1, 1]) {
-      const leg = new THREE.Group(); leg.position.set(s * 0.13, 0.55, 0);
-      leg.add(m(new THREE.CapsuleGeometry(0.09, 0.36, 4, 8), dark, 0, -0.27, 0));
-      leg.add(m(rbox(0.13, 0.08, 0.1), white, 0, -0.24, -0.07));            // knee pad
-      leg.add(m(new THREE.BoxGeometry(0.15, 0.1, 0.26), white, 0, -0.52, -0.04)); // boot
+      const leg = new THREE.Group(); leg.position.set(s * 0.11, 0.92, 0);
+      leg.add(cap(0.08, 0.26, white, 0, -0.2, 0));
+      leg.add(m(rbox(0.11, 0.06, 0.08), team, 0, -0.43, -0.06));
+      leg.add(cap(0.062, 0.28, dark, 0, -0.62, 0));
+      leg.add(m(rbox(0.12, 0.08, 0.26), white, 0, -0.86, -0.04));
+      leg.add(m(new THREE.BoxGeometry(0.125, 0.018, 0.27), glow, 0, -0.905, -0.04));
       root.add(leg); this.legs.push(leg);
     }
     // throwing arm with a small copy of the disc
-    this.arm = new THREE.Group(); this.arm.position.set(0.36, 1.28, 0); body.add(this.arm);
-    this.arm.add(m(new THREE.CapsuleGeometry(0.075, 0.36, 4, 8), dark, 0, -0.22, 0));
-    const hd = this.handDisc = new THREE.Group(); hd.position.set(0.04, -0.45, -0.12);
+    this.arm = new THREE.Group(); this.arm.position.set(0.29, 1.43, 0); body.add(this.arm);
+    this.arm.add(cap(0.06, 0.2, white, 0, -0.14, 0));
+    this.arm.add(cap(0.052, 0.2, dark, 0, -0.38, 0));
+    this.arm.add(m(new THREE.BoxGeometry(0.11, 0.02, 0.11), glow, 0, -0.27, 0));
+    const hd = this.handDisc = new THREE.Group(); hd.position.set(0.04, -0.52, -0.1);
     hd.rotation.y = Math.PI / 2;
     this.arm.add(hd);
     this.setHandDisc();
@@ -114,11 +129,13 @@ export class Fighter {
     const g = this.tagCanvas.getContext('2d'), hp = Math.max(0, Math.round(this.hp));
     if (hp === this._tagHp) return; this._tagHp = hp;
     g.clearRect(0, 0, 256, 64);
-    g.font = '700 26px "Space Grotesk", "Noto Sans KR", sans-serif'; g.textAlign = 'center';
-    g.lineWidth = 5; g.strokeStyle = 'rgba(255,255,255,.95)'; g.strokeText(this.name, 128, 27);
-    g.fillStyle = this.css; g.fillText(this.name, 128, 27);
-    g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(48, 40, 160, 10);
-    g.fillStyle = hp < 35 ? '#e8202f' : '#16161a'; g.fillRect(48, 40, 160 * hp / 100, 10);
+    g.font = '700 24px "Space Grotesk", "Noto Sans KR", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const w = Math.min(230, g.measureText(this.name).width + 44), x = 128 - w / 2;
+    g.fillStyle = 'rgba(14,17,22,.82)'; g.beginPath(); g.roundRect ? g.roundRect(x, 4, w, 32, 6) : g.rect(x, 4, w, 32); g.fill();
+    g.fillStyle = this.css; g.fillRect(x + 8, 12, 5, 16);
+    g.fillStyle = '#fff'; g.fillText(this.name, 128 + 6, 21);
+    g.fillStyle = 'rgba(14,17,22,.55)'; g.fillRect(64, 44, 128, 8);
+    g.fillStyle = hp < 35 ? '#ff3b4a' : this.css; g.fillRect(65, 45, 126 * hp / 100, 6);
     this.tagTex.needsUpdate = true;
   }
   renderModel(dt, alpha, t) {

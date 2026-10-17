@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { CollisionWorld, SURF } from './physics.js';
 import { uvBox, wedge } from './geom.js';
-import { floorTextures, panelTextures, floorAO } from './textures.js';
+import { floorTextures, panelTextures, floorAO, graphiteTextures, ledBoardTexture, courtLogoTexture } from './textures.js';
 import { MAPS } from './maps.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
@@ -35,24 +35,36 @@ export class Arena {
     this.half = 50;
     this.objects = [];
     const hi = Q.shadows, S = hi ? 1024 : 512;
-    const fl = floorTextures(S), pn = panelTextures(S);
-    const panel = (color, rough, ns = 0.6) => new THREE.MeshStandardMaterial({ color, map: pn.map, normalMap: pn.normalMap, normalScale: new THREE.Vector2(ns, ns), roughnessMap: pn.roughnessMap, roughness: rough, metalness: 0 });
+    const fl = floorTextures(S), pn = panelTextures(S), gr = graphiteTextures(hi ? 512 : 256);
+    const panel = (color, ns = 0.5) => new THREE.MeshStandardMaterial({ color, map: pn.map, normalMap: pn.normalMap, normalScale: new THREE.Vector2(ns, ns), roughnessMap: pn.roughnessMap, roughness: 0.95, metalness: 0, envMapIntensity: 0.7 });
+    const graphite = (color = 0xffffff, rough = 0.9, metal = 0.35) => new THREE.MeshStandardMaterial({ color, map: gr.map, roughnessMap: gr.roughnessMap, roughness: rough, metalness: metal, envMapIntensity: 1.1 });
+    this.ledTex = ledBoardTexture('WHITE ARENA');
+    this.logoTex = courtLogoTexture(hi ? 1024 : 512);
     this.M = {
-      floor: new THREE.MeshStandardMaterial({ map: fl.map, normalMap: fl.normalMap, normalScale: new THREE.Vector2(0.7, 0.7), roughnessMap: fl.roughnessMap, roughness: 0.75, metalness: 0, envMapIntensity: 0.9 }),
-      wall: shade(panel(0xf4f4f2, 0.8)),
-      block: shade(panel(0xffffff, 0.7)),
-      top: shade(panel(0xe9e9e6, 0.75), { base: 0.66 }),
-      ramp: shade(new THREE.MeshStandardMaterial({ color: 0xe2e2df, map: fl.map, normalMap: fl.normalMap, roughness: 0.7 }), { base: 0.7 }),
-      dark: shade(new THREE.MeshStandardMaterial({ color: 0x2a2a2f, roughness: 0.5, metalness: 0.3 }), { base: 0.8 }),
+      // polished resin court: satin, reflects the sky and the light strips
+      floor: new THREE.MeshStandardMaterial({ color: 0xe6e8ec, map: fl.map, normalMap: fl.normalMap, normalScale: new THREE.Vector2(0.6, 0.6), roughnessMap: fl.roughnessMap, roughness: 0.85, metalness: 0.05, envMapIntensity: 1.25 }),
+      wall: shade(panel(0xf6f6f4), { base: 0.72 }),
+      block: shade(panel(0xffffff), { base: 0.7 }),
+      top: shade(panel(0xd9dce1), { base: 0.72 }),
+      ramp: shade(new THREE.MeshStandardMaterial({ color: 0xc9ccd2, map: fl.map, normalMap: fl.normalMap, roughnessMap: fl.roughnessMap, roughness: 1, metalness: 0.05 }), { base: 0.75 }),
+      dark: shade(graphite(), { base: 0.85 }),
+      stand: new THREE.MeshStandardMaterial({ color: 0x8b929d, roughness: 0.75, metalness: 0.1 }),
+      canopy: panel(0xeef0f2),
+      glass: new THREE.MeshStandardMaterial({ color: 0x2a3a4e, roughness: 0.12, metalness: 0.9, envMapIntensity: 1.6 }),
       glow: new THREE.MeshBasicMaterial({ color: 0xffffff }),
       glowSoft: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+      white: new THREE.MeshBasicMaterial({ color: 0xffffff }),
       pad: new THREE.MeshBasicMaterial({ color: 0xffffff }),
-      paint: new THREE.MeshStandardMaterial({ color: 0xff7a45, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
-      paintDark: new THREE.MeshStandardMaterial({ color: 0x9a9a96, roughness: 0.7, transparent: true, opacity: 0.55, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+      led: new THREE.MeshBasicMaterial({ map: this.ledTex, color: 0xffffff }),
+      logo: new THREE.MeshBasicMaterial({ map: this.logoTex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }),
+      paint: new THREE.MeshStandardMaterial({ color: 0xff7a45, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
+      paintDark: new THREE.MeshStandardMaterial({ color: 0x3a3e46, roughness: 0.6, transparent: true, opacity: 0.55, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     };
     this.aoU = { value: null };
     shade(this.M.floor, { floor: true, aoU: this.aoU, E: 70 });
-    this.edgeMat = new THREE.LineBasicMaterial({ color: 0x9c9c98, transparent: true, opacity: 0.35 });
+    this.edgeMat = new THREE.LineBasicMaterial({ color: 0x5d636c, transparent: true, opacity: 0.18 });
+    // web fonts arrive after the first build: redraw the LED boards and the court logo once they do
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.redrawDecals()).catch(() => { });
     this.load('arena');
   }
 
@@ -73,6 +85,8 @@ export class Arena {
     this.M.glowSoft.color.copy(acc).lerp(new THREE.Color(0xffffff), 0.65).multiplyScalar(2.6);
     this.M.pad.color.copy(acc).multiplyScalar(4);
     this.M.paint.color.copy(acc).lerp(new THREE.Color(0xffffff), 0.15);
+    this.M.logo.color.copy(acc).lerp(new THREE.Color(0x2a2d33), 0.25);
+    this.redrawDecals();
     this.wallH = map.wallH || 12;
     this.ceiling = this.wallH + (map.headroom || 14);
     this.buildShell();
@@ -87,6 +101,20 @@ export class Arena {
     this.spawnHigh = this.spawnHigh.filter(p => this.col.capsuleFree(p.x, p.y + 0.05, p.z, 0.42, 1.8));
     if (!this.cover.length) this.cover.push([0, 0]);
     return map;
+  }
+
+  redrawDecals() {
+    const map = this.map; if (!map) return;
+    const css = '#' + new THREE.Color(map.accent).getHexString();
+    const old = this.ledTex; this.ledTex = ledBoardTexture(String(map.label || map.name).toUpperCase(), css);
+    this.M.led.map = this.ledTex; this.M.led.needsUpdate = true; if (old) old.dispose();
+    const ol = this.logoTex; this.logoTex = courtLogoTexture(this.Q.shadows ? 1024 : 512);
+    this.M.logo.map = this.logoTex; this.M.logo.needsUpdate = true; if (ol) ol.dispose();
+  }
+  // flat decal lying on a surface at height y (the RED/SHIFT court logo)
+  logo(x, y, z, size, ry = 0) {
+    const g = new THREE.PlaneGeometry(size, size); g.rotateX(-Math.PI / 2);
+    this.deco(g, x, y + 0.012, z, 'logo', ry);
   }
 
   add(geo, matrix, key, { collide = true, edges = true } = {}) {
@@ -104,9 +132,15 @@ export class Arena {
     _e.set(0, ry, 0); _q.setFromEuler(_e); _m.compose(_p.set(x, y + h / 2, z), _q, _s);
     this.add(uvBox(w, h, d, 8, 8), _m, key, o);
     if (o.trim) {
-      if (y < 0.05) this.deco(new THREE.BoxGeometry(w + 0.06, 0.35, d + 0.06), x, 0.175, z, 'dark', ry);
-      if (h > 2.5) this.deco(new THREE.BoxGeometry(w + 0.05, 0.13, d + 0.05), x, y + h - 0.7, z, 'glow', ry);
-      else this.deco(new THREE.BoxGeometry(w + 0.04, 0.06, d + 0.04), x, y + h - 0.03, z, 'glowSoft', ry);
+      // graphite plinth, graphite cap, one thin accent line under the cap
+      if (y < 0.05) this.deco(new THREE.BoxGeometry(w + 0.08, 0.5, d + 0.08), x, 0.25, z, 'dark', ry);
+      if (h > 2.5) {
+        this.deco(new THREE.BoxGeometry(w + 0.08, 0.32, d + 0.08), x, y + h - 0.14, z, 'dark', ry);
+        this.deco(new THREE.BoxGeometry(w + 0.03, 0.07, d + 0.03), x, y + h - 0.42, z, 'glow', ry);
+      } else {
+        this.deco(new THREE.BoxGeometry(w + 0.06, 0.12, d + 0.06), x, y + h - 0.04, z, 'dark', ry);
+        this.deco(new THREE.BoxGeometry(w + 0.025, 0.05, d + 0.025), x, y + h - 0.16, z, 'glowSoft', ry);
+      }
     }
   }
   // round column / disc. o.trim like box
@@ -116,9 +150,11 @@ export class Arena {
     _m.makeTranslation(x, y + h / 2, z);
     this.add(new THREE.CylinderGeometry(r, r, h, seg), _m, key, o);
     if (o.trim) {
-      if (y < 0.05) this.deco(new THREE.CylinderGeometry(r + 0.04, r + 0.04, 0.35, seg), x, 0.175, z, 'dark');
-      const band = new THREE.TorusGeometry(r + 0.02, 0.06, 6, seg * 2); band.rotateX(Math.PI / 2);
-      this.deco(band, x, y + h - (h > 2.5 ? 0.7 : 0.03), z, h > 2.5 ? 'glow' : 'glowSoft');
+      if (y < 0.05) this.deco(new THREE.CylinderGeometry(r + 0.05, r + 0.05, 0.5, seg), x, 0.25, z, 'dark');
+      const tall = h > 2.5;
+      this.deco(new THREE.CylinderGeometry(r + 0.05, r + 0.05, tall ? 0.32 : 0.12, seg), x, y + h - (tall ? 0.14 : 0.04), z, 'dark');
+      const band = new THREE.TorusGeometry(r + 0.02, tall ? 0.04 : 0.03, 6, seg * 2); band.rotateX(Math.PI / 2);
+      this.deco(band, x, y + h - (tall ? 0.42 : 0.16), z, tall ? 'glow' : 'glowSoft');
     }
   }
   // wedge: low end at (x, z), rising along (sin ry, cos ry) by h over len
@@ -173,29 +209,56 @@ export class Arena {
     this.box(H + T / 2, 0, 0, T, WH, H * 2, 'wall');
     const bar = (w, h, d) => new THREE.BoxGeometry(w, h, d);
     for (const [x, z, ry] of [[0, -H, 0], [0, H, Math.PI], [-H, 0, Math.PI / 2], [H, 0, -Math.PI / 2]]) {
-      const inward = new THREE.Vector3(-x, 0, -z).normalize(), along = new THREE.Vector3(Math.cos(ry), 0, -Math.sin(ry));
-      const L = H * 2;
-      this.deco(bar(L, 0.45, 0.08), x + inward.x * 0.04, 0.225, z + inward.z * 0.04, 'dark', ry);
-      this.deco(bar(L, 0.16, 0.06), x + inward.x * 0.04, WH - 0.7, z + inward.z * 0.04, 'glow', ry);
-      this.deco(bar(L, 0.05, 0.05), x + inward.x * 0.03, WH * 0.52, z + inward.z * 0.03, 'glowSoft', ry);
-      for (let k = -4; k <= 4; k++) this.deco(bar(0.12, 3.2, 0.06), x + inward.x * 0.035 + along.x * k * 10, WH - 3.6, z + inward.z * 0.035 + along.z * k * 10, 'glowSoft', ry);
+      const inward = new THREE.Vector3(-x, 0, -z).normalize();
+      const L = H * 2, at = (k, y, w, h, dd, key) => this.deco(bar(w, h, dd), x + inward.x * k, y, z + inward.z * k, key, ry);
+      at(0.08, 1.2, L, 2.4, 0.16, 'dark');                 // graphite kick panel
+      at(0.17, 2.46, L, 0.05, 0.04, 'glowSoft');           // light line on its top edge
+      at(0.1, 3.55, L, 1.1, 0.06, 'led');                  // stadium LED ribbon
+      at(0.14, 2.98, L, 0.06, 0.1, 'dark'); at(0.14, 4.12, L, 0.06, 0.1, 'dark');
+      at(0.05, WH - 0.55, L, 0.12, 0.05, 'glow');          // accent line under the coping
+      at(-0.2, WH + 0.15, L + 4.4, 0.3, 2.5, 'dark');      // graphite coping
+    }
+    // court boundary line 3 m in from the walls
+    for (const [x, z, w, d] of [[0, -(H - 3), (H - 3) * 2, 0.12], [0, H - 3, (H - 3) * 2, 0.12], [-(H - 3), 0, 0.12, (H - 3) * 2], [H - 3, 0, 0.12, (H - 3) * 2]]) {
+      const g = new THREE.PlaneGeometry(w, d); g.rotateX(-Math.PI / 2); this.deco(g, x, 0.008, z, 'paintDark');
     }
   }
 
-  // white monoliths beyond the walls with lit slits, and a halo ring over everything
+  // the stadium around the court: stepped stands on all four sides under a floating canopy, floodlight
+  // masts in the corners, and a ring of dark glass towers in the distance
   skyline(seed) {
     const bar = (w, h, d) => new THREE.BoxGeometry(w, h, d);
     const r = (i => () => ((i = (i * 16807) % 2147483647) / 2147483647))(seed);
-    for (let i = 0; i < 26; i++) {
-      const a = i / 26 * Math.PI * 2 + r() * 0.12, d = 92 + r() * 70, h = 26 + r() * 70, w = 8 + r() * 14;
-      const x = Math.sin(a) * d, z = Math.cos(a) * d;
-      this.deco(uvBox(w, h, w * (0.6 + r() * 0.8), 8, 8).translate(0, h / 2 - 2, 0), x, 0, z, 'wall', -a);
-      if (r() < 0.7) this.deco(bar(0.4, h * 0.6, 0.4), x - Math.sin(a) * w * 0.45, h * 0.45, z - Math.cos(a) * w * 0.45, 'glowSoft', -a);
+    const H = this.half, WH = this.wallH;
+    for (const [sx, sz, ry] of [[0, -1, 0], [0, 1, Math.PI], [-1, 0, Math.PI / 2], [1, 0, -Math.PI / 2]]) {
+      const out = new THREE.Vector3(sx, 0, sz), place = (dist, y, w, h, d, key) => this.deco(bar(w, h, d), out.x * dist, y, out.z * dist, key, ry);
+      place(H + 5, WH - 0.6, 108, 1.2, 8, 'dark');           // concourse behind the wall
+      for (let i = 0; i < 9; i++) {                          // 9 rows of seating rising away
+        const d0 = H + 9 + i * 3.4, y0 = WH + 0.6 + i * 2.1, w = 112 + i * 7;
+        place(d0 + 1.7, y0 / 2, w, y0, 3.4, 'stand');
+        place(d0 + 0.1, y0 + 0.02, w, 0.06, 0.08, i % 3 === 2 ? 'glowSoft' : 'dark');
+      }
+      place(H + 41, (WH + 20) / 2, 180, WH + 20, 2, 'stand'); // back wall
+      place(H + 25, WH + 30, 176, 0.9, 36, 'canopy');         // floating canopy
+      place(H + 7.2, WH + 29.4, 176, 0.5, 0.5, 'dark');
+      place(H + 7.0, WH + 29.0, 176, 0.12, 0.12, 'glow');
+      for (let k = -3; k <= 3; k++) {
+        const along = new THREE.Vector3(Math.cos(ry), 0, -Math.sin(ry)).multiplyScalar(k * 25);
+        this.deco(bar(0.8, 12, 0.8), out.x * (H + 40) + along.x, WH + 24, out.z * (H + 40) + along.z, 'dark', ry);
+      }
     }
-    const halo = new THREE.TorusGeometry(88, 0.55, 8, 200); halo.rotateX(Math.PI / 2);
-    this.deco(halo, 0, 78, 0, 'glow');
-    const halo2 = new THREE.TorusGeometry(88, 2.4, 6, 120); halo2.rotateX(Math.PI / 2);
-    this.deco(halo2, 0, 80.5, 0, 'dark');
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {   // corner floodlight masts
+      const x = sx * (H + 30), z = sz * (H + 30), a = Math.atan2(sx, sz);
+      this.deco(new THREE.CylinderGeometry(0.7, 1.2, 64, 10), x, 32, z, 'dark');
+      this.deco(bar(12, 6, 0.8), x, 64, z, 'dark', a);
+      this.deco(bar(11, 5, 0.2), x - sx * 0.35, 64, z - sz * 0.35, 'white', a);
+    }
+    for (let i = 0; i < 22; i++) {                           // distant city: dark glass towers
+      const a = i / 22 * Math.PI * 2 + r() * 0.15, d = 175 + r() * 80, h = 50 + r() * 120, w = 14 + r() * 18, dd = 14 + r() * 16;
+      const x = Math.sin(a) * d, z = Math.cos(a) * d;
+      this.deco(bar(w, h, dd), x, h / 2 - 2, z, 'glass', -a);
+      if (r() < 0.6) this.deco(bar(0.5, h * 0.8, dd + 0.2), x, h * 0.45, z, 'glowSoft', -a);
+    }
   }
 
   finalize() {
@@ -203,8 +266,8 @@ export class Arena {
       const g = mergeGeometries(geos, false);
       for (const x of geos) x.dispose();
       const mesh = new THREE.Mesh(g, this.M[key]);
-      const lit = key !== 'glow' && key !== 'glowSoft' && key !== 'pad';
-      mesh.castShadow = lit && key !== 'floor' && !key.startsWith('paint'); mesh.receiveShadow = lit;
+      const lit = !['glow', 'glowSoft', 'pad', 'led', 'white', 'logo'].includes(key);
+      mesh.castShadow = lit && !['floor', 'canopy', 'stand', 'glass'].includes(key) && !key.startsWith('paint'); mesh.receiveShadow = lit && key !== 'glass';
       this.scene.add(mesh); this.objects.push(mesh);
     }
     if (this.edges.length) {
@@ -217,5 +280,8 @@ export class Arena {
     this.col.build();
   }
 
-  update(t, dt) { for (const f of this.animated) f(t, dt); }
+  update(t, dt) {
+    if (this.ledTex) this.ledTex.offset.x = (t * 0.02) % 1; // the LED ribbons scroll
+    for (const f of this.animated) f(t, dt);
+  }
 }
