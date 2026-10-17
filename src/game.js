@@ -10,6 +10,7 @@ import { Hand } from './hand.js';
 import { Particles, Rings, SpeedLines, Ribbon } from './fx.js';
 import { Fighter, BOT_ROSTER } from './fighter.js';
 import { BotBrain, SKILL, PERSONAS } from './bot.js';
+import { makeBrain } from './neurobot.js';
 import { Net } from './net.js';
 import { installOnline } from './online.js';
 import { Audio } from './audio.js';
@@ -217,6 +218,7 @@ export class Game {
   }
 
   start(mode) {
+    if (this.me) this.me.brain = null; // (AI 관전 / lab matches put a brain in your slot — a new game gives it back)
     this.mode = ['practice', 'duel', 'ffa', 'online'].includes(mode) ? mode : 'arena';
     this.versus = this.mode === 'duel' || this.mode === 'ffa' || this.mode === 'online';
     if (this.mode !== 'online') { if (this.online) this.leaveOnline(); this.online = false; }
@@ -381,6 +383,7 @@ export class Game {
 
   // ======================= main loop =======================
   frame(now) {
+    if (this.state === 'lab') { this.last = now; return; } // AI 훈련소 is running matches in the background
     const realDt = Math.max(0, Math.min(0.1, (now - this.last) / 1000)); this.last = Math.max(this.last, now);
     this.fpsAcc += realDt; this.fpsN++;
     if (this.fpsAcc > 0.5) { this.txt('fps', Math.round(this.fpsN / this.fpsAcc) + ' FPS'); this.fpsAcc = 0; this.fpsN = 0; }
@@ -1096,7 +1099,7 @@ export class Game {
   }
 
   // drive the human fighter with a bot brain (automated tests / bot-vs-bot measurements)
-  autopilot(skill) { this.me.brain = skill ? new BotBrain(this, this.me, skill) : null; }
+  autopilot(skill) { this.me.brain = !skill ? null : skill === 'ai' ? makeBrain(this, this.me, null) : new BotBrain(this, this.me, skill); }
 
   // ======================= SKILLS (Q) =======================
   useSkill(f) {
@@ -1224,7 +1227,7 @@ export class Game {
       const r = roster[i];
       const per = PERSONAS[(Math.random() * PERSONAS.length) | 0];
       const f = new Fighter(this, { name: r.name, color: r.color, isBot: true, weapon: per.weapons[(Math.random() * per.weapons.length) | 0], skill: per.skills[(Math.random() * per.skills.length) | 0] });
-      f.brain = new BotBrain(this, f, skill, per);
+      f.brain = skill === 'ai' ? makeBrain(this, f, per) : new BotBrain(this, f, skill, per);
       this.fighters.push(f);
     }
     setTimeout(() => { for (const f of this.fighters) if (f.brain && this.versus) this.chat(f, 'start', 0.55); }, 900);
@@ -1236,7 +1239,7 @@ export class Game {
     else this.banner('FFA', `${this.mapName} · 봇 5명 · ${SKILL[skill].name} · 15킬 먼저 (4분)`, 2.6);
     this._boardHtml = '';
     // compile the bots' materials now, not on the first frame they appear
-    try { this.renderer.compile(this.scene, this.camera); } catch { }
+    if (!this.trainLock) try { this.renderer.compile(this.scene, this.camera); } catch { }
   }
   spawnPoints() {
     if (!this._spawns) { const A = this.arena; this._spawns = [...A.spawnGround, ...A.spawnHigh]; }
@@ -1250,7 +1253,7 @@ export class Game {
     for (const f of this.fighters) { if (f.disc.state !== 'hand' && !f.remote) f.disc.caught(); f.disc.trail.reset(); }
     for (const s of this.shards || []) this.scene.remove(s.m);
     this.shards = [];
-    try { this.renderer.compile(this.scene, this.camera); } catch { }
+    if (!this.trainLock) try { this.renderer.compile(this.scene, this.camera); } catch { }
     return true;
   }
   get mapName() { return (MAPS[this.arena.mapId] || MAPS.arena).name; }

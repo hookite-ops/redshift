@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { Fighter } from './fighter.js';
 import { BotBrain, PERSONAS } from './bot.js';
+import { makeBrain } from './neurobot.js';
 import { SKILLS } from './skills.js';
 
 const INTERP = 0.08;           // seconds of interpolation delay for remote players
@@ -63,7 +64,7 @@ export function installOnline(Game) {
   G.makeLocal = function (f) {
     f.remote = false;
     const per = PERSONAS.find(x => x.id === f.persona) || PERSONAS[(Math.random() * PERSONAS.length) | 0];
-    f.brain = new BotBrain(this, f, this.netBotSkill, per);
+    f.brain = this.netBotSkill === 'ai' ? makeBrain(this, f, per) : new BotBrain(this, f, this.netBotSkill, per);
     f.alive = true; f.hp = Math.max(1, f.hp);
     this.respawn(f, true);
   };

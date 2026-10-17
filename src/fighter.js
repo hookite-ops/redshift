@@ -173,8 +173,16 @@ export class Fighter {
     return pieces;
   }
   dispose() {
-    if (this.model) this.game.scene.remove(this.model);
-    if (this.isBot) this.disc.dispose();
+    if (this.model) { this.game.scene.remove(this.model); freeTree(this.model); }
+    if (this.isBot) { this.disc.dispose(); freeTree(this.disc.holder); if (this.disc.trail && this.disc.trail.mesh) freeTree(this.disc.trail.mesh); }
   }
+}
+// give a removed bot's GPU buffers back (each match builds fresh bots — without this they pile up)
+function freeTree(root) {
+  if (!root) return;
+  root.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    const m = o.material; if (m) (Array.isArray(m) ? m : [m]).forEach(x => x.dispose());
+  });
 }
 export { T };
