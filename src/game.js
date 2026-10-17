@@ -90,10 +90,12 @@ function makeSky(sunPos) {
     fragmentShader: `varying vec3 vDir; uniform vec3 sunDir;
       void main(){
         float h = vDir.y;
-        vec3 horizon = vec3(0.93, 0.91, 0.87), zenith = vec3(0.52, 0.63, 0.78), ground = vec3(0.86, 0.85, 0.82);
+        vec3 horizon = vec3(0.84, 0.89, 0.94), zenith = vec3(0.24, 0.46, 0.80), ground = vec3(0.80, 0.84, 0.88);
         vec3 c = h > 0.0 ? mix(horizon, zenith, pow(smoothstep(0.0, 0.9, h), 0.7)) : mix(horizon, ground, smoothstep(0.0, -0.2, h));
         float s = max(dot(vDir, sunDir), 0.0);
-        c += vec3(1.0, 0.85, 0.65) * (pow(s, 12.0) * 0.25 + pow(s, 400.0) * 2.0);
+        c += vec3(1.0, 0.9, 0.75) * (pow(s, 10.0) * 0.22 + pow(s, 600.0) * 3.0);
+        // a thin bright band right at the horizon (haze)
+        c = mix(c, vec3(0.93, 0.95, 0.97), exp(-abs(h) * 18.0) * 0.6);
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
@@ -115,19 +117,19 @@ export class Game {
     this.prMax = Math.min(devicePixelRatio, this.Q.pr); this.pr = this.prMax; this.perf = { t: 0, n: 0, good: 0 };
     r.setPixelRatio(this.pr);
     r.setSize(innerWidth, innerHeight);
-    r.toneMapping = THREE.NeutralToneMapping; r.toneMappingExposure = 1.25; // scene is lit a bit dark so only real glows pass the bloom threshold
+    r.toneMapping = THREE.NeutralToneMapping; r.toneMappingExposure = 1.1; // scene is lit a bit dark so only real glows pass the bloom threshold
     r.autoClear = false;
     r.shadowMap.enabled = this.Q.shadows; r.shadowMap.type = THREE.PCFSoftShadowMap;
 
     const sc = this.scene = new THREE.Scene();
-    sc.background = new THREE.Color(0xf2f0eb);
-    sc.fog = new THREE.Fog(0xf2f0eb, 90, 300);
+    sc.background = new THREE.Color(0xdfe7ef);
+    sc.fog = new THREE.Fog(0xdde5ee, 120, 420);
     // image-based light: a soft studio room reflected in every material (cheap after this one-time bake)
     const pm = new THREE.PMREMGenerator(r);
     this.envMap = pm.fromScene(new RoomEnvironment(), 0.04).texture; pm.dispose();
     sc.environment = this.envMap; sc.environmentIntensity = 0.35;
-    sc.add(new THREE.HemisphereLight(0xf4f7ff, 0xd6d2ca, 0.5));
-    const sun = this.sun = new THREE.DirectionalLight(0xfff1e0, 2.5);
+    sc.add(new THREE.HemisphereLight(0xdfeaff, 0xcfd2d6, 0.55));
+    const sun = this.sun = new THREE.DirectionalLight(0xfff4e6, 2.9);
     sun.position.set(34, 62, 18);
     sc.add(this.sky = makeSky(sun.position));
     if (this.Q.shadows) {
