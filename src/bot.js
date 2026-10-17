@@ -16,9 +16,13 @@ export const SKILL = {
   normal: { name: '보통', react: 0.27, err: 0.04, aimK: 95, aimZ: 0.6, turn: 10, align: 0.07, lead: 0.85, gravity: true, bank: 0.25, lob: 0.2, recall: 0.5, slam: 0.4, dodge: 0.1, dodgeLead: 0.08, bhop: 0.45, strafe: 0.8, strafeMin: 0.6, strafeMax: 1.5, think: 0.18, pause: 0.3, escape: 0.4, mobility: 0.3, fov: 0.9, hear: 0.75, mem: 3.5, tech: 0.4, skillUse: 0.55, mistake: 0.12 },
   hard: { name: '어려움', react: 0.17, err: 0.018, aimK: 170, aimZ: 0.65, turn: 18, align: 0.04, lead: 1, gravity: true, bank: 0.8, lob: 0.6, recall: 0.85, slam: 0.75, dodge: 0.22, dodgeLead: 0.1, bhop: 0.75, strafe: 1, strafeMin: 0.35, strafeMax: 1.1, think: 0.1, pause: 0.12, escape: 0.8, mobility: 0.6, fov: 1.05, hear: 0.9, mem: 5, tech: 0.75, skillUse: 0.8, mistake: 0.05 },
   max: { name: '최강', react: 0.1, err: 0.008, aimK: 320, aimZ: 0.7, turn: 30, align: 0.02, lead: 1, gravity: true, bank: 1, lob: 1, recall: 1, slam: 1, dodge: 0.35, dodgeLead: 0.11, bhop: 1, strafe: 1, strafeMin: 0.22, strafeMax: 0.9, think: 0.05, pause: 0.02, escape: 1, mobility: 1, fov: 1.2, hear: 1, mem: 7, tech: 0.95, skillUse: 0.95, mistake: 0.02 },
+  // 학습 AI: same human-level body as 최강, but every decision comes from the trained network (neurobot.js)
+  ai: null,
 };
 
 // personalities: how they like to fight. weapon/skill are drawn from these lists.
+SKILL.ai = { ...SKILL.max, name: '학습 AI' };
+
 export const PERSONAS = [
   { id: 'rusher', name: '돌격형', aggro: 0.9, caution: 0.2, flair: 0.6, patience: 0.15, chatty: 1.0, band: [5, 12], weapons: ['heavy', 'disc', 'nova', 'saw'], skills: ['overdrive', 'heal'] },
   { id: 'sniper', name: '저격형', aggro: 0.35, caution: 0.7, flair: 0.3, patience: 0.8, chatty: 0.6, band: [18, 32], weapons: ['rail', 'prism'], skills: ['reflect', 'gravity'] },
@@ -70,6 +74,7 @@ export class BotBrain {
 
   // ======================= senses & memory =======================
   sense() {
+    _eye.copy(this.f.body.eye);
     const G = this.G, f = this.f, B = f.body, now = this.now;
     B.lookDir(_look);
     for (const o of G.fighters) {
@@ -409,6 +414,7 @@ export class BotBrain {
   // ======================= combat =======================
   combat(dt) {
     const G = this.G, f = this.f, B = f.body, S = this.S, d = f.disc, tgt = this.target, p = this.p;
+    _eye.copy(B.eye);
     const origin = _org.copy(_eye); origin.y -= 0.15;
     let want = null, canThrow = false;
     const k = tgt ? this.known.get(tgt) : null;

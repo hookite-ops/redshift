@@ -8,3 +8,5 @@ desktop/build/
 tools/cache/
 desktop/www/
 desktop/*.syso
+tools/train/data/
+tools/train/brains/

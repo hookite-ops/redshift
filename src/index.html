@@ -278,6 +278,26 @@ h3 .sub{font-size:11px;letter-spacing:0;color:var(--dim);font-weight:400}
 }
 @media (max-width:640px){ .menuGrid{grid-template-columns:1fr} }
 body.touch .kbonly{display:none}
+.lo.five{grid-template-columns:repeat(5,1fr)}
+.lo.five button{padding:6px 3px;font-size:14px}
+#botskill button.ai{border-color:#ff5a1f}
+.labPanel{max-width:620px;width:calc(100% - 32px)}
+.labPanel h2{margin:0 0 4px}
+#ailab .btn{padding:10px 14px;font-size:16px}
+#ailab .btn:disabled{opacity:.4;cursor:default;background:#fff;color:var(--ink)}
+.labSub{opacity:.75;font-size:14px;margin-bottom:10px;line-height:1.45}
+.labBrain{display:grid;grid-template-columns:1fr 1fr;column-gap:18px;margin-bottom:10px}
+@media (max-width:560px){.labBrain{grid-template-columns:1fr}}
+.labChart{width:100%;height:90px;display:block;border-radius:8px;background:rgba(128,128,128,.08);margin-bottom:8px}
+.labProg{height:6px;border-radius:3px;background:rgba(128,128,128,.18);overflow:hidden;margin-bottom:6px}
+.labProg div{height:100%;width:0;background:#ff5a1f;transition:width .15s}
+.lstatus{min-height:20px;font-size:14px;margin-bottom:10px;opacity:.85}
+.lstatus.good{color:#16a864;opacity:1}.lstatus.bad{color:#e8202f;opacity:1}
+#ailab .row2,#ailab .row3{margin-bottom:8px}
+#ailab .row3.small .btn{font-size:14px;padding:10px 4px}
+#labTrain.on{background:#e8202f}
+.labNote{font-size:13px;opacity:.65;line-height:1.45}
+@media (max-width:700px){.lo.five{grid-template-columns:repeat(3,1fr)}}
 </style>
 </head>
 <body>
@@ -330,11 +350,12 @@ body.touch .kbonly{display:none}
       <div class="cheat touch-only"><kbd>왼쪽 엄지</kbd><span>이동 (닿은 곳에 스틱이 생겨요)</span><kbd>오른쪽 화면</kbd><span>끌어서 시점 · 던지기 버튼도 끌면 조준</span><kbd class="o">버튼</kbd><span>던지기/회수 · 순간이동 · 점프 · 대시 · 스킬</span></div>
 <div class="leftsel">
       <h3>봇 실력 (1V1 · FFA)</h3>
-      <div class="lo four" id="botskill">
+      <div class="lo five" id="botskill">
         <button data-bs="easy">쉬움</button>
         <button data-bs="normal">보통</button>
         <button data-bs="hard">어려움</button>
         <button data-bs="max">최강<small>예측·뱅크샷·회피</small></button>
+        <button data-bs="ai" class="ai">학습 AI<small>스스로 배운 두뇌</small></button>
       </div>
       <h3>아레나 난이도</h3>
       <div class="lo" id="difficulty">
@@ -381,13 +402,14 @@ body.touch .kbonly{display:none}
         <button data-sk="gravity">중력탄<small>적 끌어당기기</small></button>
         <button data-sk="heal">재생<small>체력 +35</small></button>
       </div>
-      <div class="row2" style="margin-top:14px">
+      <div class="row3" style="margin-top:14px">
+        <button class="btn ailab" data-act="ailab">AI 훈련소</button>
         <button class="btn" data-act="controls">조작법</button>
         <button class="btn" data-act="settings">설정</button>
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.2 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.3 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">
@@ -408,7 +430,7 @@ body.touch .kbonly{display:none}
         <span>방 이름</span><input id="oRoomName" maxlength="24" placeholder="자유 대전">
         <span>맵</span><select id="oMap"><option value="rotate" selected>라운드마다 바뀜</option><option value="arena">화이트 아레나</option><option value="spire">스파이어</option><option value="lanes">회랑</option><option value="forest">기둥 숲</option><option value="orbit">궤도</option></select>
         <span>봇</span><select id="oBots"><option value="0">없음 (사람만)</option><option value="1">1명</option><option value="2">2명</option><option value="3" selected>3명</option><option value="4">4명</option><option value="5">5명</option><option value="6">6명</option></select>
-        <span>봇 실력</span><select id="oBotSkill"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard" selected>어려움</option><option value="max">최강</option></select>
+        <span>봇 실력</span><select id="oBotSkill"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard" selected>어려움</option><option value="max">최강</option><option value="ai">학습 AI</option></select>
         <span>목표</span><select id="oLimit"><option value="10">10킬</option><option value="15" selected>15킬</option><option value="25">25킬</option></select>
         <span>공개</span><select id="oPriv"><option value="0">공개 (방 목록에 보임)</option><option value="1">비공개 (코드로만)</option></select>
       </div>
@@ -420,6 +442,31 @@ body.touch .kbonly{display:none}
   </div>
 </div>
 
+<div id="ailab" class="screen clear hidden">
+  <div class="panel labPanel">
+    <h2>AI 훈련소</h2>
+    <div class="labSub">스스로 게임을 배우는 봇 — 사람과 같은 버튼만 쓰고, 조준 속도도 사람급이에요. 무엇을 할지는 신경망이 1초에 20번 스스로 정해요.</div>
+    <div id="labBrain" class="labBrain"></div>
+    <canvas id="labChart" class="labChart"></canvas>
+    <div class="labProg"><div id="labBar"></div></div>
+    <div id="labStatus" class="lstatus"></div>
+    <div class="row2">
+      <button class="btn main" id="labTrain">이어서 학습하기</button>
+      <button class="btn" id="labWatch">관전하기<small>학습 AI 시점 · vs 최강 봇</small></button>
+    </div>
+    <div class="row2">
+      <button class="btn" id="labBench">실력 측정<small>최강 봇과 10판</small></button>
+      <button class="btn" id="labBack">돌아가기</button>
+    </div>
+    <div class="row3 small">
+      <button class="btn" id="labExport">두뇌 내보내기</button>
+      <button class="btn" id="labImport">두뇌 불러오기</button>
+      <button class="btn" id="labReset">기본 두뇌로</button>
+    </div>
+    <input type="file" id="labFile" accept=".json,application/json" hidden>
+    <div class="labNote">학습 중엔 화면을 켜 두세요. 세대마다 자동 저장되고, 1V1·FFA·온라인 방에서 봇 실력을 <b>학습 AI</b>로 고르면 이 두뇌로 싸워요.</div>
+  </div>
+</div>
 <div id="pause" class="screen clear hidden">
   <div class="panel">
     <h2>PAUSED</h2>

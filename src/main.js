@@ -1,5 +1,10 @@
 // Bootstrap: settings, menus, pointer lock, main loop
 import { Game } from './game.js';
+import { installTrainAPI } from './trainlab.js';
+import { installLab } from './ailab.js';
+import { setShippedBrain, makeBrain } from './neurobot.js';
+import SHIPPED_BRAIN from './brain.json';
+setShippedBrain(SHIPPED_BRAIN);
 import { Input } from './input.js';
 import { Net } from './net.js';
 import { MAPS } from './maps.js';
@@ -41,7 +46,7 @@ function landscape() { try { screen.orientation && screen.orientation.lock && sc
 game.saveRecords = () => saveRecords(game.records);
 
 // ---------------- screens ----------------
-const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online'];
+const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab'];
 function show(id) { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id)); }
 let returnTo = 'menu';
 
@@ -108,6 +113,7 @@ window.REDSHIFT_BACK = () => {
   const open = id => !$(id).classList.contains('hidden');
   if (game.state === 'play' && !game.menuOpen) { pause(); return true; }
   if (open('settings') || open('controls') || open('online')) { show(returnTo); return true; }
+  if (open('ailab')) { if (!lab.busy) show('menu'); return true; }
   if (open('pause')) { resume(); return true; }
   if (open('death')) { toMenu(); return true; }
   return false;
@@ -126,6 +132,7 @@ document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click',
   else if (a === 'online') { returnTo = 'menu'; openOnline(); show('online'); }
   else if (a === 'settings') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; openSettings(); show('settings'); }
   else if (a === 'controls') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; buildControls(); show('controls'); }
+  else if (a === 'ailab') lab.open();
   else if (a === 'back') show(returnTo);
   else if (a === 'resume') resume();
   else if (a === 'restart') startMode(game.mode);
@@ -280,10 +287,25 @@ function renderBest() {
 // ---------------- boot ----------------
 show('menu'); renderBest();
 $('loading').classList.add('hidden');
-function loop(now) { requestAnimationFrame(loop); game.frame(now); }
+// (the offline trainer sets __trainHeadless: no drawing at all, every CPU cycle goes to the matches)
+function loop(now) { if (window.__trainHeadless) return; requestAnimationFrame(loop); game.frame(now); }
 requestAnimationFrame(loop);
 
+// ---------------- AI 훈련소 ----------------
+// watch the learned bot play: it takes over YOUR slot (first-person view) against a 최강 bot
+function spectate() {
+  const keep = S.botSkill; S.botSkill = 'max';
+  game.start('duel');
+  S.botSkill = keep;
+  game.me.brain = makeBrain(game, game.me, null);
+  game.banner('AI 관전', '학습 AI 시점 · 상대는 최강 봇 · ESC 로 나가기', 3);
+  enterGame();
+  if (touchMode) game.touchUI.show(false);
+}
+const lab = installLab(game, { $, show, onSpectate: spectate });
+
 // test hooks
+installTrainAPI(game);
 window.__game = {
   game, S, input,
   start: m => startMode(m),

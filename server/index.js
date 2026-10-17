@@ -60,7 +60,7 @@ let nextClient = 1;
 function code4() { let c; do { c = Array.from({ length: 4 }, () => 'ABCDEFGHJKLMNPQRSTUVWXYZ'[(Math.random() * 24) | 0]).join(''); } while (rooms.has(c)); return c; }
 function makeRoom({ name, priv = false, bots = 3, botSkill = 'hard', limit = 15, duration = 300, map = 'rotate' } = {}) {
   const r = {
-    code: code4(), name: clean(name, 24) || '자유 대전', priv: !!priv, botSkill: ['easy', 'normal', 'hard', 'max'].includes(botSkill) ? botSkill : 'hard',
+    code: code4(), name: clean(name, 24) || '자유 대전', priv: !!priv, botSkill: ['easy', 'normal', 'hard', 'max', 'ai'].includes(botSkill) ? botSkill : 'hard',
     wantBots: Math.max(0, Math.min(6, bots | 0)), limit: Math.max(3, Math.min(50, limit | 0)), duration: Math.max(60, Math.min(900, duration | 0)),
     players: new Map(), clients: new Set(), host: null, state: 'play', timeLeft: 0, overT: 0, nextId: 1, created: now(),
   };

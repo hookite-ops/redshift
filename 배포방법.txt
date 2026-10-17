@@ -1,4 +1,4 @@
-REDSHIFT 4.2 — 웹(Cloud Run) · 안드로이드 APK · 윈도우 EXE, 셋 다 같은 방에서 멀티
+REDSHIFT 4.3 — 웹(Cloud Run) · 안드로이드 APK · 윈도우 EXE, 셋 다 같은 방에서 멀티
 =====================================================================
 
 [A] GitHub 자동 배포 (한 번만 설정하면 main 에 올라올 때마다 저절로 새 버전 배포)
@@ -57,3 +57,20 @@ REDSHIFT 4.2 — 웹(Cloud Run) · 안드로이드 APK · 윈도우 EXE, 셋 다
 - 내 컴퓨터에서 서버까지 돌려 보기: cd server && npm install && cd .. && node server/index.js → http://localhost:8080
 - 테스트: npm test (충돌·이동) · python3 tests/disc_smoke.py / disc_edge.py · versus_sim.py · aim_test.py · skills_test.py
          멀티: tests/net_test.py (2명 + 봇, 재접속, 방장 넘김) · tests/app_test.py (APK·EXE·웹 한 방) · tests/mobile_test.py (터치)
+
+[E] 학습 AI 봇 (4.3) — 스스로 게임을 배운 봇
+ - 메뉴 "봇 실력"에서 [학습 AI] 를 고르면 1V1 · FFA 봇이 학습된 두뇌로 싸워요.
+ - 온라인 방 만들기 → 봇 실력 [학습 AI] → 빈자리를 학습 AI 봇이 채워요 (서버도 같이 업데이트돼야 함: 자동 배포면 그대로 됨).
+ - 메뉴 [AI 훈련소]: 이어서 학습하기 · 관전하기(AI 시점) · 실력 측정 · 두뇌 내보내기/불러오기 · 기본 두뇌로.
+   훈련소에서 학습한 두뇌는 그 기기(브라우저/앱)에 자동 저장되고, 그 기기의 학습 AI 봇이 그 두뇌를 써요.
+ - 기본 탑재 두뇌: src/brain.json (빌드할 때 game.js 안에 들어감)
+
+[F] 두뇌를 더 학습시키기 (개발용, 리눅스/Cloud Shell · Python3 + playwright 필요)
+    npm install && npm run build
+    pip install playwright numpy && python3 -m playwright install chromium
+    python3 tools/train/imitate.py collect 300     # 최강 봇 경기 300판 기록 (약 10분)
+    python3 tools/train/imitate.py fit 20          # 모방 학습 → tools/train/brains/gen0.json
+    python3 tools/train/train.py --start tools/train/brains/gen0.json --gens 200   # 자가대전 진화 학습
+    python3 tools/train/bench.py tools/train/brains/best.json 60                   # 최강 봇 상대 실력 측정
+    cp tools/train/brains/best.json src/brain.json && npm run build                # 게임에 넣기
+ - 다른 게임에 붙이는 법: src/ai/README.md
