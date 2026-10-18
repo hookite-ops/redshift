@@ -23,8 +23,8 @@ export const QUALITY = {
 // your throws only: snap = cone (rad) in which the throw auto-leads the target,
 // homing = how hard the disc bends toward the enemy in front of it (rad/s), bonus = extra hit radius (m)
 export const ASSIST = {
-  strong: { snap: 0.17, homing: 3.4, cone: 0.62, range: 48, bonus: 0.55 },
-  normal: { snap: 0.09, homing: 1.7, cone: 0.45, range: 36, bonus: 0.25 },
+  strong: { snap: 0.11, homing: 1.9, cone: 0.5, range: 40, bonus: 0.32 },
+  normal: { snap: 0.05, homing: 0.8, cone: 0.36, range: 30, bonus: 0.12 },
   off: { snap: 0, homing: 0, cone: 0, range: 0, bonus: 0 },
 };
 const KEY = 'redshift4_settings', REC = 'redshift4_records';

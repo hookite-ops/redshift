@@ -10,6 +10,7 @@ import { Net } from './net.js';
 import { MAPS } from './maps.js';
 import { WeaponView } from './weaponview.js';
 import { WEAPONS } from './disc.js';
+import { rankState, tierOf, nextTier, applyResult } from './rank.js';
 const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
 import { Touch, isTouchDevice } from './touch.js';
 import { ACTIONS, DEFAULT_BINDS, loadSettings, saveSettings, loadRecords, saveRecords, keyName } from './settings.js';
@@ -53,7 +54,8 @@ function show(id) { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== i
 let returnTo = 'menu';
 
 function startMode(mode) {
-  game.start(mode);
+  if (mode === 'rank') game.start('duel', { ranked: true });
+  else game.start(mode);
   enterGame();
 }
 function enterGame() {
@@ -130,15 +132,15 @@ addEventListener('beforeunload', e => { if (game.state === 'play') { e.preventDe
 document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
   game.audio.init(); game.audio.setVolumes(S.sfx, S.music); game.audio.ui();
   const a = b.dataset.act;
-  if (a === 'arena' || a === 'practice' || a === 'duel' || a === 'ffa') startMode(a);
+  if (a === 'arena' || a === 'practice' || a === 'duel' || a === 'ffa' || a === 'rank') startMode(a);
   else if (a === 'online') { returnTo = 'menu'; openOnline(); show('online'); }
   else if (a === 'settings') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; openSettings(); show('settings'); }
   else if (a === 'controls') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; buildControls(); show('controls'); }
   else if (a === 'ailab') lab.open();
   else if (a === 'back') show(returnTo);
   else if (a === 'resume') resume();
-  else if (a === 'restart') startMode(game.mode);
-  else if (a === 'quit') toMenu();
+  else if (a === 'restart') { forfeit(); startMode(game.ranked ? 'rank' : game.mode); }
+  else if (a === 'quit') { forfeit(); toMenu(); }
 }));
 
 // ---------------- online ----------------
@@ -287,7 +289,22 @@ function applySettings() {
 }
 applySettings();
 
+// leaving a ranked match early counts as a loss (no dodging a bad game)
+function forfeit() {
+  if (!game.ranked || game.match.over || game.state === 'dead') return;
+  const bot = game.fighters[1];
+  applyResult(rankState(game.records), game.me.kills, Math.max(game.match.limit, bot ? bot.kills : 0));
+  game.saveRecords(); game.ranked = false;
+}
+function renderRank() {
+  const rs = rankState(game.records), t = tierOf(rs.r), nx = nextTier(rs.r);
+  $('rankBadge').textContent = `${t.name} ${rs.r}`; $('rankBadge').style.color = t.color;
+  $('rankSub').textContent = rs.games
+    ? `${rs.wins}승 ${rs.games - rs.wins}패${rs.streak > 1 ? ` · ${rs.streak}연승 중` : ''}${nx ? ` · ${nx.name}까지 ${nx.min - rs.r} RP` : ' · 최고 티어'}`
+    : '1V1 · 이기면 RP가 오르고 상대도 강해져요';
+}
 function renderBest() {
+  renderRank();
   const r = game.records;
   const parts = [];
   if (r.score) parts.push(`최고 ${r.score.toLocaleString()}점 · WAVE ${r.wave}`);

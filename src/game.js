@@ -11,6 +11,7 @@ import { Particles, Rings, SpeedLines, Ribbon } from './fx.js';
 import { Fighter, BOT_ROSTER } from './fighter.js';
 import { BotBrain, SKILL, PERSONAS } from './bot.js';
 import { makeBrain } from './neurobot.js';
+import { rankState, tierOf, opponentFor, applyResult } from './rank.js';
 import { Net } from './net.js';
 import { installOnline } from './online.js';
 import { Audio } from './audio.js';
@@ -219,7 +220,8 @@ export class Game {
     this.tut = new Set();
   }
 
-  start(mode) {
+  start(mode, opts = {}) {
+    this.ranked = !!opts.ranked && mode === 'duel';
     if (this.me) this.me.brain = null; // (AI 관전 / lab matches put a brain in your slot — a new game gives it back)
     this.mode = ['practice', 'duel', 'ffa', 'online'].includes(mode) ? mode : 'arena';
     this.versus = this.mode === 'duel' || this.mode === 'ffa' || this.mode === 'online';
@@ -506,7 +508,7 @@ export class Game {
     const lock = this.aimAssist(origin, dir);
     if (!this.throwFor(this.me, dir)) return;
     const d = this.disc;
-    d.homing = A.homing; d.cone = A.cone; d.range = A.range; d.bonus = A.bonus; d.lock = lock;
+    d.homing = A.homing; d.cone = A.cone; d.range = A.range; d.bonus = A.bonus; d.lock = lock; d.headAim = !!(lock && this.headAim);
   }
   throwFor(f, dir) {
     const B = f.body, d = f.disc;
@@ -530,7 +532,8 @@ export class Game {
   }
   // ---------- aim help for YOUR throws (settings → 조준 보조) ----------
   assistCfg() {
-    const A = ASSIST[this.S.aimAssist] || ASSIST.strong;
+    let A = ASSIST[this.S.aimAssist] || ASSIST.strong;
+    if (this.ranked && A === ASSIST.strong) A = ASSIST.normal; // ranked: no strong aim help
     // thumbs are less precise than a mouse: a wider snap cone on touch screens
     return this.input.touch && A.snap ? (this._touchA || (this._touchA = {})) && Object.assign(this._touchA, A, { snap: A.snap * 1.6, cone: A.cone * 1.15 }) : A;
   }
@@ -573,6 +576,13 @@ export class Game {
       if (this.los(origin, lp)) { bestA = ang; best = t; bestDir.copy(_a); }
       else if (this.los(origin, c)) { bestA = ang; best = t; bestDir.copy(_b); }
     }
+    // aiming at the head (clearly above the chest) keeps the head as the target: headshots stay a skill
+    this.headAim = false;
+    if (best && best instanceof Fighter) {
+      const { c } = this.tInfo(best), dist = origin.distanceTo(c);
+      const above = (Math.asin(THREE.MathUtils.clamp(dir.y, -1, 1)) - Math.asin(THREE.MathUtils.clamp(bestDir.y, -1, 1))) * dist;
+      if (above > 0.32 && above < 1.3) { this.headAim = true; bestDir.y += 0.66 / Math.max(1, dist); bestDir.normalize(); }
+    }
     if (best && apply) dir.copy(bestDir);
     return best;
   }
@@ -604,7 +614,9 @@ export class Game {
     const { c, v } = this.tInfo(best);
     if (!this.los(d.pos, c)) return; // never steer into cover
     const dist = d.pos.distanceTo(c), tt = dist / sp;
-    _c.copy(c).addScaledVector(v, tt * 0.7).sub(d.pos).normalize();
+    _c.copy(c).addScaledVector(v, tt * 0.7);
+    if (d.headAim && best instanceof Fighter) _c.y += 0.66;
+    _c.sub(d.pos).normalize();
     const ang = Math.acos(THREE.MathUtils.clamp(_c.dot(dir), -1, 1));
     if (ang < 1e-4) return;
     const rate = Math.min(14, d.homing * (1 + 8 / Math.max(1.5, dist)));
@@ -1222,14 +1234,15 @@ export class Game {
   // ======================= VERSUS: 1V1 / FFA against bots =======================
   setupVersus() {
     const duel = this.mode === 'duel';
-    const skill = SKILL[this.S.botSkill] ? this.S.botSkill : 'max';
-    this.botSkill = skill;
+    const opp = this.ranked ? opponentFor(rankState(this.records).r) : null;
+    const skill = opp ? opp.skill : SKILL[this.S.botSkill] ? this.S.botSkill : 'max';
+    this.botSkill = skill; this.oppLabel = opp ? opp.label : null; this.matchPoint = false;
     const roster = BOT_ROSTER.slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < (duel ? 1 : 5); i++) {
       const r = roster[i];
       const per = PERSONAS[(Math.random() * PERSONAS.length) | 0];
       const f = new Fighter(this, { name: r.name, color: r.color, isBot: true, weapon: per.weapons[(Math.random() * per.weapons.length) | 0], skill: per.skills[(Math.random() * per.skills.length) | 0] });
-      f.brain = skill === 'ai' ? makeBrain(this, f, per) : new BotBrain(this, f, skill, per);
+      f.brain = skill === 'ai' ? makeBrain(this, f, per, opp ? opp.motor : 'max') : new BotBrain(this, f, skill, per);
       this.fighters.push(f);
     }
     setTimeout(() => { for (const f of this.fighters) if (f.brain && this.versus) this.chat(f, 'start', 0.55); }, 900);
@@ -1237,7 +1250,8 @@ export class Game {
     for (const f of this.fighters) this.respawn(f, true);
     this.match = { limit: duel ? 5 : 15, timeLeft: duel ? 0 : 240, over: false };
     const bot = this.fighters[1];
-    if (duel) this.banner('1 V 1', `${this.mapName} · ${bot.name} · 봇 실력 ${SKILL[skill].name} · 5킬 먼저`, 2.6);
+    if (this.ranked) { const rs = rankState(this.records), t = tierOf(rs.r); this.banner('랭크전', `${t.name} ${rs.r} RP · 상대 ${bot.name} (${opp.label}) · 5킬 먼저`, 2.8); }
+    else if (duel) this.banner('1 V 1', `${this.mapName} · ${bot.name} · 봇 실력 ${SKILL[skill].name} · 5킬 먼저`, 2.6);
     else this.banner('FFA', `${this.mapName} · 봇 5명 · ${SKILL[skill].name} · 15킬 먼저 (4분)`, 2.6);
     this._boardHtml = '';
     // compile the bots' materials now, not on the first frame they appear
@@ -1314,7 +1328,10 @@ export class Game {
         ? w.dmg * (1 + w.bounceMul * d.bounces) * (0.75 + 0.25 * d.speedMul()) * (d.reflectedBy ? 1.2 : 1)
         : w.returnDmg * (1 + 0.2 * d.bounces);
       const hitAt = new THREE.Vector3().lerpVectors(a, b, _ss.s);
-      this.damageFighter(t, dmg, attacker, d.reflectedBy ? 'reflect' : leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', dir, d.bounces);
+      // headshot: the disc passed through the head (top ~40 cm) → ×1.5 and its own hit sound / marker
+      const crit = leg === 'out' && hitAt.y - B.pos.y > B.h - 0.42;
+      this._crit = crit;
+      this.damageFighter(t, crit ? dmg * 1.5 : dmg, attacker, d.reflectedBy ? 'reflect' : leg === 'out' ? (d.bounces > 0 ? 'bank' : 'direct') : 'return', dir, d.bounces);
       if (w.blast && leg === 'out' && !d.blasted) { d.blasted = true; this.discBlast(d, hitAt); d.recall(); return hitAt; }
     }
     return null;
@@ -1340,11 +1357,18 @@ export class Game {
     if (by) { by.st.hits++; if (kind === 'bank') by.st.bank++; if (kind === 'return') by.st.ret++; }
     if (t.brain) t.brain.onHurt(by, kind);
     if (t === this.me) { this.dmgFx = 1; this.shake(0.22); this.audio.hurt(); if (by) this.hurtDir(by.updateCenter()); }
+    const crit = this._crit; this._crit = false;
+    if (crit && by) by.st.crits = (by.st.crits || 0) + 1;
     if (by === this.me) {
-      this.audio.discHit(bounces + 1); this.stats.hits++;
-      this.dmgNumber(c, dmg, kind === 'bank' || kind === 'slam');
-      this.hitmarker(killed);
-      this.stopT = Math.max(this.stopT, killed ? 0.05 : 0.02);
+      this.audio.discHit(bounces + 1 + (crit ? 2 : 0)); this.stats.hits++;
+      if (crit) this.audio.crit && this.audio.crit();
+      this.dmgNumber(c, crit ? `${dmg}!` : dmg, crit || kind === 'bank' || kind === 'slam');
+      this.hitmarker(killed, crit);
+      if (crit && !killed) this.popup('헤드샷');
+      // hit-stop: the world freezes for a beat so every hit lands with weight
+      this.stopT = Math.max(this.stopT, killed ? 0.11 : crit || kind === 'bank' ? 0.065 : 0.04);
+      this.shake(killed ? 0.2 : crit ? 0.12 : 0.07);
+      this.camState.kick = Math.max(this.camState.kick, crit ? 0.5 : 0.3);
     } else if (t !== this.me) this.spatial(c, () => this.audio.discHit(1));
     if (killed) this.killFighter(t, by, kind, bounces, dir);
     return killed ? 'kill' : 'hit';
@@ -1376,12 +1400,21 @@ export class Game {
     if (k && k.brain && k !== v) { k.brain.onKill(v); this.chat(k, k.streak === 3 ? 'streak' : kind === 'bank' ? 'bank' : kind === 'slam' ? 'slam' : 'kill', v === this.me ? 0.4 : 0.22); }
     if (v.brain) { v.brain.onDeath(k); this.chat(v, 'death', k === this.me ? 0.35 : 0.15); }
     if (k === this.me) {
-      this.popup(k.streak >= 3 ? `${k.streak}연속 처치!` : (tag || '처치!'));
-      this.audio.kill(Math.min(k.streak, 8)); this.shake(0.12); this.kills++;
+      // multi-kills inside 4 s get their own call-out; every kill gets a short slow-motion beat
+      const now = this.gameTime; this.multi = now - (this.multiT || -9) < 4 ? (this.multi || 1) + 1 : 1; this.multiT = now;
+      const MULTI = ['', '', '더블 킬', '트리플 킬', '쿼드라 킬', '펜타 킬'];
+      const call = this.multi >= 2 ? MULTI[Math.min(5, this.multi)] || `${this.multi}연속 킬` : null;
+      this.popup(call || (k.streak >= 3 ? `${k.streak}연속 처치!` : (tag || '처치!')));
+      this.killCard(v, call || tag);
+      this.slowT = Math.max(this.slowT, this.multi >= 2 ? 0.45 : 0.22); this.flashFx = 1;
+      this.audio.kill(Math.min(k.streak + this.multi, 10)); this.shake(0.12); this.kills++;
       if (kind === 'bank') this.stats.banks++;
     } else this.spatial(c, () => this.audio.kill(1));
     if (v === this.me) { this.deathInfo = { by: k, pos: this.player.pos.clone(), t: 0 }; this.throwBuf = 0; }
     if (counts && k && k.kills >= this.match.limit) this.endMatch();
+    else if (counts && k && this.mode === 'duel' && !this.matchPoint && k.kills === this.match.limit - 1) {
+      this.matchPoint = true; this.banner('매치 포인트', k === this.me ? '한 킬만 더!' : `${k.name}이(가) 한 킬 남았어요`, 1.8);
+    }
     if (net && v === this.me) this.audio.hurt();
   }
   feedText(text) {
@@ -1425,6 +1458,13 @@ export class Game {
       sub = `${me.kills} : ${bot.kills}`;
       if (me.kills > bot.kills) rec.duelWin = (rec.duelWin || 0) + 1;
       else if (me.kills < bot.kills) rec.duelLose = (rec.duelLose || 0) + 1;
+      if (this.ranked) {
+        const res = this.rankResult = applyResult(rankState(rec), me.kills, bot.kills), t = tierOf(res.after);
+        sub = `${me.kills} : ${bot.kills} · ${res.delta >= 0 ? '+' : ''}${res.delta} RP`;
+        if (res.promoted) { title = `${res.promoted.name} 승급!`; }
+        else if (res.demoted) { sub += ` · ${res.demoted.name}(으)로 강등`; }
+        this.rankLine = [`랭크`, `${t.name} · ${res.after} RP (${res.delta >= 0 ? '+' : ''}${res.delta})`];
+      } else this.rankLine = null;
     } else {
       title = myRank === 1 ? '1위!' : `${myRank}위`;
       sub = `${me.kills}킬 · ${me.deaths}데스`;
@@ -1437,7 +1477,9 @@ export class Game {
     if (myRank === 1) this.audio.checkpoint(true); else this.audio.wave();
     for (const f of this.fighters) if (f.brain) this.chat(f, rank[0] === f ? 'win' : 'lose', 0.6);
     const stats = rank.map((f, i) => [`${i + 1}. ${f.name}`, `${f.kills} 킬 · ${f.deaths} 데스`]);
-    stats.push(['봇 실력', SKILL[this.botSkill].name], ['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H']);
+    if (this.ranked && this.rankLine) { const rs = rankState(rec); stats.unshift(this.rankLine); stats.push(['연승', rs.streak > 0 ? `${rs.streak}연승` : rs.streak < 0 ? `${-rs.streak}연패` : '—'], ['헤드샷', `${me.st.crits || 0}번`]); }
+    else stats.push(['봇 실력', SKILL[this.botSkill].name], ['헤드샷', `${me.st.crits || 0}번`]);
+    stats.push(['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H']);
     this.result = { title, stats, rank: myRank };
     setTimeout(() => {
       if (this.state !== 'play' || this.match !== M) return;
@@ -1473,8 +1515,14 @@ export class Game {
     p.classList.remove('show'); void p.offsetWidth; p.classList.add('show');
   }
   popupWorld(pos, text) { this.dmgNumber(pos, text, false, true); }
-  hitmarker(kill) {
-    const h = this.el('hit'); h.classList.toggle('kill', !!kill);
+  killCard(v, tag) {
+    const e = this.el('killCard'); if (e === DUMMY_EL) return;
+    this.el('kcName').textContent = v.name; this.el('kcName').style.color = v.css || '#fff';
+    this.el('kcTag').textContent = tag || '처치';
+    e.classList.remove('show'); void e.offsetWidth; e.classList.add('show');
+  }
+  hitmarker(kill, crit = false) {
+    const h = this.el('hit'); h.classList.toggle('kill', !!kill); h.classList.toggle('crit', !!crit && !kill);
     h.classList.remove('show'); void h.offsetWidth; h.classList.add('show');
   }
   hint(text, key, ms = 2800) {
@@ -1730,8 +1778,8 @@ export class Game {
       this.txt('comboTxt', `현재 ${this.ranking().indexOf(me) + 1}위`);
     } else if (this.mode === 'duel') {
       const bot = this.fighters[1];
-      this.txt('modeTxt', '1V1');
-      this.txt('subTxt', `${M.limit}킬 먼저 · ${bot ? bot.name : ''} (${skill})`);
+      if (this.ranked) { const rs = rankState(this.records); this.txt('modeTxt', '랭크전'); this.txt('subTxt', `${tierOf(rs.r).name} ${rs.r} RP · ${M.limit}킬 먼저 · ${bot ? bot.name : ''} (${this.oppLabel})`); }
+      else { this.txt('modeTxt', '1V1'); this.txt('subTxt', `${M.limit}킬 먼저 · ${bot ? bot.name : ''} (${skill})`); }
       this.txt('scoreTxt', `${me.kills} : ${bot ? bot.kills : 0}`);
       this.txt('comboTxt', me.streak >= 2 ? `${me.streak}연속 처치` : '');
     } else {

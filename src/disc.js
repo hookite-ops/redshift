@@ -96,7 +96,7 @@ export class Disc {
     if (this.state !== 'hand' || this.catchCd > 0) return false;
     const w = this.w;
     this.state = 'out'; this.t = 0; this.bounces = 0; this.hit.clear(); this.blinked = false; this.kills = 0; this.leg++;
-    this.homing = 0; this.bonus = 0; this.lock = null; this.cone = 0; this.range = 0; this.reflectedBy = null;
+    this.homing = 0; this.bonus = 0; this.lock = null; this.headAim = false; this.cone = 0; this.range = 0; this.reflectedBy = null;
     this.stuckT = 0; this.sawT = 0; this.blasted = false; this.splitDone = false; this.seekLock = null;
     const carry = Math.max(0, playerVel.dot(dir)) * w.carry;
     this.pos.copy(origin); this.vel.copy(dir).multiplyScalar((w.speed + carry) * speedMul);
