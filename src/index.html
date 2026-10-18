@@ -429,6 +429,16 @@ body.touch #chat{left:50%;bottom:17vmin;transform:translateX(-50%);width:auto;al
 body.touch #chat div{align-self:center}
 body.touch #board{width:200px;transform:scale(.82);transform-origin:top left;top:112px}
 body.touch #feed{top:62px}
+.wview{display:grid;grid-template-columns:1.15fr 1fr;gap:10px;align-items:center;margin-bottom:6px;background:linear-gradient(180deg,#f3f5f8,#e7ebf0);border-radius:3px;padding:4px 10px 4px 0;position:relative;overflow:hidden}
+.wview::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(90deg,rgba(14,17,22,.035) 0 1px,transparent 1px 22px);pointer-events:none}
+#wCanvas{width:100%;height:118px;display:block}
+.wname{font-family:'Space Grotesk','Noto Sans KR';font-weight:700;font-size:17px;letter-spacing:1px}
+.wdesc{font-size:11.5px;color:var(--dim);margin:1px 0 6px;line-height:1.35}
+.wbar{display:grid;grid-template-columns:38px 1fr;align-items:center;gap:6px;font-size:10.5px;color:var(--ink2);margin-top:3px}
+.wbar i{height:5px;background:rgba(14,17,22,.1);transform:skewX(var(--sk));overflow:hidden}
+.wbar b{display:block;height:100%;width:0;background:var(--ink);transition:width .35s cubic-bezier(.2,.8,.2,1)}
+.wbar:first-of-type b{background:var(--or)}
+@media (max-width:900px),(max-height:560px){#wCanvas{height:92px}.wdesc{display:none}}
 @media (max-width:900px),(max-height:560px){
   #menu .menuGrid{grid-template-columns:1fr 1.25fr;gap:14px;width:98vw}
   #menu .menuGrid>div:last-child{padding:12px 14px;max-height:94vh}
@@ -521,6 +531,16 @@ body.touch #feed{top:62px}
         <button data-mp="orbit">궤도<small>둥근 트랙</small></button>
       </div>
       <h3>무기</h3>
+      <div class="wview">
+        <canvas id="wCanvas"></canvas>
+        <div class="wstats">
+          <div id="wName" class="wname"></div><div id="wDesc" class="wdesc"></div>
+          <div class="wbar"><span>속도</span><i><b id="wSpd"></b></i></div>
+          <div class="wbar"><span>피해</span><i><b id="wDmg"></b></i></div>
+          <div class="wbar"><span>튕김</span><i><b id="wBnc"></b></i></div>
+          <div class="wbar"><span>충격파</span><i><b id="wSlam"></b></i></div>
+        </div>
+      </div>
       <div class="lo weapons" id="weapons">
         <button data-wp="disc">원반<small>기본 · 튕길수록 강함</small></button>
         <button data-wp="heavy">해머<small>느림 · 크고 묵직</small></button>
@@ -546,7 +566,7 @@ body.touch #feed{top:62px}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.4 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.5 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">

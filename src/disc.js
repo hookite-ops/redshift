@@ -2,6 +2,7 @@
 // Four variants are picked in the loadout; they all use the same two buttons.
 import * as THREE from 'three';
 import { Ribbon } from './fx.js';
+import { buildWeaponModel } from './weapons3d.js';
 
 export const WEAPONS = {
   disc: {
@@ -62,32 +63,9 @@ export const DISC = WEAPONS.disc; // the baseline numbers (some systems still re
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 const _hit = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
 
+// every weapon has its own model (weapons3d.js); Disc.glow is 4 with bloom on, 1 without
 export function discModel(color, w, s = 1, glowMul = 1) {
-  const g = new THREE.Group(), glow = Math.max(1, (Disc.glow || 1) * glowMul), heavy = w.id === 'heavy';
-  // glowing rim (blooms with post-processing on), dark brushed-metal face, white ceramic blades
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.34 * s, 0.06 * s * (heavy ? 1.5 : 1), 12, 48),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.1, emissive: color, emissiveIntensity: glow > 1 ? 1.2 * glow : 0.3 }));
-  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3 * s, 0.3 * s, 0.05 * s * (heavy ? 2 : 1), 40), new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.28, metalness: 0.75 }));
-  face.rotation.x = Math.PI / 2;
-  const inner = new THREE.Mesh(new THREE.TorusGeometry(0.19 * s, 0.012 * s, 6, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(glow > 1 ? 1.4 * glow : 1) }));
-  inner.position.z = 0.03 * s * (heavy ? 2 : 1);
-  const inner2 = inner.clone(); inner2.position.z *= -1;
-  const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * s, 0.1 * s, 0.07 * s * (heavy ? 1.6 : 1), 20), new THREE.MeshStandardMaterial({ color, roughness: 0.35, emissive: color, emissiveIntensity: glow > 1 ? 0.4 * glow : 0.2 }));
-  dot.rotation.x = Math.PI / 2;
-  const bladeMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f4, roughness: 0.25, metalness: 0.2 });
-  const long = w.id === 'boomerang' ? 2.6 : w.id === 'rail' ? 1.8 : w.id === 'saw' ? 0.75 : w.id === 'prism' ? 0.7 : 1;
-  const hot = c => new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(glow > 1 ? 1.4 * glow : 1) });
-  if (w.id === 'nova') { const core = new THREE.Mesh(new THREE.SphereGeometry(0.15 * s, 16, 12), hot(color)); g.add(core); }
-  if (w.id === 'prism') { const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.17 * s), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.05, metalness: 0.9, emissive: color, emissiveIntensity: glow > 1 ? 0.8 : 0.15 })); gem.scale.z = 0.6; g.add(gem); }
-  if (w.id === 'seeker') for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2, e = new THREE.Mesh(new THREE.SphereGeometry(0.035 * s, 8, 6), hot(0xffffff)); e.position.set(Math.cos(a) * 0.24 * s, Math.sin(a) * 0.24 * s, 0.035 * s); g.add(e); }
-  if (w.id === 'splitter') for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2 + 0.5, cut = new THREE.Mesh(new THREE.BoxGeometry(0.02 * s, 0.24 * s, 0.07 * s), hot(color)); cut.position.set(Math.cos(a) * 0.15 * s, Math.sin(a) * 0.15 * s, 0); cut.rotation.z = a; g.add(cut); }
-  for (let i = 0; i < w.blades; i++) {
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.06 * s, 0.16 * s * long, 0.04 * s), bladeMat);
-    const a = i / w.blades * Math.PI * 2, r = (0.42 + (long - 1) * 0.08) * s;
-    blade.position.set(Math.cos(a) * r, Math.sin(a) * r, 0); blade.rotation.z = a; g.add(blade);
-  }
-  g.add(rim, face, dot, inner, inner2); rim.castShadow = face.castShadow = true;
-  return g;
+  return buildWeaponModel(color, w, s, glowMul, Disc.glow || 1);
 }
 
 export class Disc {
