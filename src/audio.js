@@ -169,7 +169,18 @@ export class Audio {
   discThrow(p = 1) { this._noise(0.25, { type: 'bandpass', freq: 900, sweepTo: 3200, q: 1.5, gain: 0.35 * p, attack: 0.01 }); this._tone(500, 0.18, { type: 'triangle', gain: 0.08, slideTo: 1400, rev: 0.2 }); }
   discBounce(n = 1) { this._tone(900 + n * 260, 0.12, { type: 'square', gain: 0.07, rev: 0.3 }); this._noise(0.06, { type: 'highpass', freq: 3000, gain: 0.25, rev: 0.2 }); }
   discCatch() { this._tone(1500, 0.06, { type: 'triangle', gain: 0.12, rev: 0 }); this._noise(0.05, { type: 'lowpass', freq: 1500, gain: 0.2, rev: 0 }); }
-  discHit(n = 1) { this._noise(0.12, { type: 'lowpass', freq: 2500, gain: 0.5, rev: 0.15 }); this._tone(240 + n * 60, 0.1, { type: 'square', gain: 0.1, slideTo: 90, rev: 0 }); }
+  discHit(n = 1) {
+    // crack + body thump + a pitched tick that climbs with bounces
+    this._noise(0.12, { type: 'lowpass', freq: 2600, gain: 0.55, rev: 0.15 });
+    this._tone(95, 0.16, { type: 'sine', gain: 0.45, slideTo: 45, rev: 0 });
+    this._tone(240 + n * 60, 0.1, { type: 'square', gain: 0.1, slideTo: 90, rev: 0 });
+  }
+  crit() {
+    // headshot: a bright metallic ping on top of the hit
+    this._tone(1760, 0.18, { type: 'triangle', gain: 0.16, rev: 0.3 });
+    this._tone(2640, 0.12, { type: 'sine', gain: 0.1, delay: 0.02, rev: 0.3 });
+    this._noise(0.05, { type: 'highpass', freq: 5000, gain: 0.25, rev: 0 });
+  }
   blink() { this._tone(300, 0.25, { type: 'sine', gain: 0.35, slideTo: 1600, rev: 0.4 }); this._noise(0.2, { type: 'bandpass', freq: 4000, sweepTo: 500, gain: 0.3 }); }
   slam() { this._noise(0.4, { type: 'lowpass', freq: 1200, sweepTo: 80, gain: 0.7, rev: 0.4 }); this._tone(70, 0.3, { type: 'sine', gain: 0.5, slideTo: 35, rev: 0 }); }
   orbFire(dist) { const g = Math.max(0.05, 0.3 - dist * 0.004); this._tone(700, 0.2, { type: 'sine', gain: g, slideTo: 250, rev: 0.4 }); }

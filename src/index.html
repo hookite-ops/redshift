@@ -223,7 +223,6 @@ body.touch #tut{top:112px;left:18px;width:300px;transform:scale(.85);transform-o
 body.touch #bannerBig{font-size:44px}
 #rotate{display:none}
 @media (orientation:portrait){body.touch.playing #rotate{display:flex;position:fixed;inset:0;z-index:50;background:var(--paper);align-items:center;justify-content:center;font-size:20px;font-weight:900;text-align:center;line-height:1.6}}
-}
 .lo{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .lo button{font:inherit;font-weight:700;font-size:15px;padding:9px 6px;background:#fff;border:1.5px solid var(--line);cursor:pointer;color:var(--ink)}
 .lo button small{display:block;font-size:11px;font-weight:400;color:var(--dim);margin-top:2px}
@@ -439,6 +438,23 @@ body.touch #feed{top:62px}
 .wbar b{display:block;height:100%;width:0;background:var(--ink);transition:width .35s cubic-bezier(.2,.8,.2,1)}
 .wbar:first-of-type b{background:var(--or)}
 @media (max-width:900px),(max-height:560px){#wCanvas{height:92px}.wdesc{display:none}}
+#hit.crit i{background:var(--or);box-shadow:0 0 6px rgba(255,79,20,.8)}
+#hit.crit.show{animation:hitK .3s ease-out forwards}
+#killCard{position:absolute;left:50%;top:64%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;opacity:0;pointer-events:none}
+#killCard span{background:var(--or);color:#fff;font-weight:900;font-size:13px;letter-spacing:2px;padding:4px 10px;transform:skewX(var(--sk))}
+#killCard b{background:var(--ink);color:#fff;font-family:'Space Grotesk','Noto Sans KR';font-size:22px;letter-spacing:2px;padding:3px 14px;transform:skewX(var(--sk));text-transform:uppercase}
+#killCard b::before{content:'✕  ';color:var(--or)}
+#killCard.show{animation:kc 1.5s cubic-bezier(.2,.9,.2,1) forwards}
+@keyframes kc{0%{opacity:0;transform:translateX(-50%) scale(1.5)}10%{opacity:1;transform:translateX(-50%) scale(1)}78%{opacity:1}100%{opacity:0;transform:translateX(-50%) translateY(-10px)}}
+#popup{font-size:30px}
+.dn.big{font-size:34px}
+.btn.rank{background:linear-gradient(110deg,var(--or) 0%,#ff7a2e 60%,#ffb02e 140%);border-color:var(--or);color:#fff}
+.btn.rank small{color:rgba(255,255,255,.92)}
+.btn.rank::after{content:'→';position:absolute;right:14px;top:50%;transform:translateY(-50%);font-family:'Space Grotesk';font-weight:700;opacity:.7}
+.btn.rank:hover{background:var(--ink);border-color:var(--ink)}
+#rankBadge{display:inline-block;margin-left:8px;font-size:11px;font-weight:900;letter-spacing:1px;padding:2px 8px;background:#fff;color:var(--ink);transform:skewX(var(--sk));vertical-align:2px}
+.row4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.row4 .btn{margin-bottom:0;padding:9px 10px!important;font-size:14.5px!important}
 @media (max-width:900px),(max-height:560px){
   #menu .menuGrid{grid-template-columns:1fr 1.25fr;gap:14px;width:98vw}
   #menu .menuGrid>div:last-child{padding:12px 14px;max-height:94vh}
@@ -469,6 +485,7 @@ body.touch #feed{top:62px}
   <div id="tut" class="hidden"></div>
   <div id="banner"><div id="bannerBig"></div><div id="bannerSmall"></div></div>
   <div id="popup"></div>
+  <div id="killCard"><span id="kcTag">처치</span><b id="kcName"></b></div>
   <div id="hint"></div>
   <div id="keyHints"></div>
   <div id="hpBox"><div id="hpRow"><span>HP</span><span id="hpNum">100</span></div><div id="hpBar"><div id="hpFill"></div></div></div>
@@ -514,12 +531,12 @@ body.touch #feed{top:62px}
       <div id="best"></div>
     </div>
     <div>
-      <button class="btn main" data-act="arena">아레나<small>포탑 · 추적자 · 방패병 웨이브 생존</small></button>
+      <button class="btn rank" data-act="rank">랭크전<span id="rankBadge">브론즈 1000</span><small id="rankSub">1V1 · 이기면 RP가 오르고 상대도 강해져요</small></button>
       <button class="btn online" data-act="online">온라인 대전<small>다른 사람들과 멀티 · PC·모바일·앱 같이</small></button>
       <div class="row3">
         <button class="btn vs" data-act="duel">1V1<small>봇과 5킬</small></button>
         <button class="btn vs" data-act="ffa">FFA<small>봇 5명</small></button>
-        <button class="btn" data-act="practice">연습장<small>안 죽음</small></button>
+        <button class="btn vs" data-act="arena">아레나<small>웨이브 생존</small></button>
       </div>
       <h3>맵 <span class="sub">(1V1 · FFA · 아레나)</span></h3>
       <div class="lo six" id="maps">
@@ -559,14 +576,15 @@ body.touch #feed{top:62px}
         <button data-sk="gravity">중력탄<small>적 끌어당기기</small></button>
         <button data-sk="heal">재생<small>체력 +35</small></button>
       </div>
-      <div class="row3" style="margin-top:14px">
+      <div class="row4" style="margin-top:14px">
+        <button class="btn" data-act="practice">연습장</button>
         <button class="btn ailab" data-act="ailab">AI 훈련소</button>
         <button class="btn" data-act="controls">조작법</button>
         <button class="btn" data-act="settings">설정</button>
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.5 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.6 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">

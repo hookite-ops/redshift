@@ -47,47 +47,66 @@ export class Fighter {
     const m = (g, mat, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.castShadow = true; return o; };
     const rbox = (w, h, d) => { const g = new THREE.CapsuleGeometry(Math.min(w, d) / 2, h, 4, 10); g.scale(w / Math.min(w, d), 1, d / Math.min(w, d)); return g; };
     const root = this.model = new THREE.Group();
-    const body = this.torso = new THREE.Group(); root.add(body);
-    const cap = (r, l, mat, x, y, z) => m(new THREE.CapsuleGeometry(r, l, 4, 10), mat, x, y, z);
-    // core: graphite bodysuit, white shell plates, a team-coloured stripe and glowing accents
-    body.add(cap(0.16, 0.22, dark, 0, 1.05, 0));                                     // waist
-    body.add(m(rbox(0.34, 0.12, 0.2), dark, 0, 0.93, 0));                            // pelvis
-    const chest = m(rbox(0.44, 0.26, 0.26), white, 0, 1.33, -0.01); body.add(chest);   // chest shell
-    body.add(m(new THREE.BoxGeometry(0.07, 0.3, 0.02), team, 0, 1.3, -0.145));        // front stripe
-    body.add(m(new THREE.BoxGeometry(0.26, 0.022, 0.02), glow, 0, 1.4, -0.152));      // chest light
-    const belt = m(new THREE.TorusGeometry(0.175, 0.016, 6, 32), glow, 0, 0.99, 0); belt.rotation.x = Math.PI / 2; belt.scale.set(1.05, 0.75, 1); body.add(belt);
-    for (const sx of [-1, 1]) { const sp = m(new THREE.SphereGeometry(0.1, 14, 10), white, sx * 0.26, 1.45, 0); sp.scale.set(1.15, 0.8, 1.1); body.add(sp); }
-    body.add(m(rbox(0.22, 0.3, 0.08), dark, 0, 1.3, 0.15));                          // back fin
-    body.add(m(new THREE.BoxGeometry(0.03, 0.26, 0.02), glow, 0, 1.3, 0.195));        // spine light
-    body.add(m(new THREE.CylinderGeometry(0.055, 0.065, 0.1, 10), dark, 0, 1.55, 0));  // neck
-    // helmet: smooth white shell, dark face plate, thin glowing visor slit
-    this.head = m(new THREE.SphereGeometry(0.15, 22, 16), white, 0, 1.7, 0); this.head.scale.set(0.95, 1.08, 1.05); body.add(this.head);
-    this.head.add(m(new THREE.SphereGeometry(0.152, 20, 12, Math.PI * 0.62, Math.PI * 0.76, Math.PI * 0.32, Math.PI * 0.36), dark, 0, 0, 0));
-    this.head.add(m(new THREE.CylinderGeometry(0.155, 0.155, 0.028, 22, 1, true, Math.PI * 0.68, Math.PI * 0.64), glow, 0, 0.012, 0));
-    this.head.add(m(new THREE.BoxGeometry(0.03, 0.02, 0.24), team, 0, 0.15, 0.02));    // crest
-    // off arm (static) — upper white, forearm graphite
-    const offArm = new THREE.Group(); offArm.position.set(-0.29, 1.43, 0); offArm.rotation.set(0.25, 0, 0.12); body.add(offArm);
-    offArm.add(cap(0.06, 0.2, white, 0, -0.14, 0)); offArm.add(cap(0.052, 0.2, dark, 0, -0.38, -0.02));
-    offArm.add(m(new THREE.BoxGeometry(0.11, 0.02, 0.11), glow, 0, -0.27, 0));
-    // legs: white thigh, knee cap, graphite shin, white boot with a glowing sole line
-    this.legs = [];
+    // ---- skeleton: hips → spine → chest → neck → head, shoulders → elbows → hands, hips → knees → ankles ----
+    // joints are Groups; meshes hang off them, so the procedural animation in renderModel bends real joints
+    const J = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+    const limb = (parent, len, r0, r1, mat) => { const o = m(new THREE.CylinderGeometry(r1, r0, len, 12), mat, 0, -len / 2, 0); parent.add(o); return o; };
+    const ball = (parent, r, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => { const o = m(new THREE.SphereGeometry(r, 16, 12), mat, x, y, z); o.scale.set(sx, sy, sz); parent.add(o); return o; };
+    const R = this.rig = {};
+    const hips = R.hips = J(root, 0, 0.96, 0);
+    ball(hips, 0.14, dark, 0, 0, 0, 1.3, 0.85, 1.0);                                   // pelvis
+    hips.add(m(new THREE.TorusGeometry(0.135, 0.013, 6, 32).rotateX(Math.PI / 2), glow, 0, 0.04, 0)); // belt light
+    const spine = R.spine = J(hips, 0, 0.07, 0);
+    ball(spine, 0.125, dark, 0, 0.1, 0, 1.2, 1.2, 0.9);                                 // waist
+    const chest = R.chest = J(spine, 0, 0.2, 0);
+    ball(chest, 0.16, dark, 0, 0.04, 0, 1.25, 1.0, 0.82);                                 // ribcage
+    const plate = m(rbox(0.36, 0.16, 0.22), white, 0, 0.06, -0.015); chest.add(plate);    // chest armour
+    chest.add(m(new THREE.BoxGeometry(0.05, 0.2, 0.02), team, 0, 0.05, -0.135));         // front stripe
+    chest.add(m(new THREE.BoxGeometry(0.2, 0.018, 0.02), glow, 0, 0.12, -0.14));          // chest light
+    chest.add(m(rbox(0.2, 0.18, 0.08), dark, 0, 0.04, 0.14));                            // back unit
+    chest.add(m(new THREE.BoxGeometry(0.025, 0.2, 0.02), glow, 0, 0.04, 0.185));          // spine light
+    const neck = R.neck = J(chest, 0, 0.2, 0);
+    neck.add(m(new THREE.CylinderGeometry(0.045, 0.055, 0.09, 10), dark, 0, 0.03, 0));
+    const head = this.head = R.head = J(neck, 0, 0.1, 0);
+    ball(head, 0.115, white, 0, 0.04, 0.005, 0.95, 1.12, 1.05);                           // helmet
+    head.add(m(new THREE.SphereGeometry(0.117, 18, 10, Math.PI * 0.6, Math.PI * 0.8, Math.PI * 0.36, Math.PI * 0.34), dark, 0, 0.035, 0.005)); // face plate
+    head.add(m(new THREE.CylinderGeometry(0.118, 0.118, 0.022, 20, 1, true, Math.PI * 0.66, Math.PI * 0.68), glow, 0, 0.05, 0.005)); // visor
+    head.add(m(new THREE.BoxGeometry(0.022, 0.016, 0.2), team, 0, 0.165, 0.02));           // crest
+    // arms (index 0 = left, 1 = right / throwing)
+    R.sh = []; R.el = []; R.hand = [];
     for (const s of [-1, 1]) {
-      const leg = new THREE.Group(); leg.position.set(s * 0.11, 0.92, 0);
-      leg.add(cap(0.08, 0.26, white, 0, -0.2, 0));
-      leg.add(m(rbox(0.11, 0.06, 0.08), team, 0, -0.43, -0.06));
-      leg.add(cap(0.062, 0.28, dark, 0, -0.62, 0));
-      leg.add(m(rbox(0.12, 0.08, 0.26), white, 0, -0.86, -0.04));
-      leg.add(m(new THREE.BoxGeometry(0.125, 0.018, 0.27), glow, 0, -0.905, -0.04));
-      root.add(leg); this.legs.push(leg);
+      const sh = J(chest, s * 0.2, 0.13, 0);
+      ball(sh, 0.085, white, s * 0.02, 0.01, 0, 1.2, 0.85, 1.1);                          // shoulder pad
+      limb(sh, 0.27, 0.06, 0.072, dark);
+      sh.add(m(rbox(0.13, 0.12, 0.12), white, 0, -0.13, 0));                                // upper-arm plate
+      const el = J(sh, 0, -0.27, 0);
+      ball(el, 0.058, dark);
+      limb(el, 0.25, 0.05, 0.06, dark);
+      el.add(m(new THREE.CylinderGeometry(0.068, 0.06, 0.13, 12), white, 0, -0.16, 0));     // bracer
+      el.add(m(new THREE.TorusGeometry(0.067, 0.009, 6, 20).rotateX(Math.PI / 2), glow, 0, -0.095, 0));
+      const hand = J(el, 0, -0.26, 0);
+      ball(hand, 0.055, dark, 0, -0.03, 0, 0.9, 1.15, 0.7);
+      R.sh.push(sh); R.el.push(el); R.hand.push(hand);
     }
-    // throwing arm with a small copy of the disc
-    this.arm = new THREE.Group(); this.arm.position.set(0.29, 1.43, 0); body.add(this.arm);
-    this.arm.add(cap(0.06, 0.2, white, 0, -0.14, 0));
-    this.arm.add(cap(0.052, 0.2, dark, 0, -0.38, 0));
-    this.arm.add(m(new THREE.BoxGeometry(0.11, 0.02, 0.11), glow, 0, -0.27, 0));
-    const hd = this.handDisc = new THREE.Group(); hd.position.set(0.04, -0.52, -0.1);
-    hd.rotation.y = Math.PI / 2;
-    this.arm.add(hd);
+    // legs
+    R.hip = []; R.knee = []; R.ankle = [];
+    for (const s of [-1, 1]) {
+      const hp = J(hips, s * 0.095, -0.03, 0);
+      limb(hp, 0.44, 0.075, 0.1, dark);
+      hp.add(m(rbox(0.17, 0.2, 0.16), white, 0, -0.17, -0.012));                          // thigh plate
+      const kn = J(hp, 0, -0.44, 0);
+      ball(kn, 0.07, team, 0, 0, -0.03, 1, 1, 0.8);                                      // knee cap
+      limb(kn, 0.42, 0.058, 0.078, dark);
+      kn.add(m(rbox(0.13, 0.22, 0.1), white, 0, -0.18, -0.03));                            // shin guard
+      const an = J(kn, 0, -0.42, 0);
+      an.add(m(rbox(0.12, 0.06, 0.25), white, 0, -0.035, -0.05));                           // boot
+      an.add(m(new THREE.BoxGeometry(0.105, 0.016, 0.23), glow, 0, -0.068, -0.05));        // sole light
+      R.hip.push(hp); R.knee.push(kn); R.ankle.push(an);
+    }
+    this.torso = spine; this.arm = R.sh[1];
+    const hd = this.handDisc = new THREE.Group(); hd.position.set(0.02, -0.07, -0.06); hd.rotation.set(0, Math.PI / 2, 0);
+    R.hand[1].add(hd);
+    this.anim = { ph: 0, run: 0, air: 0, dash: 0, land: 0, wasAir: false, hipYaw: 0, dir: 1, aim: 0 };
     this.setHandDisc();
     // reflect bubble + chat bubble
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(1.15, 24, 16), new THREE.MeshBasicMaterial({ color: this.color, transparent: true, opacity: 0.22, depthWrite: false }));
@@ -140,24 +159,73 @@ export class Fighter {
   }
   renderModel(dt, alpha, t) {
     if (!this.model) return;
-    const B = this.body, root = this.model;
+    const B = this.body, root = this.model, R = this.rig, A = this.anim;
     root.visible = this.alive && !(this.protT > 0 && Math.sin(t * 40) > 0.3);
     if (!this.alive) return;
     root.position.set(B.prevPos.x + (B.pos.x - B.prevPos.x) * alpha, B.prevPos.y + (B.pos.y - B.prevPos.y) * alpha, B.prevPos.z + (B.pos.z - B.prevPos.z) * alpha);
     root.rotation.y = B.yaw;
-    const hs = B.hSpeed;
-    // lean into the run, legs swing, tuck in the air
-    const fwd = B.flatFwd(_v); const along = (B.vel.x * fwd.x + B.vel.z * fwd.z);
-    this.lean += (THREE.MathUtils.clamp(-along * 0.012, -0.35, 0.35) - this.lean) * Math.min(1, dt * 8);
-    this.torso.rotation.x = this.lean;
-    if (B.grounded) this.walk += dt * (2 + hs * 0.9);
-    const sw = B.grounded ? Math.sin(this.walk) * Math.min(1, hs / 8) * 0.8 : 0.5;
-    this.legs[0].rotation.x = B.grounded ? sw : -0.6; this.legs[1].rotation.x = B.grounded ? -sw : 0.3;
-    this.head.rotation.x = B.pitch * 0.6;
+    const k = (v, target, rate) => v + (target - v) * Math.min(1, dt * rate);
+    // velocity in the body's frame: f = forward (toward -z of the model), s = right
+    const fx = -Math.sin(B.yaw), fz = -Math.cos(B.yaw);
+    const vf = B.vel.x * fx + B.vel.z * fz, vs = B.vel.x * -fz + B.vel.z * fx, hs = Math.hypot(vf, vs);
+    const ground = B.grounded;
+    // ---- state blends ----
+    A.run = k(A.run, ground ? Math.min(1, hs / 7) : 0, 10);
+    A.air = k(A.air, ground ? 0 : 1, ground ? 14 : 6);
+    A.dash = k(A.dash, B.dashT > 0 ? 1 : 0, 16);
+    if (ground && A.wasAir && A.fallV < -6) A.land = Math.min(1, -A.fallV / 18);
+    A.wasAir = !ground; if (!ground) A.fallV = B.vel.y;
+    A.land = Math.max(0, A.land - dt * 4);
+    // lower body turns toward the direction of travel (backwards = run facing forward, legs reversed)
+    let mv = hs > 1.2 ? Math.atan2(vs, vf) : 0, dir = 1;
+    if (Math.abs(mv) > Math.PI / 2 + 0.2) { mv -= Math.sign(mv) * Math.PI; dir = -1; }
+    A.hipYaw = k(A.hipYaw, -THREE.MathUtils.clamp(mv, -1.1, 1.1) * 0.85, 10);
+    A.dir = dir;
+    // ---- gait: phase advances with distance travelled, so feet don't skate ----
+    const stride = 1.25 + Math.min(hs, 16) * 0.07;
+    if (ground) A.ph += dir * Math.min(hs, 16) / stride * Math.PI * dt;
+    const ph = A.ph, run = A.run, air = A.air, dash = A.dash;
+    const bob = Math.abs(Math.sin(ph)) * 0.05 * run;
+    R.hips.position.y = 0.96 - 0.03 * run + bob - A.land * 0.14 - dash * 0.06;
+    R.hips.rotation.set(0, A.hipYaw, Math.sin(ph) * 0.06 * run);
+    // upper body: counter-turns so the chest faces where the bot aims, leans into speed
+    const lean = -THREE.MathUtils.clamp(vf * 0.022, -0.3, 0.35) * (1 - air) - dash * 0.45 - A.land * 0.25;
+    R.spine.rotation.set(lean, -A.hipYaw * 0.8 + Math.sin(ph) * 0.16 * run, -Math.sin(ph) * 0.04 * run);
+    R.chest.rotation.set(-0.05 * run + Math.sin(t * 2.2) * 0.015 * (1 - run), -A.hipYaw * 0.2, 0);
+    this.head.rotation.set(THREE.MathUtils.clamp(B.pitch, -0.9, 0.9) * 0.65 - lean * 0.6, 0, 0);
+    // legs
+    for (let i = 0; i < 2; i++) {
+      const p = ph + (i ? Math.PI : 0), sw = Math.sin(p), cw = Math.cos(p);
+      let hip = sw * 0.75 * run, knee = -(0.12 + 1.15 * Math.max(0, cw)) * run, ank = 0;
+      // air: tucked, one leg forward; dash: long reaching stride
+      hip = hip * (1 - air) + (i ? 0.25 : 0.95) * air;
+      knee = knee * (1 - air) - (i ? 0.9 : 1.35) * air;
+      hip += dash * (i ? -0.5 : 0.6); knee -= dash * (i ? 0.6 : 0.2);
+      hip += A.land * 0.6; knee -= A.land * 1.1;
+      ank = -(hip + knee) * 0.45;
+      R.hip[i].rotation.set(hip, 0, (i ? -1 : 1) * (0.04 + air * 0.06));
+      R.knee[i].rotation.x = knee;
+      R.ankle[i].rotation.x = ank;
+    }
+    // arms: swing against the legs; out in the air; swept back in a dash
     this.throwT = Math.max(0, this.throwT - dt);
-    const k = this.throwT > 0 ? Math.sin((1 - this.throwT / 0.25) * Math.PI) : 0;
-    this.arm.rotation.x = 0.35 + B.pitch * 0.5 + k * 1.4;
-    this.arm.rotation.z = -0.15;
+    const th = this.throwT > 0 ? 1 - this.throwT / 0.25 : -1;
+    for (let i = 0; i < 2; i++) {
+      const p = ph + (i ? 0 : Math.PI), sw = Math.sin(p) * 0.85 * run;
+      let sx = sw * (1 - air) + 0.15, sz = (i ? -1 : 1) * (0.12 + air * 0.55 + run * 0.05), ex = 0.35 + 0.75 * run;
+      sx = sx * (1 - dash) - 0.9 * dash; ex = ex * (1 - dash) + 0.3 * dash;
+      if (i === 1) {
+        // throwing arm: holds the disc ready at chest height; the throw is a sidearm whip toward the aim
+        const hold = this.disc.state === 'hand' ? 1 - dash * 0.7 : 0;
+        sx = sx * (1 - hold) + (0.7 + B.pitch * 0.5) * hold; ex = ex * (1 - hold) + 1.5 * hold; sz = sz * (1 - hold) - 0.35 * hold;
+        if (th >= 0) {
+          const wind = th < 0.35 ? th / 0.35 : 1, rel = th < 0.35 ? 0 : (th - 0.35) / 0.65, e = 1 - Math.pow(1 - rel, 3);
+          sx = 1.3 + B.pitch * 0.8; ex = 1.6 * (1 - e) + 0.15 * e; sz = -0.9 * wind * (1 - e) + 0.5 * e;
+        }
+      }
+      R.sh[i].rotation.set(sx, 0, sz);
+      R.el[i].rotation.set(ex, 0, 0);
+    }
     this.handDisc.visible = this.disc.state === 'hand';
     this.dome.visible = this.reflectT > 0;
     if (this.dome.visible) { this.dome.scale.setScalar(0.9 + Math.sin(t * 30) * 0.05); this.dome.material.opacity = 0.1 + this.reflectT * 0.15; }
