@@ -8,6 +8,8 @@ setShippedBrain(SHIPPED_BRAIN);
 import { Input } from './input.js';
 import { Net } from './net.js';
 import { MAPS } from './maps.js';
+import { WeaponView } from './weaponview.js';
+import { WEAPONS } from './disc.js';
 const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
 import { Touch, isTouchDevice } from './touch.js';
 import { ACTIONS, DEFAULT_BINDS, loadSettings, saveSettings, loadRecords, saveRecords, keyName } from './settings.js';
@@ -200,7 +202,19 @@ $('oRefresh').onclick = async () => { if (await connectOnline()) game.net.send({
 $('oServer').addEventListener('change', () => { Net.save($('oServer').value.trim()); if (game.net.ws) game.net.close(); if ($('oServer').value.trim()) connectOnline(); else openOnline(); });
 
 // difficulty
+// menu weapon showcase (3D preview + stat bars)
+let wview = null;
+try { wview = new WeaponView($('wCanvas')); } catch (e) { $('wCanvas').style.display = 'none'; }
+const WMAX = { speed: 78, dmg: 58, maxBounces: 6, blinkSlam: 56 };
+function renderWeapon() {
+  const w = WEAPONS[S.weapon] || WEAPONS.disc;
+  if (wview) wview.set(w.id);
+  $('wName').textContent = w.name; $('wDesc').textContent = w.desc;
+  const set = (id, v, max) => { $(id).style.width = Math.max(6, Math.round(v / max * 100)) + '%'; };
+  set('wSpd', w.speed, WMAX.speed); set('wDmg', w.dmg, WMAX.dmg); set('wBnc', w.maxBounces + 0.3, WMAX.maxBounces); set('wSlam', w.blinkSlam, WMAX.blinkSlam);
+}
 function renderDifficulty() {
+  renderWeapon();
   document.querySelectorAll('#difficulty button').forEach(b => b.classList.toggle('on', b.dataset.df === S.difficulty));
   document.querySelectorAll('#botskill button').forEach(b => b.classList.toggle('on', b.dataset.bs === S.botSkill));
   document.querySelectorAll('#weapons button').forEach(b => b.classList.toggle('on', b.dataset.wp === S.weapon));
@@ -288,7 +302,13 @@ function renderBest() {
 show('menu'); renderBest();
 $('loading').classList.add('hidden');
 // (the offline trainer sets __trainHeadless: no drawing at all, every CPU cycle goes to the matches)
-function loop(now) { if (window.__trainHeadless) return; requestAnimationFrame(loop); game.frame(now); }
+let wvLast = 0;
+function loop(now) {
+  if (window.__trainHeadless) return;
+  requestAnimationFrame(loop); game.frame(now);
+  // weapon preview: only while the main menu is showing, ~30 fps
+  if (wview && now - wvLast > 33 && !$('menu').classList.contains('hidden')) { wview.frame(Math.min(0.1, (now - wvLast) / 1000)); wvLast = now; }
+}
 requestAnimationFrame(loop);
 
 // ---------------- AI 훈련소 ----------------
@@ -307,7 +327,7 @@ const lab = installLab(game, { $, show, onSpectate: spectate });
 // test hooks
 installTrainAPI(game);
 window.__game = {
-  game, S, input,
+  game, S, input, renderWeapon,
   start: m => startMode(m),
   sim(sec, keys = []) {
     const g = game; const dt = 1 / 120;
