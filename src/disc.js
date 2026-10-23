@@ -64,8 +64,8 @@ const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 const _hit = { t: 0, x: 0, y: 0, z: 0, nx: 0, ny: 0, nz: 0, flags: 0, tri: 0 };
 
 // every weapon has its own model (weapons3d.js); Disc.glow is 4 with bloom on, 1 without
-export function discModel(color, w, s = 1, glowMul = 1) {
-  return buildWeaponModel(color, w, s, glowMul, Disc.glow || 1);
+export function discModel(color, w, s = 1, glowMul = 1, wskin = 'std') {
+  return buildWeaponModel(color, w, s, glowMul, Disc.glow || 1, wskin);
 }
 
 export class Disc {
@@ -84,7 +84,7 @@ export class Disc {
   setWeapon(id) {
     this.w = WEAPONS[id] || WEAPONS.disc;
     if (this.spinner) this.holder.remove(this.spinner);
-    this.spinner = this.mesh = discModel(this.color, this.w, this.w.scale);
+    this.spinner = this.mesh = discModel(this.color, this.w, this.w.scale, 1, (this.owner && this.owner.wskin) || this.wskin || 'std');
     this.holder.add(this.spinner);
   }
   get body() { return this.owner ? this.owner.body : this.game.player; }

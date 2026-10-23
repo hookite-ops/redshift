@@ -51,7 +51,7 @@ export function installOnline(Game) {
   };
   G.addNetFighter = function (p) {
     const local = p.bot && p.owner === this.net.clientId;
-    const f = new Fighter(this, { name: p.name, color: p.color, isBot: true, weapon: p.weapon, skill: p.skill });
+    const f = new Fighter(this, { name: p.name, color: p.color, isBot: true, weapon: p.weapon, skill: p.skill, skin: p.look && p.look.skin, wskin: p.look && p.look.wskin, killfx: p.look && p.look.killfx });
     f.netId = p.id; f.netBot = p.bot; f.persona = p.persona;
     f.kills = p.kills || 0; f.deaths = p.deaths || 0; f.hp = p.hp ?? 100; f.alive = p.alive !== false;
     f.snaps = [];
@@ -88,7 +88,7 @@ export function installOnline(Game) {
         this.banner('랭크전', `${m.you.name} (${m.you.tier} ${m.you.r})  VS  ${m.op.name} (${m.op.tier} ${m.op.r}) · 5킬 먼저`, 3.2);
         this.audio.checkpoint && this.audio.checkpoint(false);
         return;
-      case 'rankres': this.rankResult = m; this.onRankResult && this.onRankResult(m); return;
+      case 'rankres': { const got = this.award(m.result === 'win' ? 150 : m.result === 'draw' ? 80 : 50, '랭크전'); m.coins = got; this.rankResult = m; this.onRankResult && this.onRankResult(m); return; }
       case 'closed': if (this.online) { this.online = false; this.net.inRoom = false; this.onRankClosed && this.onRankClosed(); } return;
     }
     if (!this.online) return;
@@ -145,7 +145,7 @@ export function installOnline(Game) {
         }
         return;
       }
-      case 'loadout': { const f = by(m.id); if (f && f.remote) { f.disc.setWeapon(m.weapon); f.setHandDisc(); f.skill = m.skill; } return; }
+      case 'loadout': { const f = by(m.id); if (f && f.remote) { f.disc.setWeapon(m.weapon); f.setHandDisc(); f.skill = m.skill; if (m.look) f.setLook(m.look); } return; }
       case 'fx': return this.netFxIn(m);
     }
   };
@@ -184,6 +184,7 @@ export function installOnline(Game) {
     this.banner(w && w.f === this.me ? '1위!' : `${w ? w.f.name : '?'} 우승`, `내 순위 ${myRank}위 · 8초 뒤 새 라운드`, 7);
     if (myRank === 1) this.audio.checkpoint(true); else this.audio.wave();
     const rec = this.records; rec.onlineGames = (rec.onlineGames || 0) + 1; if (myRank === 1) rec.onlineWins = (rec.onlineWins || 0) + 1;
+    const got = this.award(40 + this.me.kills * 8 + (myRank === 1 ? 60 : 0), '온라인 대전'); if (got) this.feedText(`+${got} 코인`);
     this.saveRecords && this.saveRecords();
     for (const f of this.fighters) if (f.brain) this.chat(f, w && w.f === f ? 'win' : 'lose', 0.5);
   };
@@ -216,6 +217,7 @@ export function installOnline(Game) {
         break;
       }
       case 'refl': this.reflectFx(f, at, true); break;
+      case 'emote': if (f.remote) f.playEmote(m.e); break;
       case 'nade': this.throwGrenade(f, null, V(m.p), V(m.v)); break;
       case 'blast': this.discBlast(f.disc, V(m.p), true); break;
       case 'split': for (const v of m.v || []) this.spawnShard(f, f.color, V(m.p), V(v), 0, true); break;

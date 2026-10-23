@@ -12,6 +12,7 @@ import { Fighter, BOT_ROSTER } from './fighter.js';
 import { BotBrain, SKILL, PERSONAS } from './bot.js';
 import { makeBrain } from './neurobot.js';
 import { rankState, tierOf, opponentFor, applyResult } from './rank.js';
+import { wallet, owns, CATS, earn, EMOTES, byId as cosm } from './cosmetics.js';
 import { Net } from './net.js';
 import { installOnline } from './online.js';
 import { Audio } from './audio.js';
@@ -256,7 +257,12 @@ export class Game {
     Object.assign(me, { kills: 0, deaths: 0, alive: true, protT: 0, invulnT: 0, regenT: 0, streak: 0, lastHitBy: null, respawnT: 0 });
     this.deathInfo = null; this.match = { limit: 0, timeLeft: 0, over: true };
     this.disc.caught(); this.disc.catchCd = 0; this.trail.reset();
-    this.disc.setWeapon(this.S.weapon); this.hand.setWeapon(this.disc.w, 0xff5a1f);
+    // your look: only what you own (falls back to the free items)
+    const S = this.S, rec = wallet(this.records || {});
+    const pickOwned = (cat, id) => owns(rec, cat, id) ? id : CATS[cat].find(x => x.free).id;
+    me.setLook({ skin: pickOwned('skin', S.skin), wskin: pickOwned('wskin', S.wskin), killfx: pickOwned('killfx', S.killfx) });
+    me.showSelf = false; me.emote = null;
+    this.disc.setWeapon(S.weapon); this.hand.setWeapon(this.disc.w, 0xff5a1f, me.wskin);
     me.skill = SKILLS[this.S.skill] ? this.S.skill : 'reflect';
     me.skillCd = 0; me.reflectT = me.overT = me.healT = 0; P.speedMul = 1;
     this.state = 'play'; this.acc = 0; this.last = performance.now(); this.timeScale = 1; this.slowT = this.stopT = 0;
@@ -442,7 +448,7 @@ export class Game {
       crouch: false, dashPressed: I.pressed('dash'),
       grapplePressed: false, grappleHeld: false,
       autoHop: !!this.S.autoHop,
-      throwPressed: I.pressed('throw'), blinkPressed: I.pressed('blink'), skillPressed: I.pressed('skill'),
+      throwPressed: I.pressed('throw'), blinkPressed: I.pressed('blink'), skillPressed: I.pressed('skill'), emotePressed: I.pressed('emote'),
     };
     I.consumeEdges();
     return inp;
@@ -461,6 +467,12 @@ export class Game {
     let inp = this.readInput();
     if (this.menuOpen) { inp.fwd = inp.right = 0; inp.jumpPressed = inp.jumpHeld = inp.dashPressed = inp.throwPressed = inp.blinkPressed = inp.skillPressed = false; }
     if (me.brain) inp = me.brain.tick(dt); // autopilot (used by the automated tests)
+    if (inp.emotePressed && this.onEmoteKey) this.onEmoteKey();
+    if (me.emote && (inp.fwd || inp.right || inp.jumpPressed || inp.dashPressed || inp.throwPressed || inp.blinkPressed || inp.skillPressed || !me.alive)) { me.emote = null; }
+    me.showSelf = !!me.emote;
+    // party emotes throw confetti
+    this.confT = (this.confT || 0) - dt;
+    if (this.confT <= 0) { this.confT = 0.12; for (const f of this.fighters) if (f.emote && f.emote.def.confetti && f.alive) this.confetti(f.body.pos, 5, 2.4); }
     if (this.online) this.updateRemotes();
     if (me.alive) {
       P.tick(dt, inp, this.pctx);
@@ -514,6 +526,45 @@ export class Game {
     this.foes = this.foes.filter(f => f.alive);
     this.tickOrbs(dt);
     if (this.mode === 'arena') this.tickWaves(dt); else this.tickPractice(dt);
+  }
+
+  // ======================= emotes & cosmetics =======================
+  emote(id) {
+    const me = this.me;
+    if (this.state !== 'play' || !me.alive || !me.body.grounded) return false;
+    if (!me.playEmote(id)) return false;
+    me.showSelf = true;
+    if (this.online) this.netFx({ k: 'emote', id: me.netId, e: id });
+    return true;
+  }
+  confetti(pos, n = 30, h = 1.2) {
+    const P = [[1, 0.31, 0.08], [0.1, 0.55, 1], [0.15, 0.85, 0.45], [1, 0.82, 0.1], [1, 0.25, 0.65], [1, 1, 1]];
+    this.parts.emit(new THREE.Vector3(pos.x, pos.y + h, pos.z), n, { color: P, speed: 6, life: 1.1, gravity: 6, size: 0.12 });
+  }
+  // what a kill looks like depends on the KILLER's kill effect
+  killEffect(k, v, c, dir) {
+    const fx = k && k.killfx || 'cubes', col = new THREE.Color(v.color);
+    if (fx === 'confetti') { this.confetti(v.body.pos, 70, 1.1); this.rings.add(c.clone(), 0xffffff, 2.2, 0.35, null); }
+    else if (fx === 'pixel') {
+      for (let i = 0; i < 4; i++) this.parts.emit(new THREE.Vector3(c.x, c.y - 0.6 + i * 0.4, c.z), 14, { color: [[col.r, col.g, col.b], [1, 1, 1]], speed: 1.5, life: 1.3, gravity: -4, size: 0.16 });
+    } else if (fx === 'bolt') {
+      for (let i = 0; i < 26; i++) { const t = i / 25, j = (Math.random() - 0.5) * 0.9 * (1 - t); this.parts.emit(new THREE.Vector3(c.x + j, c.y + t * 14, c.z + (Math.random() - 0.5) * 0.9 * (1 - t)), 2, { color: [[0.75, 0.85, 1], [1, 1, 1]], speed: 0.6, life: 0.35, gravity: 0, size: 0.22 }); }
+      this.rings.add(new THREE.Vector3(v.body.pos.x, v.body.pos.y + 0.06, v.body.pos.z), 0xbfd8ff, 4.2, 0.4);
+      this.flashFx = 1; this.shake(0.15);
+    } else if (fx === 'hole') {
+      for (let i = 0; i < 3; i++) this.rings.add(c.clone(), 0x0e1116, 3.2 - i * 0.8, 0.5 + i * 0.12, null);
+      for (let i = 0; i < 36; i++) { // a ring of debris sucked into the middle
+        const ang = i / 36 * Math.PI * 2, p = new THREE.Vector3(c.x + Math.cos(ang) * 2.6, c.y + (Math.random() - 0.5), c.z + Math.sin(ang) * 2.6);
+        this.parts.emit(p, 1, { color: [[0.05, 0.05, 0.08], [0.55, 0.3, 1], [col.r, col.g, col.b]], dir: new THREE.Vector3(-Math.cos(ang), 0, -Math.sin(ang)), spread: 0.1, speed: 6, life: 0.45, gravity: 0, drag: 0, size: 0.14 });
+      }
+    }
+  }
+  // coins for playing (cosmetics)
+  award(n, why) {
+    if (this.trainLock || n <= 0) return 0;
+    const got = earn(wallet(this.records), n, why); this.saveRecords && this.saveRecords();
+    this.coinsWon = (this.coinsWon || 0) + got;
+    return got;
   }
 
   // ======================= the disc =======================
@@ -1438,6 +1489,8 @@ export class Game {
       k.body.dashCharges = Math.min(k.body.dashMax, k.body.dashCharges + 1);
     }
     this.feedKill(k, v, tag);
+    if (k && k !== v && (k.killfx || 'cubes') !== 'cubes') this.killEffect(k, v, c, dir);
+    if (k && k.brain && k !== v && !k.remote && Math.random() < 0.18 && k.body.grounded) { const E = ['wave', 'taunt', 'flex', 'cheer', 'clap']; k.playEmote(E[(Math.random() * E.length) | 0]); }
     if (k && k.brain && k !== v) { k.brain.onKill(v); this.chat(k, k.streak === 3 ? 'streak' : kind === 'bank' ? 'bank' : kind === 'slam' ? 'slam' : 'kill', v === this.me ? 0.4 : 0.22); }
     if (v.brain) { v.brain.onDeath(k); this.chat(v, 'death', k === this.me ? 0.35 : 0.15); }
     if (k === this.me) {
@@ -1513,14 +1566,17 @@ export class Game {
       rec.ffaBest = Math.min(rec.ffaBest || 99, myRank);
     }
     rec.speed = Math.max(rec.speed || 0, this.maxSpeed);
+    // coins: practice vs bots pays a little (ranked and online pay more)
+    const coins = this.award(20 + me.kills * 6 + (myRank === 1 ? 30 : 0), '봇 연습');
     this.saveRecords && this.saveRecords();
     this.banner(title, sub, 1.8);
     if (myRank === 1) this.audio.checkpoint(true); else this.audio.wave();
     for (const f of this.fighters) if (f.brain) this.chat(f, rank[0] === f ? 'win' : 'lose', 0.6);
+    if (rank[0] && rank[0].brain && rank[0].body.grounded) rank[0].playEmote(Math.random() < 0.5 ? 'disco' : 'groove');
     const stats = rank.map((f, i) => [`${i + 1}. ${f.name}`, `${f.kills} 킬 · ${f.deaths} 데스`]);
     if (this.ranked && this.rankLine) { const rs = rankState(rec); stats.unshift(this.rankLine); stats.push(['연승', rs.streak > 0 ? `${rs.streak}연승` : rs.streak < 0 ? `${-rs.streak}연패` : '—'], ['헤드샷', `${me.st.crits || 0}번`]); }
     else stats.push(['봇 실력', SKILL[this.botSkill].name], ['헤드샷', `${me.st.crits || 0}번`]);
-    stats.push(['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H']);
+    stats.push(['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H'], ['코인', `+${coins}`]);
     this.result = { title, stats, rank: myRank };
     setTimeout(() => {
       if (this.state !== 'play' || this.match !== M) return;
@@ -1594,6 +1650,13 @@ export class Game {
       this.camera.position.lerp(_d, Math.min(1, rawDt * 5));
       this.camera.lookAt(look.x, look.y + 1, look.z);
       this.camera.fov = 62; this.camera.updateProjectionMatrix();
+    } else if (inGame && this.me.emote && this.me.alive) {
+      // emoting: swing out in front of yourself so you can see it
+      const B = this.me.body, a = B.yaw + 0.4 + Math.sin(this.clockT * 0.4) * 0.3;   // in front of you, slowly drifting
+      _d.set(B.pos.x - Math.sin(a) * 3.6, B.pos.y + 1.45, B.pos.z - Math.cos(a) * 3.6);
+      if (this.camera.position.distanceTo(_d) > 6) this.camera.position.copy(_d); else this.camera.position.lerp(_d, Math.min(1, rawDt * 6));
+      this.camera.lookAt(B.pos.x, B.pos.y + 1.05, B.pos.z);
+      this.camera.fov = 58; this.camera.updateProjectionMatrix();
     } else if (!inGame) {
       // menu: slow orbit over the arena
       const a = this.clockT * 0.06;
@@ -1636,7 +1699,7 @@ export class Game {
     for (const f of this.fighters) {
       f.disc.render(fxDt);
       f.disc.trail.update(f.disc.pos, this.camera.position, f.disc.out && this.state !== 'menu');
-      if (f.isBot) f.renderModel(rawDt, alphaR, this.clockT);
+      f.renderModel(rawDt, alphaR, this.clockT);
     }
     this.renderShards();
     this.parts.update(fxDt);
@@ -1655,8 +1718,9 @@ export class Game {
     this.audio.update(this.state === 'play' ? P.speed : 0, false, rawDt, intensity);
 
     if (inGame) this.updateHud(rawDt);
+    this.cls('hud', 'emoting', !!(this.me.emote && inGame));
 
-    const r = this.renderer, hands = (this.state === 'play' || this.state === 'paused') && this.me.alive;
+    const r = this.renderer, hands = (this.state === 'play' || this.state === 'paused') && this.me.alive && !this.me.emote;
     this.sky.position.copy(this.camera.position);
     if (this.post) {
       const sp = this.state === 'play' && this.me.alive ? THREE.MathUtils.clamp((P.speed - 20) / 26, 0, 1) * (this.S.fovFx > 0 ? 1 : 0.5) : 0;

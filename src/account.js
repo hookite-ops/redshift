@@ -20,6 +20,7 @@ export function mergeRecords(a = {}, b = {}) {
       const x = a.rank, y = v;
       out.rank = !x ? y : !y ? x : (y.games > x.games || (y.games === x.games && y.r > x.r)) ? { ...y, best: Math.max(x.best || 0, y.best || 0) } : { ...x, best: Math.max(x.best || 0, y.best || 0) };
     } else if (k === 'ffaBest') out[k] = (a[k] && v) ? Math.min(a[k], v) : (a[k] || v || 0); // lower is better, 0 = never
+    else if (Array.isArray(v)) out[k] = [...new Set([...(Array.isArray(a[k]) ? a[k] : []), ...v])];   // owned cosmetics: union
     else if (typeof v === 'number') out[k] = Math.max(a[k] || 0, v);
     else if (!(k in out)) out[k] = v;
   }

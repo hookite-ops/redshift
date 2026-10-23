@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { Player, T } from './player.js';
 import { Disc, WEAPONS, discModel } from './disc.js';
+import { SKINS, byId, EMOTES } from './cosmetics.js';
+import { buildAvatar, emotePose } from './avatar.js';
 
 export const BOT_ROSTER = [
   { name: 'VEGA', color: 0x2f6bff },
@@ -15,7 +17,7 @@ export const BOT_ROSTER = [
 const _v = new THREE.Vector3();
 
 export class Fighter {
-  constructor(game, { name, color, isBot, body = null, disc = null, weapon = 'disc', skill = 'reflect' }) {
+  constructor(game, { name, color, isBot, body = null, disc = null, weapon = 'disc', skill = 'reflect', skin = null, wskin = 'std', killfx = 'cubes' }) {
     this.game = game; this.name = name; this.color = color; this.isBot = isBot;
     this.css = '#' + color.toString(16).padStart(6, '0');
     this.body = body || new Player(game.arena, game.botEvents(this));
@@ -29,7 +31,20 @@ export class Fighter {
     this.st = { throws: 0, hits: 0, blinks: 0, slams: 0, dodges: 0, bank: 0, ret: 0 };
     this.center = new THREE.Vector3();
     this.brain = null;
-    if (isBot) this.buildModel();
+    // cosmetics: bots wear a random outfit; your own model exists too (seen while you emote)
+    this.skinId = skin || (isBot ? SKINS[(Math.random() * SKINS.length) | 0].id : 'runner');
+    this.wskin = wskin; this.killfx = killfx; this.emote = null;
+    this.showSelf = false;
+    this.buildModel();
+  }
+  playEmote(id) {
+    const def = EMOTES.find(e => e.id === id); if (!def || !this.alive) return false;
+    this.emote = { def, t: 0 }; return true;
+  }
+  setLook({ skin, wskin, killfx } = {}) {
+    if (killfx) this.killfx = killfx;
+    if (wskin && wskin !== this.wskin) { this.wskin = wskin; this.disc.setWeapon(this.disc.w.id); this.setHandDisc(); }
+    if (skin && skin !== this.skinId) { this.skinId = skin; const vis = this.model && this.model.visible; this.buildModel(); this.model.visible = !!vis; }
   }
 
   get invuln() { return this.body.invuln || this.invulnT > 0 || this.protT > 0; }
@@ -37,75 +52,13 @@ export class Fighter {
 
   // ---------------- bot body ----------------
   buildModel() {
-    // suit: dark under-layer, white armour plates, team-coloured glow lines (visor, belt, spine) that bloom
-    const glowK = (this.game.Q && this.game.Q.post) ? 2.4 : 1.3;
-    const dark = new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: 0.45, metalness: 0.45 });
-    const team = this.teamMat = new THREE.MeshStandardMaterial({ color: this.color, roughness: 0.35, emissive: new THREE.Color(this.color).multiplyScalar(0.3) });
-    const white = new THREE.MeshStandardMaterial({ color: 0xf7f7f5, roughness: 0.22, metalness: 0.05, envMapIntensity: 1.3 });
-    const glow = this.glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(this.color).multiplyScalar(glowK) });
-    this.glowK = glowK;
-    const m = (g, mat, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, mat); o.position.set(x, y, z); o.castShadow = true; return o; };
-    const rbox = (w, h, d) => { const g = new THREE.CapsuleGeometry(Math.min(w, d) / 2, h, 4, 10); g.scale(w / Math.min(w, d), 1, d / Math.min(w, d)); return g; };
-    const root = this.model = new THREE.Group();
-    // ---- skeleton: hips → spine → chest → neck → head, shoulders → elbows → hands, hips → knees → ankles ----
-    // joints are Groups; meshes hang off them, so the procedural animation in renderModel bends real joints
-    const J = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
-    const limb = (parent, len, r0, r1, mat) => { const o = m(new THREE.CylinderGeometry(r1, r0, len, 12), mat, 0, -len / 2, 0); parent.add(o); return o; };
-    const ball = (parent, r, mat, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1) => { const o = m(new THREE.SphereGeometry(r, 16, 12), mat, x, y, z); o.scale.set(sx, sy, sz); parent.add(o); return o; };
-    const R = this.rig = {};
-    const hips = R.hips = J(root, 0, 0.96, 0);
-    ball(hips, 0.14, dark, 0, 0, 0, 1.3, 0.85, 1.0);                                   // pelvis
-    hips.add(m(new THREE.TorusGeometry(0.135, 0.013, 6, 32).rotateX(Math.PI / 2), glow, 0, 0.04, 0)); // belt light
-    const spine = R.spine = J(hips, 0, 0.07, 0);
-    ball(spine, 0.125, dark, 0, 0.1, 0, 1.2, 1.2, 0.9);                                 // waist
-    const chest = R.chest = J(spine, 0, 0.2, 0);
-    ball(chest, 0.16, dark, 0, 0.04, 0, 1.25, 1.0, 0.82);                                 // ribcage
-    const plate = m(rbox(0.36, 0.16, 0.22), white, 0, 0.06, -0.015); chest.add(plate);    // chest armour
-    chest.add(m(new THREE.BoxGeometry(0.05, 0.2, 0.02), team, 0, 0.05, -0.135));         // front stripe
-    chest.add(m(new THREE.BoxGeometry(0.2, 0.018, 0.02), glow, 0, 0.12, -0.14));          // chest light
-    chest.add(m(rbox(0.2, 0.18, 0.08), dark, 0, 0.04, 0.14));                            // back unit
-    chest.add(m(new THREE.BoxGeometry(0.025, 0.2, 0.02), glow, 0, 0.04, 0.185));          // spine light
-    const neck = R.neck = J(chest, 0, 0.2, 0);
-    neck.add(m(new THREE.CylinderGeometry(0.045, 0.055, 0.09, 10), dark, 0, 0.03, 0));
-    const head = this.head = R.head = J(neck, 0, 0.1, 0);
-    ball(head, 0.115, white, 0, 0.04, 0.005, 0.95, 1.12, 1.05);                           // helmet
-    head.add(m(new THREE.SphereGeometry(0.117, 18, 10, Math.PI * 0.6, Math.PI * 0.8, Math.PI * 0.36, Math.PI * 0.34), dark, 0, 0.035, 0.005)); // face plate
-    head.add(m(new THREE.CylinderGeometry(0.118, 0.118, 0.022, 20, 1, true, Math.PI * 0.66, Math.PI * 0.68), glow, 0, 0.05, 0.005)); // visor
-    head.add(m(new THREE.BoxGeometry(0.022, 0.016, 0.2), team, 0, 0.165, 0.02));           // crest
-    // arms (index 0 = left, 1 = right / throwing)
-    R.sh = []; R.el = []; R.hand = [];
-    for (const s of [-1, 1]) {
-      const sh = J(chest, s * 0.2, 0.13, 0);
-      ball(sh, 0.085, white, s * 0.02, 0.01, 0, 1.2, 0.85, 1.1);                          // shoulder pad
-      limb(sh, 0.27, 0.06, 0.072, dark);
-      sh.add(m(rbox(0.13, 0.12, 0.12), white, 0, -0.13, 0));                                // upper-arm plate
-      const el = J(sh, 0, -0.27, 0);
-      ball(el, 0.058, dark);
-      limb(el, 0.25, 0.05, 0.06, dark);
-      el.add(m(new THREE.CylinderGeometry(0.068, 0.06, 0.13, 12), white, 0, -0.16, 0));     // bracer
-      el.add(m(new THREE.TorusGeometry(0.067, 0.009, 6, 20).rotateX(Math.PI / 2), glow, 0, -0.095, 0));
-      const hand = J(el, 0, -0.26, 0);
-      ball(hand, 0.055, dark, 0, -0.03, 0, 0.9, 1.15, 0.7);
-      R.sh.push(sh); R.el.push(el); R.hand.push(hand);
-    }
-    // legs
-    R.hip = []; R.knee = []; R.ankle = [];
-    for (const s of [-1, 1]) {
-      const hp = J(hips, s * 0.095, -0.03, 0);
-      limb(hp, 0.44, 0.075, 0.1, dark);
-      hp.add(m(rbox(0.17, 0.2, 0.16), white, 0, -0.17, -0.012));                          // thigh plate
-      const kn = J(hp, 0, -0.44, 0);
-      ball(kn, 0.07, team, 0, 0, -0.03, 1, 1, 0.8);                                      // knee cap
-      limb(kn, 0.42, 0.058, 0.078, dark);
-      kn.add(m(rbox(0.13, 0.22, 0.1), white, 0, -0.18, -0.03));                            // shin guard
-      const an = J(kn, 0, -0.42, 0);
-      an.add(m(rbox(0.12, 0.06, 0.25), white, 0, -0.035, -0.05));                           // boot
-      an.add(m(new THREE.BoxGeometry(0.105, 0.016, 0.23), glow, 0, -0.068, -0.05));        // sole light
-      R.hip.push(hp); R.knee.push(kn); R.ankle.push(an);
-    }
-    this.torso = spine; this.arm = R.sh[1];
-    const hd = this.handDisc = new THREE.Group(); hd.position.set(0.02, -0.07, -0.06); hd.rotation.set(0, Math.PI / 2, 0);
-    R.hand[1].add(hd);
+    // BLOCKY RUNNER — chunky rounded blocks with 16×16 pixel-art skins (cosmetics.js); a team-coloured
+    // arm band and belt glow so you can still tell who is who at a glance
+    if (this.model) { this.game.scene.remove(this.model); this.model = null; }
+    const A = buildAvatar(this.skinId, this.color, (this.game.Q && this.game.Q.post) ? 2.4 : 1.3);
+    const root = this.model = A.root; this.rig = A.rig; this.head = A.head; this.handDisc = A.handDisc;
+    this.glowMat = A.glow; this.teamMat = A.team; this.glowK = A.glowK;
+    this.torso = A.rig.spine; this.arm = A.rig.sh[1];
     this.anim = { ph: 0, run: 0, air: 0, dash: 0, land: 0, wasAir: false, hipYaw: 0, dir: 1, aim: 0 };
     this.setHandDisc();
     // reflect bubble + chat bubble
@@ -129,7 +82,7 @@ export class Fighter {
   setHandDisc() {
     if (!this.handDisc) return;
     this.handDisc.clear();
-    this.handDisc.add(discModel(this.color, this.disc.w, 0.5 * Math.min(1.4, this.disc.w.scale)));
+    this.handDisc.add(discModel(this.color, this.disc.w, 0.5 * Math.min(1.4, this.disc.w.scale), 1, this.wskin));
   }
   // short chat line over the head (bots only)
   say(text, dur = 2.6) {
@@ -160,8 +113,9 @@ export class Fighter {
   renderModel(dt, alpha, t) {
     if (!this.model) return;
     const B = this.body, root = this.model, R = this.rig, A = this.anim;
-    root.visible = this.alive && !(this.protT > 0 && Math.sin(t * 40) > 0.3);
-    if (!this.alive) return;
+    root.visible = this.alive && !(this.protT > 0 && Math.sin(t * 40) > 0.3) && (this.isBot || this.showSelf);
+    this.tag.visible = this.isBot;
+    if (!root.visible) return;
     root.position.set(B.prevPos.x + (B.pos.x - B.prevPos.x) * alpha, B.prevPos.y + (B.pos.y - B.prevPos.y) * alpha, B.prevPos.z + (B.pos.z - B.prevPos.z) * alpha);
     root.rotation.y = B.yaw;
     const k = (v, target, rate) => v + (target - v) * Math.min(1, dt * rate);
@@ -226,7 +180,13 @@ export class Fighter {
       R.sh[i].rotation.set(sx, 0, sz);
       R.el[i].rotation.set(ex, 0, 0);
     }
-    this.handDisc.visible = this.disc.state === 'hand';
+    // emote: overrides the pose (cancelled by moving, or after its length)
+    if (this.emote) {
+      const E = this.emote; E.t += dt;
+      if ((!E.def.loop && E.t > E.def.dur) || (hs > 2.5 && E.t > 0.2) || !ground) this.emote = null;
+      else { emotePose(R, E.def.id, E.t, root); root.rotation.y = B.yaw + (root.userData.spin || 0); }
+    }
+    this.handDisc.visible = this.disc.state === 'hand' && !this.emote;
     this.dome.visible = this.reflectT > 0;
     if (this.dome.visible) { this.dome.scale.setScalar(0.9 + Math.sin(t * 30) * 0.05); this.dome.material.opacity = 0.1 + this.reflectT * 0.15; }
     this.teamMat.emissiveIntensity = this.overT > 0 ? 2.2 + Math.sin(t * 20) * 0.6 : 1;
