@@ -25,6 +25,7 @@ export function installOnline(Game) {
     this.start('online');
     this.online = true; this.versus = true; this.roomCode = m.code; this.roomName = m.name;
     this.isHost = !!m.host; this.netBotSkill = m.botSkill || 'hard'; this.botSkill = this.netBotSkill;
+    this.rankedOnline = m.ranked ? (this.rankedOnline || { op: null }) : null;
     this.byId = new Map(); this.sendT = 0; this.menuOpen = false;
     const me = this.me;
     me.netId = m.you; me.name = (S.name || '나'); this.byId.set(me.netId, me);
@@ -33,7 +34,7 @@ export function installOnline(Game) {
     if (mine) { me.color = mine.color; me.css = '#' + mine.color.toString(16).padStart(6, '0'); me.kills = mine.kills; me.deaths = mine.deaths; }
     this.applyMatch(m.match);
     this.respawn(me, true);
-    this.banner('온라인', `방 ${m.code} · ${this.mapName} · ${m.players.filter(p => !p.bot).length}명 접속 · ${this.match.limit}킬 먼저`, 2.6);
+    if (!m.ranked) this.banner('온라인', `방 ${m.code} · ${this.mapName} · ${m.players.filter(p => !p.bot).length}명 접속 · ${this.match.limit}킬 먼저`, 2.6);
     this.cls('board', 'hidden', false);
     this._boardHtml = '';
     try { this.renderer.compile(this.scene, this.camera); } catch { }
@@ -80,6 +81,15 @@ export function installOnline(Game) {
       case 'rooms': case 'hi': this.onRooms && this.onRooms(m.rooms || []); return;
       case 'err': this.onNetError && this.onNetError(m.msg); return;
       case 'dropped': if (this.online) { this.online = false; this.onNetDropped && this.onNetDropped(); } return;
+      // ranked (players only): queue status, the pairing, the server's verdict, the room closing
+      case 'rankq': this.onRankQueue && this.onRankQueue(m); return;
+      case 'rankmatch':
+        this.rankedOnline = { you: m.you, op: m.op };
+        this.banner('랭크전', `${m.you.name} (${m.you.tier} ${m.you.r})  VS  ${m.op.name} (${m.op.tier} ${m.op.r}) · 5킬 먼저`, 3.2);
+        this.audio.checkpoint && this.audio.checkpoint(false);
+        return;
+      case 'rankres': this.rankResult = m; this.onRankResult && this.onRankResult(m); return;
+      case 'closed': if (this.online) { this.online = false; this.net.inRoom = false; this.onRankClosed && this.onRankClosed(); } return;
     }
     if (!this.online) return;
     switch (m.t) {
@@ -160,6 +170,14 @@ export function installOnline(Game) {
     if (k && !k.remote) k.body.dashCharges = Math.min(k.body.dashMax, k.body.dashCharges + 1);
   };
   G.netMatchOver = function (m) {
+    if (this.rankedOnline) {
+      const me = this.me, op = this.fighters.find(f => f !== me && !f.netBot);
+      const win = op ? me.kills > op.kills : true;
+      this.banner(win ? '승리!' : me.kills === (op ? op.kills : 0) ? '무승부' : '패배', `${me.kills} : ${op ? op.kills : 0}`, 3);
+      if (win) this.audio.checkpoint(true); else this.audio.wave();
+      this.slowT = Math.max(this.slowT, 1.0);
+      return;
+    }
     const rank = (m.ranking || []).map(([id, k, d]) => ({ f: this.byId.get(id), k, d })).filter(x => x.f);
     const w = rank[0];
     const myRank = rank.findIndex(x => x.f === this.me) + 1;
