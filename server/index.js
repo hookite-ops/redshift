@@ -125,12 +125,13 @@ function joinRoom(c, r) {
   const becameHost = !r.host;
   if (becameHost) r.host = c;
   cast(r, { t: 'join', p: pub(p) }, c);
-  send(c, { t: 'joined', code: r.code, name: r.name, you: p.id, clientId: c.id, players: [...r.players.values()].map(pub), match: matchInfo(r), botSkill: r.botSkill, host: r.host === c });
+  send(c, { t: 'joined', code: r.code, name: r.name, you: p.id, clientId: c.id, players: [...r.players.values()].map(pub), match: matchInfo(r), botSkill: r.botSkill, host: r.host === c, ranked: !!r.ranked });
   fillBots(r);
   if (becameHost) setHost(r, c);
 }
 function leaveRoom(c, quiet = false) {
   const r = c.room; if (!r) return;
+  if (r.ranked && !r.ranked.done && r.state === 'play') { r.state = 'over'; r.overT = 3; settleRanked(r, c.id); cast(r, { t: 'match', ...matchInfo(r) }); }
   r.clients.delete(c);
   if (c.pid) { r.players.delete(c.pid); cast(r, { t: 'leave', id: c.pid }); }
   c.room = null; c.pid = null;
@@ -165,12 +166,81 @@ function endMatch(r) {
   if (r.state !== 'play') return;
   r.state = 'over'; r.overT = 8;
   cast(r, { t: 'match', ...matchInfo(r) });
+  if (r.ranked) settleRanked(r);
 }
 function resetMatch(r) {
   r.state = 'play'; r.timeLeft = r.duration;
   if (r.mapMode === 'rotate') r.map = nextMap(r.map);
   for (const p of r.players.values()) { p.kills = 0; p.deaths = 0; p.hp = 100; p.alive = true; p.prot = now() + 2; }
   cast(r, { t: 'match', ...matchInfo(r), reset: true, players: [...r.players.values()].map(pub) });
+}
+
+// ---------------------------------------------------------------- ranked 1V1 (players only)
+// Queue → pair by rating (the allowed gap widens while you wait) → a private 2-player room, first to 5.
+// The server owns the ratings (Elo); leaving a ranked match early counts as a loss.
+const queue = new Map();      // clientId → { c, uid, r, name, since }
+const TIERS = [[1850, '레드시프트'], [1700, '마스터'], [1550, '다이아'], [1400, '플래티넘'], [1250, '골드'], [1100, '실버'], [0, '브론즈']];
+const tierName = r => TIERS.find(([m]) => r >= m)[1];
+async function rankQueue(c, m) {
+  const uid = await auth.uidOf(m.token);
+  if (!uid) return send(c, { t: 'rankq', state: 'error', msg: '랭크전은 로그인(또는 게스트 계정)이 필요해요' });
+  if (c.room) leaveRoom(c);
+  for (const q of queue.values()) if (q.uid === uid && q.c !== c) { queue.delete(q.c.id); send(q.c, { t: 'rankq', state: 'cancelled', msg: '다른 기기에서 대기를 시작했어요' }); }
+  const rk = await auth.rankOf(uid), u = await auth.getUser(uid);
+  c.name = clean(m.name, 12) || clean(u && u.name, 12) || c.name;
+  if (WEAPONS.includes(m.weapon)) c.weapon = m.weapon; if (SKILLS.includes(m.skill)) c.skill = m.skill;
+  queue.set(c.id, { c, uid, r: rk.r, name: c.name, since: now() });
+  send(c, { t: 'rankq', state: 'searching', r: rk.r, players: queue.size });
+}
+function rankCancel(c) { if (queue.delete(c.id)) send(c, { t: 'rankq', state: 'cancelled' }); }
+function matchmake() {
+  const list = [...queue.values()].filter(q => q.c.ws && !q.c.dropT).sort((a, b) => a.r - b.r);
+  const t = now(), used = new Set();
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]; if (used.has(a)) continue;
+    let best = null, bd = 1e9;
+    for (let j = 0; j < list.length; j++) {
+      const b = list[j]; if (b === a || used.has(b) || b.uid === a.uid) continue;
+      const gap = Math.abs(a.r - b.r), allow = 100 + 25 * Math.min(t - a.since, t - b.since);
+      if (gap <= allow && gap < bd) { bd = gap; best = b; }
+    }
+    if (best) { used.add(a); used.add(best); startRanked(a, best); }
+  }
+  // tell waiting players how it's going every few seconds
+  for (const q of queue.values()) if (!used.has(q) && Math.floor(t - q.since) % 3 === 0) send(q.c, { t: 'rankq', state: 'searching', r: q.r, players: queue.size, wait: Math.round(t - q.since) });
+}
+function startRanked(a, b) {
+  queue.delete(a.c.id); queue.delete(b.c.id);
+  const r = makeRoom({ name: '랭크전', priv: true, bots: 0, limit: 5, duration: 300, map: 'rotate' });
+  r.ranked = { players: [a, b].map(q => ({ uid: q.uid, cid: q.c.id, r: q.r, name: q.name, pid: null })), done: false };
+  for (const q of [a, b]) {
+    joinRoom(q.c, r);
+    r.ranked.players.find(x => x.cid === q.c.id).pid = q.c.pid;
+  }
+  for (const [me, op] of [[a, b], [b, a]]) send(me.c, { t: 'rankmatch', you: { name: me.name, r: me.r, tier: tierName(me.r) }, op: { name: op.name, r: op.r, tier: tierName(op.r) } });
+}
+// Elo with a little extra for winning big; new players move faster
+async function settleRanked(r, quitter = null) {
+  const R = r.ranked; if (!R || R.done) return; R.done = true;
+  const [A, B] = R.players, pa = r.players.get(A.pid), pb = r.players.get(B.pid);
+  const ka = pa ? pa.kills : 0, kb = pb ? pb.kills : 0;
+  let sa = ka > kb ? 1 : ka < kb ? 0 : 0.5;
+  if (quitter) sa = quitter === A.cid ? 0 : 1;
+  const out = [];
+  for (const [me, op, s, mk, ok] of [[A, B, sa, ka, kb], [B, A, 1 - sa, kb, ka]]) {
+    const rk = (await auth.rankOf(me.uid)) || { r: 1000, games: 0, wins: 0, losses: 0, streak: 0, best: 1000 };
+    const exp = 1 / (1 + Math.pow(10, (op.r - me.r) / 400)), K = rk.games < 10 ? 48 : 32;
+    let d = Math.round(K * (s - exp));
+    if (s === 1) d += Math.min(8, 2 * Math.abs(mk - ok)) + Math.min(6, Math.max(0, rk.streak) * 2);
+    if (s === 0 && quitter === me.cid) d -= 5;
+    const before = rk.r;
+    rk.r = Math.max(0, rk.r + d); rk.games++;
+    if (s === 1) { rk.wins++; rk.streak = Math.max(1, rk.streak + 1); } else if (s === 0) { rk.losses = (rk.losses || 0) + 1; rk.streak = Math.min(-1, rk.streak - 1); }
+    rk.best = Math.max(rk.best || 0, rk.r);
+    await auth.setRank(me.uid, rk).catch(e => console.error('[rank]', e.message));
+    out.push({ cid: me.cid, msg: { t: 'rankres', result: s === 1 ? 'win' : s === 0 ? 'loss' : 'draw', delta: rk.r - before, before, rank: rk, tierBefore: tierName(before), tier: tierName(rk.r), score: [mk, ok], op: op.name, forfeit: !!quitter } });
+  }
+  for (const o of out) send(clients.get(o.cid), o.msg);
 }
 
 // ---------------------------------------------------------------- messages
@@ -189,8 +259,8 @@ function onMessage(c, raw) {
     }
     case 'list': send(c, { t: 'rooms', rooms: roomList() }); break;
     case 'quick': {
-      const open = [...rooms.values()].filter(x => !x.priv && humans(x).length < MAX_PLAYERS).sort((a, b) => humans(b).length - humans(a).length)[0];
-      joinRoom(c, open || makeRoom({ name: c.name + '의 방', bots: 3 }));
+      const open = [...rooms.values()].filter(x => !x.priv && !x.ranked && x.wantBots === 0 && humans(x).length < MAX_PLAYERS).sort((a, b) => humans(b).length - humans(a).length)[0];
+      joinRoom(c, open || makeRoom({ name: c.name + '의 방', bots: 0 }));
       break;
     }
     case 'create': joinRoom(c, makeRoom({ name: m.name, priv: m.priv, bots: m.bots, botSkill: m.botSkill, limit: m.limit, duration: m.duration, map: m.map })); break;
@@ -231,6 +301,8 @@ function onMessage(c, raw) {
       break;
     }
     case 'ping': send(c, { t: 'pong', c: m.c }); break;
+    case 'rankq': rankQueue(c, m).catch(e => send(c, { t: 'rankq', state: 'error', msg: '서버 오류: ' + e.message })); break;
+    case 'rankcancel': rankCancel(c); break;
   }
 }
 
@@ -253,12 +325,15 @@ wss.on('connection', (ws, req) => {
   ws.on('error', () => { });
 });
 
+setInterval(matchmake, 1000);
+
 // ---------------------------------------------------------------- world clock (10 Hz)
 let hpT = 0;
 setInterval(() => {
   const t = now(), dt = 0.1;
   // drop clients that didn't come back
   for (const c of clients.values()) {
+    if (c.dropT && queue.has(c.id)) queue.delete(c.id);
     if (c.dropT && t - c.dropT > 12) { leaveRoom(c); clients.delete(c.id); tokens.delete(c.token); }
   }
   hpT += dt;
@@ -266,7 +341,10 @@ setInterval(() => {
     if (r.state === 'play') {
       r.timeLeft -= dt;
       if (r.timeLeft <= 0) endMatch(r);
-    } else if ((r.overT -= dt) <= 0) resetMatch(r);
+    } else if ((r.overT -= dt) <= 0) {
+      if (r.ranked) { cast(r, { t: 'closed' }); for (const c of [...r.clients]) { c.room = null; c.pid = null; } rooms.delete(r.code); continue; }
+      resetMatch(r);
+    }
     const changed = [];
     for (const p of r.players.values()) {
       if (!p.alive || p.hp >= 100) continue;

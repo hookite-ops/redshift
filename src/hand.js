@@ -9,8 +9,9 @@ export class Hand {
   constructor() {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.01, 10);
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xcfcfcf, 1.8));
-    const d = new THREE.DirectionalLight(0xffffff, 1.6); d.position.set(1, 2, 1); this.scene.add(d);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0xb9bec6, 1.15));
+    const d = new THREE.DirectionalLight(0xfff4e8, 1.3); d.position.set(1, 2, 1); this.scene.add(d);
+    const rim = new THREE.DirectionalLight(0xcfe0ff, 0.6); rim.position.set(-1.5, 0.5, -1); this.scene.add(rim);
     const sleeve = new THREE.MeshStandardMaterial({ color: 0xcfcfca, roughness: 0.85 });
     const glove = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.6 });
     const orange = new THREE.MeshStandardMaterial({ color: 0xff5a1f, roughness: 0.4, emissive: 0x401000 });

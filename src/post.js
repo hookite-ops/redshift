@@ -10,10 +10,10 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 
 const LensShader = {
-  uniforms: { tDiffuse: { value: null }, uSpeed: { value: 0 }, uHurt: { value: 0 }, uVig: { value: 0.28 }, uAspect: { value: 1 } },
+  uniforms: { tDiffuse: { value: null }, uSpeed: { value: 0 }, uHurt: { value: 0 }, uVig: { value: 0.28 }, uAspect: { value: 1 }, uTime: { value: 0 } },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: `
-    uniform sampler2D tDiffuse; uniform float uSpeed, uHurt, uVig, uAspect; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uSpeed, uHurt, uVig, uAspect, uTime; varying vec2 vUv;
     void main(){
       vec2 c = vUv - 0.5; vec2 cc = vec2(c.x * uAspect, c.y); float d = length(cc);
       float edge = smoothstep(0.18, 0.75, d);
@@ -30,6 +30,14 @@ const LensShader = {
       } else col = texture2D(tDiffuse, vUv).rgb;
       col *= 1.0 - uVig * smoothstep(0.35, 1.0, d) - uSpeed * 0.12 * edge;
       col = mix(col, vec3(1.4, 0.05, 0.08), uHurt * 0.55 * smoothstep(0.3, 0.9, d));
+      // grade (still linear HDR here): a touch more contrast and saturation, cool shadows, warm highlights
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = mix(vec3(l), col, 1.12);
+      col *= mix(vec3(0.96, 0.99, 1.05), vec3(1.04, 1.01, 0.97), smoothstep(0.05, 0.9, l));
+      col = max(col, 0.0); vec3 sc = clamp(col, 0.0, 1.0); col += (sc * sc * (3.0 - 2.0 * sc) - sc) * 0.2; // gentle S-curve, glows untouched
+      // very fine film grain so big flat surfaces never look plasticky
+      float g = fract(sin(dot(vUv * 1000.0 + uTime, vec2(12.9898, 78.233))) * 43758.5453);
+      col += (g - 0.5) * 0.018;
       gl_FragColor = vec4(col, 1.0);
     }`,
 };
@@ -55,7 +63,7 @@ export class Post {
   }
   render(dt, { hands = true, speed = 0, hurt = 0, vignette = 0.28 } = {}) {
     this.hands.enabled = hands;
-    const u = this.lens.uniforms; u.uSpeed.value = speed; u.uHurt.value = hurt; u.uVig.value = vignette;
+    const u = this.lens.uniforms; u.uSpeed.value = speed; u.uHurt.value = hurt; u.uVig.value = vignette; u.uTime.value = (u.uTime.value + dt) % 100;
     this.composer.render(dt);
   }
 }

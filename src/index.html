@@ -326,7 +326,8 @@ body{background:var(--paper)}
 #hpRow{color:rgba(255,255,255,.55);align-items:flex-end}
 #hpNum{color:#fff;font-size:26px;line-height:1}
 #hpBar{height:9px;background:rgba(255,255,255,.12)}
-#hpFill{background:#fff;-webkit-mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%);mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%)}
+#hpFill{background:#fff}
+#hpBar{-webkit-mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%);mask:repeating-linear-gradient(90deg,#000 0 calc(10% - 2px),transparent calc(10% - 2px) 10%)}
 #hpBar.low #hpFill{background:var(--red)}
 #speedo{bottom:20px}
 #speedNum{font-size:44px;color:var(--ink);text-shadow:0 0 12px rgba(255,255,255,.9),0 0 2px #fff}
@@ -476,6 +477,62 @@ body.touch #feed{top:62px}
 .accRow input{font:inherit;font-family:'Space Grotesk';font-size:18px;letter-spacing:4px;text-transform:uppercase;text-align:center;padding:8px;border:1px solid var(--line);border-radius:3px}
 .accRow .btn{margin:0}
 .accWarn{font-size:12.5px;background:#fff4e5;border-left:3px solid #e0a800;padding:8px 10px;margin-bottom:12px;line-height:1.5}
+.rkPanel{width:min(560px,94vw)}
+.rkTop{display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:center;margin-bottom:12px}
+.rkEmblem{width:130px;display:flex;justify-content:center;animation:emb 3.2s ease-in-out infinite}
+@keyframes emb{50%{transform:translateY(-4px)}}
+.rkLabel{font-family:'Space Grotesk','Noto Sans KR';font-size:11px;letter-spacing:3px;color:var(--dim);font-weight:700}
+.rkTier{font-size:30px;font-weight:900;letter-spacing:1px;line-height:1.15}
+.rkRp{font-size:14px;color:var(--ink2)}.rkRp b{font-size:24px;color:var(--ink)}
+.rkBar{height:7px;background:rgba(14,17,22,.1);margin:8px 0 4px;transform:skewX(var(--sk));overflow:hidden}
+.rkBar i{display:block;height:100%;width:0;background:var(--or);transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.rkNext{font-size:12px;color:var(--dim)}
+.rkStats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px}
+.rkStats div{background:#f1f3f6;border-radius:3px;padding:8px 4px;text-align:center;font-size:11.5px;color:var(--ink2);font-weight:700}
+.rkStats em{display:block;font-style:normal;font-family:'Space Grotesk','Noto Sans KR';font-size:20px;color:var(--ink)}
+.rkSearch{display:flex;align-items:center;gap:14px;background:var(--ink);color:#fff;padding:12px 16px;border-radius:3px;margin-bottom:10px}
+.rkSearch b{display:block;font-size:16px}.rkSearch small{color:rgba(255,255,255,.65);font-size:12px}
+.rkRadar{position:relative;width:44px;height:44px;flex:none}
+.rkRadar i{position:absolute;inset:0;border:2px solid var(--or);border-radius:50%;opacity:0;animation:radar 2.1s ease-out infinite}
+.rkRadar i:nth-child(2){animation-delay:.7s}.rkRadar i:nth-child(3){animation-delay:1.4s}
+@keyframes radar{0%{transform:scale(.2);opacity:1}100%{transform:scale(1.15);opacity:0}}
+.rkResult{text-align:center;padding:14px 10px;margin-bottom:12px;border-radius:3px;background:linear-gradient(180deg,#f6f7f9,#eceff3);position:relative;overflow:hidden}
+.rkResult .big{font-family:'Space Grotesk','Noto Sans KR';font-weight:700;font-size:40px;letter-spacing:4px;line-height:1}
+.rkResult.win .big{color:var(--or)}.rkResult.loss .big{color:var(--ink2)}
+.rkResult .score{font-family:'Space Grotesk';font-size:18px;margin:6px 0 2px}
+.rkResult .delta{font-family:'Space Grotesk';font-weight:700;font-size:28px}
+.rkResult.win .delta{color:#16a864}.rkResult.loss .delta{color:var(--red)}
+.rkResult .promo{display:inline-block;margin-top:8px;background:var(--or);color:#fff;font-weight:900;padding:4px 12px;transform:skewX(var(--sk));animation:promo 1.2s ease-out}
+@keyframes promo{0%{transform:skewX(var(--sk)) scale(2);opacity:0}40%{transform:skewX(var(--sk)) scale(.95);opacity:1}100%{transform:skewX(var(--sk)) scale(1)}}
+.rkNote{font-size:12.5px;color:var(--dim);line-height:1.55;margin-top:6px}
+#rankBadge svg{vertical-align:middle}
+@media (max-height:560px){.rkEmblem{width:96px}.rkTier{font-size:24px}.rkStats div{padding:5px 3px}.rkStats em{font-size:16px}}
+/* ---- 4.8 motion polish (CSS only: no cost while playing) ---- */
+#hpBar{position:relative}
+#hpGhost{position:absolute;left:0;top:0;height:100%;width:100%;background:var(--red);opacity:.85;transition:width .55s cubic-bezier(.4,0,.2,1) .28s}
+#hpFill{position:relative}
+.screen:not(.hidden) .panel{animation:pin .32s cubic-bezier(.2,.9,.25,1) both}
+@keyframes pin{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+#menu:not(.hidden) .menuGrid>div:first-child>*{animation:rise .55s cubic-bezier(.2,.9,.25,1) both}
+#menu:not(.hidden) .menuGrid>div:first-child>*:nth-child(2){animation-delay:.05s}
+#menu:not(.hidden) .menuGrid>div:first-child>*:nth-child(3){animation-delay:.1s}
+#menu:not(.hidden) .menuGrid>div:first-child>*:nth-child(4){animation-delay:.15s}
+#menu:not(.hidden) .menuGrid>div:first-child>*:nth-child(n+5){animation-delay:.2s}
+#menu:not(.hidden) .menuGrid>div:last-child{animation:pin .5s cubic-bezier(.2,.9,.25,1) .08s both}
+@keyframes rise{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+.logo span{animation:slash 3.6s ease-in-out infinite;display:inline-block}
+@keyframes slash{0%,86%,100%{filter:none}90%{filter:drop-shadow(0 0 10px rgba(255,79,20,.9))}}
+.btn,.lo button,.accChip{transition:transform .12s ease,background .12s,color .12s,box-shadow .15s,border-color .12s}
+.btn:active,.lo button:active,.accChip:active{transform:scale(.97)}
+@media (hover:hover){.btn:hover{box-shadow:0 8px 22px rgba(14,17,22,.14)}.btn.rank:hover,.btn.main:hover{box-shadow:0 10px 26px rgba(255,79,20,.35)}}
+.btn.rank{overflow:hidden}
+.btn.rank::before{content:'';position:absolute;top:0;bottom:0;width:40%;left:-60%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg);animation:sheen 3.4s ease-in-out infinite}
+@keyframes sheen{0%,60%{left:-60%}100%{left:130%}}
+#feed div{border-radius:2px}
+#loading{flex-direction:column;gap:14px}
+#banner.show #bannerBig{animation:bbig .5s cubic-bezier(.2,.9,.25,1)}
+@keyframes bbig{from{letter-spacing:22px;opacity:0}to{letter-spacing:4px;opacity:1}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (max-width:900px),(max-height:560px){
   #menu .menuGrid{grid-template-columns:1fr 1.25fr;gap:14px;width:98vw}
   #menu .menuGrid>div:last-child{padding:12px 14px;max-height:94vh}
@@ -509,7 +566,7 @@ body.touch #feed{top:62px}
   <div id="killCard"><span id="kcTag">처치</span><b id="kcName"></b></div>
   <div id="hint"></div>
   <div id="keyHints"></div>
-  <div id="hpBox"><div id="hpRow"><span>HP</span><span id="hpNum">100</span></div><div id="hpBar"><div id="hpFill"></div></div></div>
+  <div id="hpBox"><div id="hpRow"><span>HP</span><span id="hpNum">100</span></div><div id="hpBar"><div id="hpGhost"></div><div id="hpFill"></div></div></div>
   <div id="speedo"><div id="speedNum" class="num">0</div><div id="speedUnit">KM/H</div><div id="dashPips"></div></div>
   <div id="skillBox"><div class="sk"><b id="skillKey">Q</b><span id="skillName"></span><em id="skillCd"></em></div><div class="bar"><i id="skillFill"></i></div></div>
   <div id="chat"></div>
@@ -553,11 +610,11 @@ body.touch #feed{top:62px}
       <div id="best"></div>
     </div>
     <div>
-      <button class="btn rank" data-act="rank">랭크전<span id="rankBadge">브론즈 1000</span><small id="rankSub">1V1 · 이기면 RP가 오르고 상대도 강해져요</small></button>
+      <button class="btn rank" data-act="rank">랭크전<span id="rankBadge">브론즈 1000</span><small id="rankSub">사람끼리 1V1 · 비슷한 실력과 매칭</small></button>
       <button class="btn online" data-act="online">온라인 대전<small>다른 사람들과 멀티 · PC·모바일·앱 같이</small></button>
       <div class="row3">
-        <button class="btn vs" data-act="duel">1V1<small>봇과 5킬</small></button>
-        <button class="btn vs" data-act="ffa">FFA<small>봇 5명</small></button>
+        <button class="btn vs" data-act="duel">봇 1V1<small>연습 · 5킬</small></button>
+        <button class="btn vs" data-act="ffa">봇 FFA<small>연습 · 봇 5명</small></button>
         <button class="btn vs" data-act="arena">아레나<small>웨이브 생존</small></button>
       </div>
       <h3>맵 <span class="sub">(1V1 · FFA · 아레나)</span></h3>
@@ -606,7 +663,7 @@ body.touch #feed{top:62px}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.7 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.8 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">
@@ -617,7 +674,7 @@ body.touch #feed{top:62px}
       <span>서버 주소</span><input id="oServer" placeholder="https://redshift-xxxx.run.app" autocomplete="off" spellcheck="false">
     </div>
     <div id="oStatus">연결 전</div>
-    <button class="btn main" id="oQuick">빠른 참가<small>사람 있는 방에 바로 들어가요 · 없으면 새 방 (봇 3명)</small></button>
+    <button class="btn main" id="oQuick">빠른 참가<small>사람끼리 하는 방에 바로 들어가요 · 없으면 새 방</small></button>
     <div class="row2">
       <button class="btn" id="oCreateBtn">방 만들기<small>코드로 친구 초대 · 봇 수 조절</small></button>
       <div><div class="codebox"><input id="oCode" maxlength="4" placeholder="ABCD" autocomplete="off"><button class="btn" id="oJoin" style="margin:0">코드로 참가</button></div></div>
@@ -626,7 +683,7 @@ body.touch #feed{top:62px}
       <div class="oform">
         <span>방 이름</span><input id="oRoomName" maxlength="24" placeholder="자유 대전">
         <span>맵</span><select id="oMap"><option value="rotate" selected>라운드마다 바뀜</option><option value="arena">화이트 아레나</option><option value="spire">스파이어</option><option value="lanes">회랑</option><option value="forest">기둥 숲</option><option value="orbit">궤도</option></select>
-        <span>봇</span><select id="oBots"><option value="0">없음 (사람만)</option><option value="1">1명</option><option value="2">2명</option><option value="3" selected>3명</option><option value="4">4명</option><option value="5">5명</option><option value="6">6명</option></select>
+        <span>봇</span><select id="oBots"><option value="0" selected>없음 (사람만)</option><option value="1">1명</option><option value="2">2명</option><option value="3">3명</option><option value="4">4명</option><option value="5">5명</option><option value="6">6명</option></select>
         <span>봇 실력</span><select id="oBotSkill"><option value="easy">쉬움</option><option value="normal">보통</option><option value="hard" selected>어려움</option><option value="max">최강</option><option value="ai">학습 AI</option></select>
         <span>목표</span><select id="oLimit"><option value="10">10킬</option><option value="15" selected>15킬</option><option value="25">25킬</option></select>
         <span>공개</span><select id="oPriv"><option value="0">공개 (방 목록에 보임)</option><option value="1">비공개 (코드로만)</option></select>
@@ -670,6 +727,29 @@ body.touch #feed{top:62px}
     <div id="accBody"></div>
     <div id="accMsg" class="lstatus"></div>
     <button class="btn" data-act="back" style="margin-top:6px">닫기</button>
+  </div>
+</div>
+<div id="ranked" class="screen clear hidden">
+  <div class="panel rkPanel">
+    <div class="rkTop">
+      <div id="rkEmblem" class="rkEmblem"></div>
+      <div class="rkInfo">
+        <div class="rkLabel">RANKED · 1V1 · 사람끼리만</div>
+        <div id="rkTier" class="rkTier">브론즈</div>
+        <div class="rkRp"><b id="rkRp" class="num">1000</b> RP</div>
+        <div class="rkBar"><i id="rkBarFill"></i></div>
+        <div id="rkNext" class="rkNext"></div>
+      </div>
+    </div>
+    <div id="rkStats" class="rkStats"></div>
+    <div id="rkResult" class="rkResult hidden"></div>
+    <div id="rkSearch" class="rkSearch hidden"><div class="rkRadar"><i></i><i></i><i></i></div><div><b id="rkSearchT">상대 찾는 중…</b><small id="rkSearchS"></small></div></div>
+    <div id="rkMsg" class="lstatus"></div>
+    <button class="btn rank" id="rkFind">상대 찾기<small>비슷한 실력의 사람과 1:1 · 5킬 먼저</small></button>
+    <button class="btn hidden" id="rkCancel">찾기 취소</button>
+    <div id="rkGuest" class="rkNote"></div>
+    <div class="rkNote">랭크전은 <b>사람과만</b> 붙어요. 중간에 나가면 <b>패배</b>로 처리돼요. 점수는 서버가 관리해요.</div>
+    <button class="btn" data-act="back" style="margin-top:8px">닫기</button>
   </div>
 </div>
 <div id="pause" class="screen clear hidden">

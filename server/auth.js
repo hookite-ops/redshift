@@ -115,10 +115,11 @@ export function createAuth({ publicDir }) {
     if (!s || s.exp < now()) return null;
     return { uid: s.uid, key: sha(m[1]) };
   }
-  const pub = u => ({ name: u.name, email: u.email, picture: u.picture, since: u.since });
+  const pub = u => ({ name: u.name, email: u.email, picture: u.picture, since: u.since, guest: !!u.guest });
+  const RANK0 = () => ({ r: 1000, games: 0, wins: 0, losses: 0, streak: 0, best: 1000 });
   async function loginResult(uid) {
     const u = await get('users', uid), t = await newSession(uid);
-    return { token: t, user: pub(u), save: u.save || null, updated: u.updated || 0 };
+    return { token: t, user: pub(u), save: u.save || null, updated: u.updated || 0, rank: u.rank || RANK0() };
   }
 
   // ---------- device link (apps) ----------
@@ -153,12 +154,24 @@ export function createAuth({ publicDir }) {
       if (p === '/api/auth/config') { readCfg(); await initStore(); return send(res, 200, { clientId, storage }), true; }
       if ((p === '/api/auth/google' || p.startsWith('/api/link/')) && limited(req)) return send(res, 429, { error: '잠시 후 다시 해 주세요' }), true;
       if (p === '/api/auth/google' && req.method === 'POST') {
-        const { credential } = await body(req);
+        const b = await body(req), { credential } = b, body2 = { guest: b.guest };
         if (!credential) return send(res, 400, { error: '로그인 정보가 없어요' }), true;
         const g = await verifyGoogle(String(credential)), uid = 'g' + g.sub;
         const u = (await get('users', uid)) || { since: now(), save: null, updated: 0 };
         Object.assign(u, { name: g.name, email: g.email, picture: g.picture, last: now() });
+        // played ranked as a guest on this device first? keep whichever rank has more games
+        const gw = await who({ headers: { authorization: 'Bearer ' + (body2.guest || '') } }).catch(() => null);
+        if (gw && gw.uid !== uid) {
+          const gu = await get('users', gw.uid);
+          if (gu && gu.guest && gu.rank && gu.rank.games > ((u.rank && u.rank.games) || 0)) u.rank = gu.rank;
+        }
         await put('users', uid, u);
+        return send(res, 200, await loginResult(uid)), true;
+      }
+      // guest account: lets anyone play ranked right away; signing in with Google later keeps the rank
+      if (p === '/api/auth/guest' && req.method === 'POST') {
+        const uid = 'u' + crypto.randomBytes(9).toString('base64url');
+        await put('users', uid, { guest: true, name: '게스트', since: now(), save: null, updated: 0, rank: RANK0() });
         return send(res, 200, await loginResult(uid)), true;
       }
       if (p === '/api/link/new' && req.method === 'POST') {
@@ -184,7 +197,7 @@ export function createAuth({ publicDir }) {
       }
       if (p === '/api/me' && req.method === 'GET') {
         const u = await get('users', me.uid); if (!u) return send(res, 401, { error: '계정이 없어요' }), true;
-        return send(res, 200, { user: pub(u), save: u.save || null, updated: u.updated || 0 }), true;
+        return send(res, 200, { user: pub(u), save: u.save || null, updated: u.updated || 0, rank: u.rank || RANK0() }), true;
       }
       if (p === '/api/save' && req.method === 'PUT') {
         const { save } = await body(req);
@@ -201,6 +214,11 @@ export function createAuth({ publicDir }) {
       send(res, e.code && e.code < 600 ? e.code : 500, { error: e.code ? e.message : '서버 오류가 났어요' }); return true;
     }
   }
+  // ---------- used by the game server (ranked matches) ----------
+  async function uidOf(token) { const w = await who({ headers: { authorization: 'Bearer ' + (token || '') } }).catch(() => null); return w ? w.uid : null; }
+  async function getUser(uid) { return get('users', uid); }
+  async function rankOf(uid) { const u = await get('users', uid); return u ? (u.rank || RANK0()) : null; }
+  async function setRank(uid, rank) { const u = await get('users', uid); if (!u) return; u.rank = rank; await put('users', uid, u); }
   initStore();
-  return { handle };
+  return { handle, uidOf, getUser, rankOf, setRank };
 }

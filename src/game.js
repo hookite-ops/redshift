@@ -83,12 +83,17 @@ function segDist(a, b, p, t) {
 }
 
 // sky dome: cool blue overhead fading to a warm white haze at the horizon, with a soft glow around the sun
-function makeSky(sunPos) {
+function makeSky(sunPos, clouds = true) {
   const m = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { sunDir: { value: sunPos.clone().normalize() } },
+    defines: clouds ? { CLOUDS: 1 } : {},
+    uniforms: { sunDir: { value: sunPos.clone().normalize() }, uTime: { value: 0 } },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position = p.xyww; }`,
-    fragmentShader: `varying vec3 vDir; uniform vec3 sunDir;
+    fragmentShader: `varying vec3 vDir; uniform vec3 sunDir; uniform float uTime;
+      float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * vn(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }
       void main(){
         float h = vDir.y;
         vec3 horizon = vec3(0.84, 0.89, 0.94), zenith = vec3(0.24, 0.46, 0.80), ground = vec3(0.80, 0.84, 0.88);
@@ -97,6 +102,16 @@ function makeSky(sunPos) {
         c += vec3(1.0, 0.9, 0.75) * (pow(s, 10.0) * 0.22 + pow(s, 600.0) * 3.0);
         // a thin bright band right at the horizon (haze)
         c = mix(c, vec3(0.93, 0.95, 0.97), exp(-abs(h) * 18.0) * 0.6);
+        #ifdef CLOUDS
+        if (h > 0.02) {
+          // thin high clouds drifting slowly, lit on the sun side
+          vec2 uv = vDir.xz / (h + 0.18) * 1.6 + vec2(uTime * 0.004, uTime * 0.0015);
+          float n = fbm(uv) * 0.75 + fbm(uv * 3.1 + 2.0) * 0.25;
+          float cl = smoothstep(0.52, 0.82, n) * smoothstep(0.02, 0.22, h) * (1.0 - smoothstep(0.65, 1.0, h) * 0.6);
+          float lit = 0.85 + 0.25 * pow(max(dot(vDir, sunDir), 0.0), 4.0);
+          c = mix(c, vec3(0.97, 0.975, 0.985) * lit, cl * 0.85);
+        }
+        #endif
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
@@ -132,7 +147,7 @@ export class Game {
     sc.add(new THREE.HemisphereLight(0xdfeaff, 0xcfd2d6, 0.55));
     const sun = this.sun = new THREE.DirectionalLight(0xfff4e6, 2.9);
     sun.position.set(34, 62, 18);
-    sc.add(this.sky = makeSky(sun.position));
+    sc.add(this.sky = makeSky(sun.position, this.Q.shadows));
     if (this.Q.shadows) {
       sun.castShadow = true; sun.shadow.mapSize.set(this.Q.shadowSize, this.Q.shadowSize); sun.shadow.radius = 3;
       const c = sun.shadow.camera; c.left = -62; c.right = 62; c.top = 62; c.bottom = -62; c.near = 1; c.far = 200;
@@ -177,6 +192,7 @@ export class Game {
     this.blinkGhost = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.6, 32), new THREE.MeshBasicMaterial({ color: 0xff5a1f, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
     this.blinkGhost.rotation.x = -Math.PI / 2; this.blinkGhost.visible = false; sc.add(this.blinkGhost);
 
+    this.captureEnv();
     this.D = DIFF[S.difficulty] || DIFF.easy;
     this.camState = { dip: 0, dipV: 0, tilt: 0, fov: S.fov, kick: 0, trauma: 0, bob: 0 };
     this.acc = 0; this.last = performance.now(); this.clockT = 0; this.fpsAcc = 0; this.fpsN = 0;
@@ -1269,8 +1285,33 @@ export class Game {
     for (const f of this.fighters) { if (f.disc.state !== 'hand' && !f.remote) f.disc.caught(); f.disc.trail.reset(); }
     for (const s of this.shards || []) this.scene.remove(s.m);
     this.shards = [];
+    this.captureEnv();
     if (!this.trainLock) try { this.renderer.compile(this.scene, this.camera); } catch { }
     return true;
+  }
+  // reflections of the REAL arena: render the stadium into a cube map once per map and use it as the
+  // scene environment, so the glossy floor, chrome and armour reflect the actual sky, stands and light strips.
+  // A one-time cost on map load — nothing per frame.
+  captureEnv() {
+    if (this.trainLock || !this.Q.shadows) return; // low quality keeps the cheap studio light
+    try {
+      const r = this.renderer, sc = this.scene, size = this.Q.shadowSize >= 4096 ? 256 : 128;
+      if (!this._cubeRT) { this._cubeRT = new THREE.WebGLCubeRenderTarget(size, { type: THREE.HalfFloatType }); this._cubeCam = new THREE.CubeCamera(0.5, 500, this._cubeRT); sc.add(this._cubeCam); }
+      const hidden = [];
+      for (const f of this.fighters || []) if (f.model && f.model.visible) { f.model.visible = false; hidden.push(f.model); }
+      // from head height at a free spawn spot: sees floor, walls and stands as well as sky (a neutral, believable mix)
+      const sp = (this.arena.spawnGround && this.arena.spawnGround[0]) || new THREE.Vector3(0, 0, 20);
+      this._cubeCam.position.set(sp.x * 0.6, sp.y + 2.2, sp.z * 0.6);
+      const env = sc.environment; sc.environment = this.envMap;
+      this._cubeCam.update(r, sc);
+      sc.environment = env;
+      for (const m of hidden) m.visible = true;
+      if (!this._pm) this._pm = new THREE.PMREMGenerator(r);
+      const old = this.arenaEnv;
+      this.arenaEnv = this._pm.fromCubemap(this._cubeRT.texture).texture;
+      sc.environment = this.arenaEnv; sc.environmentIntensity = 0.5;
+      if (old) old.dispose();
+    } catch (e) { console.warn('env', e); }
   }
   get mapName() { return (MAPS[this.arena.mapId] || MAPS.arena).name; }
   pickSpawn(f) {
@@ -1601,6 +1642,7 @@ export class Game {
     this.parts.update(fxDt);
     this.rings.update(fxDt);
     this.arena.update(this.clockT, fxDt);
+    if (this.sky.material.uniforms.uTime) this.sky.material.uniforms.uTime.value = this.clockT;
     for (const o of this.orbs) o.halo.scale.setScalar(1.7 + Math.sin(o.t * 18) * 0.25);
     this.updateLasers();
     this.updateBlinkGhost();
@@ -1670,7 +1712,7 @@ export class Game {
     const P = this.player, d = this.disc, W = innerWidth, H = innerHeight;
     // vitals
     const hp = Math.max(0, Math.round(this.hp));
-    this.css('hpFill', 'width', hp + '%');
+    this.css('hpFill', 'width', hp + '%'); this.css('hpGhost', 'width', hp + '%');
     this.txt('hpNum', String(hp));
     this.cls('hpBar', 'low', hp < 35);
     if (this.versus) this.updateVersusHud(dt);
@@ -1770,7 +1812,13 @@ export class Game {
 
   updateVersusHud(dt) {
     const me = this.me, M = this.match, skill = SKILL[this.botSkill] ? SKILL[this.botSkill].name : '';
-    if (this.online) {
+    if (this.online && this.rankedOnline) {
+      const op = this.fighters.find(f => f !== me && !f.netBot), R = this.rankedOnline, t = Math.max(0, Math.ceil(M.timeLeft || 0));
+      this.txt('modeTxt', '랭크전');
+      this.txt('subTxt', `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} · vs ${op ? op.name : '…'}${R.op ? ` (${R.op.tier} ${R.op.r})` : ''} · ${M.limit}킬 먼저 · ${Math.round(this.net.rtt)}ms`);
+      this.txt('scoreTxt', `${me.kills} : ${op ? op.kills : 0}`);
+      this.txt('comboTxt', '');
+    } else if (this.online) {
       const t = Math.max(0, Math.ceil(M.timeLeft || 0)), people = this.fighters.filter(f => !f.netBot).length;
       this.txt('modeTxt', `온라인 · ${this.roomCode || ''}`);
       this.txt('subTxt', `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')} · ${M.limit}킬 먼저 · ${people}명${this.fighters.length - people ? ` + 봇 ${this.fighters.length - people}` : ''} · ${Math.round(this.net.rtt)}ms${this.net.status === 'reconnecting' ? ' · 재연결 중…' : ''}`);

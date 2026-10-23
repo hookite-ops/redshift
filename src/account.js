@@ -32,13 +32,22 @@ export class Account {
     this.game = game; this.S = S; this.onChange = onChange || (() => { }); this.onApplied = onApplied || (() => { });
     const a = load();
     this.token = a && a.token || null; this.user = a && a.user || null; this.base = a && a.base || '';
-    this.status = this.token ? 'signed' : 'out'; this.msg = ''; this.lastSync = a && a.lastSync || 0; this.lastHash = '';
+    this.rank = a && a.rank || null;   // ranked rating — owned by the server, mirrored here for the menu
+    this.status = this.token && this.user && !this.user.guest ? 'signed' : 'out'; this.msg = ''; this.lastSync = a && a.lastSync || 0; this.lastHash = '';
     this.cfg = null; this.link = null;
     this.app = !!window.REDSHIFT_APP;
     setInterval(() => this.autosync(), 20000);
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.autosync(true); });
   }
-  get signedIn() { return !!this.token; }
+  get signedIn() { return !!this.token && !!this.user && !this.user.guest; }   // a Google account
+  get hasSession() { return !!this.token; }                                     // Google or guest
+  // ranked needs an identity the server trusts: make a guest one if there's nothing yet
+  async ensureSession() {
+    if (this.token) return this.token;
+    const j = await this.api('POST', '/api/auth/guest', null, false);
+    this.token = j.token; this.user = j.user; this.rank = j.rank; this.persist(); this.onChange(this);
+    return this.token;
+  }
 
   async server() {
     if (this.base) return this.base;
@@ -60,9 +69,9 @@ export class Account {
     if (!r.ok) throw new Error(j.error || `서버 오류 (${r.status})`);
     return j;
   }
-  persist() { store(this.token ? { token: this.token, user: this.user, base: this.base, lastSync: this.lastSync } : null); }
+  persist() { store(this.token ? { token: this.token, user: this.user, base: this.base, lastSync: this.lastSync, rank: this.rank } : null); }
   set(status, msg = '') { this.status = status; this.msg = msg; this.onChange(this); }
-  forget() { this.token = null; this.user = null; this.persist(); this.set('out', '로그인이 만료됐어요. 다시 로그인해 주세요'); }
+  forget() { this.token = null; this.user = null; this.rank = null; this.persist(); this.set('out', '로그인이 만료됐어요. 다시 로그인해 주세요'); }
 
   // ---------- what gets saved ----------
   snapshot() {
@@ -88,7 +97,7 @@ export class Account {
 
   // ---------- sign-in flows ----------
   async afterLogin(j) {
-    this.token = j.token; this.user = j.user; this.persist();
+    this.token = j.token; this.user = j.user; if (j.rank) this.rank = j.rank; this.persist();
     // first sign-in on this device: combine what's here with what's in the cloud, then upload the result
     if (j.save) this.apply(j.save);
     if (!this.S.name || /^플레이어\d+$/.test(this.S.name)) { this.S.name = String(j.user.name || '').slice(0, 12) || this.S.name; saveSettings(this.S); }
@@ -97,7 +106,7 @@ export class Account {
   }
   async loginGoogle(credential) {
     this.set('busy', '구글 계정 확인 중…');
-    try { await this.afterLogin(await this.api('POST', '/api/auth/google', { credential }, false)); }
+    try { await this.afterLogin(await this.api('POST', '/api/auth/google', { credential, guest: this.user && this.user.guest ? this.token : undefined }, false)); }
     catch (e) { this.set(this.token ? 'signed' : 'out', e.message); }
   }
   async startLink() {
@@ -131,7 +140,7 @@ export class Account {
   }
   async logout() {
     try { await this.push(true); await this.api('POST', '/api/logout'); } catch { }
-    this.token = null; this.user = null; this.persist(); this.set('out', '로그아웃했어요 — 이 기기의 기록은 그대로 남아 있어요');
+    this.token = null; this.user = null; this.rank = null; this.persist(); this.set('out', '로그아웃했어요 — 이 기기의 기록은 그대로 남아 있어요');
   }
 
   // ---------- sync ----------
@@ -139,21 +148,22 @@ export class Account {
     if (!this.token) return;
     try {
       const j = await this.api('GET', '/api/me');
-      this.user = j.user; this.persist();
+      this.user = j.user; if (j.rank) this.rank = j.rank; this.persist();
+      if (this.user.guest) { this.set('out', ''); return; }   // guests only keep a rank, no cloud save
       if (j.save) this.apply(j.save);
       await this.push();
       this.set('signed', '');
     } catch (e) { if (this.token) this.set('signed', e.message); }
   }
   async push(force = false) {
-    if (!this.token) return;
+    if (!this.signedIn) return;
     const s = this.snapshot(), h = this.hash(s);
     if (!force && h === this.lastHash) return;
     const j = await this.api('PUT', '/api/save', { save: s });
     this.lastHash = h; this.lastSync = j.updated || Date.now(); this.persist(); this.onChange(this);
   }
   autosync(now = false) {
-    if (!this.token || this.status === 'busy') return;
+    if (!this.signedIn || this.status === 'busy') return;
     if (this.game.state === 'play' && !now) return; // never during a match
     this.push().catch(() => { });
   }

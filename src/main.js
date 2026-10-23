@@ -12,6 +12,7 @@ import { WeaponView } from './weaponview.js';
 import { WEAPONS } from './disc.js';
 import { rankState, tierOf, nextTier, applyResult } from './rank.js';
 import { Account } from './account.js';
+import { emblemSVG } from './emblem.js';
 import { loadCustomBrain } from './neurobot.js';
 const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
 import { Touch, isTouchDevice } from './touch.js';
@@ -51,13 +52,13 @@ function landscape() { try { screen.orientation && screen.orientation.lock && sc
 game.saveRecords = () => saveRecords(game.records);
 
 // ---------------- screens ----------------
-const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab', 'account'];
+const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab', 'account', 'ranked'];
 function show(id) { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id)); }
 let returnTo = 'menu';
 
 function startMode(mode) {
-  if (mode === 'rank') game.start('duel', { ranked: true });
-  else game.start(mode);
+  if (mode === 'rank') { openRanked(); return; }   // ranked is players-only now (online matchmaking)
+  game.start(mode);
   enterGame();
 }
 function enterGame() {
@@ -121,6 +122,7 @@ window.REDSHIFT_BACK = () => {
   if (open('settings') || open('controls') || open('online')) { show(returnTo); return true; }
   if (open('ailab')) { if (!lab.busy) show('menu'); return true; }
   if (open('account')) { show('menu'); return true; }
+  if (open('ranked')) { cancelRank(); show('menu'); return true; }
   if (open('pause')) { resume(); return true; }
   if (open('death')) { toMenu(); return true; }
   return false;
@@ -196,7 +198,7 @@ async function joinBy(msg) {
 }
 game.onRooms = list => { if (!$('online').classList.contains('hidden')) renderRooms(list); };
 game.onNetError = msg => oStatus(msg, 'bad');
-game.onJoined = () => enterGame();
+game.onJoined = m => { if (m && m.ranked) { rkState = 'idle'; clearInterval(rkTimer); $('rkResult').classList.add('hidden'); } enterGame(); };
 game.onNetDropped = () => { toMenu(); openOnline(); show('online'); oStatus('서버와 연결이 끊겼어요', 'bad'); };
 game.net.onStatus = (st, msg) => { if (st === 'reconnecting') oStatus('다시 연결하는 중…'); };
 $('oQuick').onclick = () => joinBy({ t: 'quick' });
@@ -301,12 +303,79 @@ function forfeit() {
   game.saveRecords(); game.ranked = false;
 }
 function renderRank() {
-  const rs = rankState(game.records), t = tierOf(rs.r), nx = nextTier(rs.r);
+  const rs = acc.rank || { r: 1000, games: 0, wins: 0, streak: 0 }, t = tierOf(rs.r), nx = nextTier(rs.r);
   $('rankBadge').textContent = `${t.name} ${rs.r}`; $('rankBadge').style.color = t.color;
   $('rankSub').textContent = rs.games
     ? `${rs.wins}승 ${rs.games - rs.wins}패${rs.streak > 1 ? ` · ${rs.streak}연승 중` : ''}${nx ? ` · ${nx.name}까지 ${nx.min - rs.r} RP` : ' · 최고 티어'}`
-    : '1V1 · 이기면 RP가 오르고 상대도 강해져요';
+    : '사람끼리 1V1 · 비슷한 실력과 매칭';
 }
+// ---------------- 랭크전 (사람끼리) ----------------
+let rkState = 'idle', rkT0 = 0, rkTimer = 0;
+function renderRanked() {
+  const rs = acc.rank || { r: 1000, games: 0, wins: 0, losses: 0, streak: 0, best: 1000 }, t = tierOf(rs.r), nx = nextTier(rs.r);
+  $('rkEmblem').innerHTML = emblemSVG(rs.r, 130);
+  $('rkTier').textContent = t.name; $('rkTier').style.color = t.color; $('rkRp').textContent = rs.r;
+  const lo = t.min, hi = nx ? nx.min : t.min + 300;
+  $('rkBarFill').style.width = Math.max(4, Math.min(100, (rs.r - lo) / (hi - lo) * 100)) + '%';
+  $('rkNext').textContent = nx ? `${nx.name}까지 ${nx.min - rs.r} RP` : '최고 티어!';
+  const losses = rs.losses ?? (rs.games - rs.wins);
+  $('rkStats').innerHTML = `<div><em>${rs.games}</em>경기</div><div><em>${rs.wins}</em>승</div><div><em>${losses}</em>패</div><div><em>${rs.streak > 0 ? rs.streak + '연승' : rs.streak < 0 ? -rs.streak + '연패' : '—'}</em>${rs.best ? '최고 ' + rs.best : ''}</div>`;
+  $('rkGuest').innerHTML = acc.signedIn ? '' : '게스트로 플레이 중이에요. <b>구글로 로그인</b>하면 랭크가 계정에 남아서 다른 기기에서도 이어져요.';
+  $('rkSearch').classList.toggle('hidden', rkState !== 'searching');
+  $('rkFind').classList.toggle('hidden', rkState === 'searching');
+  $('rkCancel').classList.toggle('hidden', rkState !== 'searching');
+}
+function openRanked() { returnTo = 'menu'; $('rkMsg').textContent = ''; show('ranked'); renderRanked(); acc.refresh().then(() => { renderRanked(); renderRank(); }); }
+async function findRank() {
+  $('rkMsg').textContent = ''; rkState = 'searching'; rkT0 = performance.now(); renderRanked();
+  $('rkSearchT').textContent = '서버 연결 중…'; $('rkSearchS').textContent = '';
+  try {
+    await acc.ensureSession();
+    let base = Net.defaultServer(); if (!base) base = await Net.discover();
+    if (!base) throw new Error('서버 주소를 몰라요 — 온라인 화면에서 서버 주소를 먼저 넣어 주세요');
+    const hello = { name: S.name, weapon: S.weapon, skill: S.skill };
+    if (!(game.net.open && game.net.base === base)) { if (game.net.ws) game.net.close(); await game.net.connect(base, hello); }
+    if (rkState !== 'searching') return;
+    game.net.send({ t: 'rankq', token: acc.token, name: S.name, weapon: S.weapon, skill: S.skill });
+    $('rkSearchT').textContent = '상대 찾는 중…';
+    clearInterval(rkTimer);
+    rkTimer = setInterval(() => { const s = Math.round((performance.now() - rkT0) / 1000); $('rkSearchT').textContent = `상대 찾는 중… ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }, 500);
+  } catch (e) { rkState = 'idle'; renderRanked(); $('rkMsg').textContent = e.message; $('rkMsg').className = 'lstatus bad'; }
+}
+function cancelRank() {
+  if (rkState !== 'searching') return;
+  rkState = 'idle'; clearInterval(rkTimer);
+  if (game.net.open) game.net.send({ t: 'rankcancel' });
+  renderRanked();
+}
+$('rkFind').onclick = () => { game.audio.init(); game.audio.ui(); findRank(); };
+$('rkCancel').onclick = () => cancelRank();
+game.onRankQueue = m => {
+  if (m.state === 'searching') { const p = Math.max(0, (m.players || 1) - 1); $('rkSearchS').textContent = `내 점수 ${m.r} RP 근처에서 찾는 중 · 대기 중인 다른 사람 ${p}명 · 오래 기다릴수록 범위가 넓어져요`; }
+  else if (m.state === 'error' || m.state === 'cancelled') { rkState = 'idle'; clearInterval(rkTimer); renderRanked(); if (m.msg) { $('rkMsg').textContent = m.msg; $('rkMsg').className = 'lstatus bad'; } }
+};
+let rkResult = null;
+game.onRankResult = m => {
+  rkResult = m; acc.rank = m.rank; acc.persist(); renderRank();
+  rkState = 'idle'; clearInterval(rkTimer);
+  if (m.forfeit && m.result === 'win') { game.banner('승리!', '상대가 나갔어요', 2.5); setTimeout(() => game.onRankClosed && game.onRankClosed(), 2600); }
+};
+game.onRankClosed = () => {
+  if (game.online) game.leaveOnline();
+  game.online = false; game.rankedOnline = null;
+  toMenu(); openRanked();
+  const m = rkResult; if (!m) return;
+  const el = $('rkResult'); el.className = 'rkResult ' + m.result; el.classList.remove('hidden');
+  el.innerHTML = `<div class="big">${m.result === 'win' ? 'VICTORY' : m.result === 'loss' ? 'DEFEAT' : 'DRAW'}</div>
+    <div class="score">${m.score[0]} : ${m.score[1]} · vs ${esc(m.op)}${m.forfeit ? ' · 기권' : ''}</div>
+    <div class="delta"><span id="rkDelta">${m.delta >= 0 ? '+' : ''}0</span> RP</div>
+    ${m.tier !== m.tierBefore ? `<div class="promo">${m.delta > 0 ? `${m.tier} 승급!` : `${m.tier}(으)로 강등`}</div>` : ''}`;
+  // count the RP change up
+  const t0 = performance.now(), D = m.delta;
+  const step = () => { const k = Math.min(1, (performance.now() - t0) / 900), v = Math.round(D * (1 - Math.pow(1 - k, 3))); const e = $('rkDelta'); if (e) e.textContent = (D >= 0 ? '+' : '') + v; if (k < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+  rkResult = null;
+};
 function renderBest() {
   renderRank();
   const r = game.records;
