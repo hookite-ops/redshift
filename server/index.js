@@ -24,6 +24,8 @@ const MAPS = ['arena', 'spire', 'lanes', 'forest', 'orbit'];
 const nextMap = cur => { const o = MAPS.filter(m => m !== cur); return o[(Math.random() * o.length) | 0]; };
 const pick = a => a[(Math.random() * a.length) | 0];
 const now = () => Date.now() / 1000;
+// cosmetics travel as short ids only
+const cleanLook = l => l && typeof l === 'object' ? { skin: String(l.skin || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 16), wskin: String(l.wskin || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 16), killfx: String(l.killfx || '').replace(/[^a-z0-9_-]/gi, '').slice(0, 16) } : null;
 const clean = (s, n) => String(s || '').replace(/[<>&"'`\\\u0000-\u001f]/g, '').trim().slice(0, n);
 
 // ---------------------------------------------------------------- static files
@@ -79,7 +81,7 @@ function roomList() {
 }
 const humans = r => [...r.players.values()].filter(p => !p.bot);
 function freeColor(r) { const used = new Set([...r.players.values()].map(p => p.color)); return COLORS.find(c => !used.has(c)) ?? pick(COLORS); }
-function pub(p) { return { id: p.id, name: p.name, color: p.color, weapon: p.weapon, skill: p.skill, bot: p.bot, persona: p.persona, owner: p.owner, hp: Math.round(p.hp), alive: p.alive, kills: p.kills, deaths: p.deaths }; }
+function pub(p) { return { id: p.id, name: p.name, color: p.color, weapon: p.weapon, skill: p.skill, look: p.look || null, bot: p.bot, persona: p.persona, owner: p.owner, hp: Math.round(p.hp), alive: p.alive, kills: p.kills, deaths: p.deaths }; }
 function send(c, m) { if (c && c.ws && c.ws.readyState === 1) c.ws.send(typeof m === 'string' ? m : JSON.stringify(m)); }
 function cast(r, m, except = null) { const s = JSON.stringify(m); for (const c of r.clients) if (c !== except) send(c, s); }
 function addPlayer(r, o) {
@@ -120,7 +122,7 @@ function joinRoom(c, r) {
   if (humans(r).length >= MAX_PLAYERS) { send(c, { t: 'err', msg: '방이 꽉 찼어요' }); return; }
   // make space by removing a bot if needed
   if (r.players.size >= MAX_PLAYERS) { const b = [...r.players.values()].reverse().find(p => p.bot); if (b) { r.players.delete(b.id); cast(r, { t: 'leave', id: b.id }); } }
-  const p = addPlayer(r, { name: c.name, weapon: c.weapon, skill: c.skill, bot: false, owner: c.id });
+  const p = addPlayer(r, { name: c.name, weapon: c.weapon, skill: c.skill, look: c.look || null, bot: false, owner: c.id });
   c.room = r; c.pid = p.id; r.clients.add(c);
   const becameHost = !r.host;
   if (becameHost) r.host = c;
@@ -254,6 +256,7 @@ function onMessage(c, raw) {
       c.name = clean(m.name, 12) || '플레이어';
       c.weapon = WEAPONS.includes(m.weapon) ? m.weapon : 'disc';
       c.skill = SKILLS.includes(m.skill) ? m.skill : 'reflect';
+      c.look = cleanLook(m.look);
       send(c, { t: 'hi', clientId: c.id, token: c.token, rooms: roomList() });
       break;
     }
@@ -297,7 +300,8 @@ function onMessage(c, raw) {
       if (!r) return;
       const p = r.players.get(c.pid); if (!p) return;
       if (WEAPONS.includes(m.weapon)) p.weapon = m.weapon; if (SKILLS.includes(m.skill)) p.skill = m.skill;
-      cast(r, { t: 'loadout', id: p.id, weapon: p.weapon, skill: p.skill });
+      if (m.look) p.look = c.look = cleanLook(m.look);
+      cast(r, { t: 'loadout', id: p.id, weapon: p.weapon, skill: p.skill, look: p.look || null });
       break;
     }
     case 'ping': send(c, { t: 'pong', c: m.c }); break;

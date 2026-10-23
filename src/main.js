@@ -13,6 +13,8 @@ import { WEAPONS } from './disc.js';
 import { rankState, tierOf, nextTier, applyResult } from './rank.js';
 import { Account } from './account.js';
 import { emblemSVG } from './emblem.js';
+import { installLocker } from './locker.js';
+import { wallet, owns, EMOTES, daily } from './cosmetics.js';
 import { loadCustomBrain } from './neurobot.js';
 const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
 import { Touch, isTouchDevice } from './touch.js';
@@ -52,7 +54,7 @@ function landscape() { try { screen.orientation && screen.orientation.lock && sc
 game.saveRecords = () => saveRecords(game.records);
 
 // ---------------- screens ----------------
-const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab', 'account', 'ranked'];
+const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab', 'account', 'ranked', 'locker'];
 function show(id) { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id)); }
 let returnTo = 'menu';
 
@@ -122,6 +124,7 @@ window.REDSHIFT_BACK = () => {
   if (open('settings') || open('controls') || open('online')) { show(returnTo); return true; }
   if (open('ailab')) { if (!lab.busy) show('menu'); return true; }
   if (open('account')) { show('menu'); return true; }
+  if (open('locker')) { show('menu'); renderBest(); return true; }
   if (open('ranked')) { cancelRank(); show('menu'); return true; }
   if (open('pause')) { resume(); return true; }
   if (open('death')) { toMenu(); return true; }
@@ -143,6 +146,7 @@ document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click',
   else if (a === 'controls') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; buildControls(); show('controls'); }
   else if (a === 'ailab') lab.open();
   else if (a === 'account') { returnTo = 'menu'; openAccount(); }
+  else if (a === 'locker') { returnTo = 'menu'; locker.open(); }
   else if (a === 'back') show(returnTo);
   else if (a === 'resume') resume();
   else if (a === 'restart') { forfeit(); startMode(game.ranked ? 'rank' : game.mode); }
@@ -168,7 +172,7 @@ async function connectOnline() {
   const base = $('oServer').value.trim();
   S.name = cleanName($('oName').value); saveSettings(S);
   if (!base) { oStatus('서버 주소를 넣어 주세요', 'bad'); return false; }
-  const hello = { name: S.name, weapon: S.weapon, skill: S.skill };
+  const hello = { name: S.name, weapon: S.weapon, skill: S.skill, look: myLook() };
   if (game.net.open && game.net.base === base) { game.net.send({ t: 'hello', ...hello }); return true; }
   if (game.net.ws) game.net.close();
   oStatus('연결 중…');
@@ -333,7 +337,7 @@ async function findRank() {
     await acc.ensureSession();
     let base = Net.defaultServer(); if (!base) base = await Net.discover();
     if (!base) throw new Error('서버 주소를 몰라요 — 온라인 화면에서 서버 주소를 먼저 넣어 주세요');
-    const hello = { name: S.name, weapon: S.weapon, skill: S.skill };
+    const hello = { name: S.name, weapon: S.weapon, skill: S.skill, look: myLook() };
     if (!(game.net.open && game.net.base === base)) { if (game.net.ws) game.net.close(); await game.net.connect(base, hello); }
     if (rkState !== 'searching') return;
     game.net.send({ t: 'rankq', token: acc.token, name: S.name, weapon: S.weapon, skill: S.skill });
@@ -376,8 +380,13 @@ game.onRankClosed = () => {
   requestAnimationFrame(step);
   rkResult = null;
 };
+function myLook() {
+  const rec = wallet(game.records), ok = (c, id, d) => owns(rec, c, id) ? id : d;
+  return { skin: ok('skin', S.skin, 'runner'), wskin: ok('wskin', S.wskin, 'std'), killfx: ok('killfx', S.killfx, 'cubes') };
+}
 function renderBest() {
   renderRank();
+  $('menuCoins').textContent = wallet(game.records).coins.toLocaleString();
   const r = game.records;
   const parts = [];
   if (r.score) parts.push(`최고 ${r.score.toLocaleString()}점 · WAVE ${r.wave}`);
@@ -451,7 +460,7 @@ $('loading').classList.add('hidden');
 let wvLast = 0;
 function loop(now) {
   if (window.__trainHeadless) return;
-  requestAnimationFrame(loop); game.frame(now);
+  requestAnimationFrame(loop); game.frame(now); locker.frame(now);
   // weapon preview: only while the main menu is showing, ~30 fps
   if (wview && now - wvLast > 33 && !$('menu').classList.contains('hidden')) { wview.frame(Math.min(0.1, (now - wvLast) / 1000)); wvLast = now; }
 }
@@ -469,6 +478,32 @@ function spectate() {
   if (touchMode) game.touchUI.show(false);
 }
 const lab = installLab(game, { $, show, onSpectate: spectate });
+
+// ---------------- 보관함 · 이모트 ----------------
+const locker = installLocker({ $, S, game, show, saveSettings, onChange: () => { renderBest(); if (game.net.open) game.net.send({ t: 'loadout', weapon: S.weapon, skill: S.skill, look: myLook() }); } });
+// emote wheel: B (or the 😀 button on touch) opens it; 1–4 or a tap plays one; moving cancels the emote
+function wheelOpen(on) {
+  const w = $('emoteWheel');
+  if (on === undefined) on = w.classList.contains('hidden');
+  if (!on) { w.classList.add('hidden'); return; }
+  const list = (S.emotes || []).filter(id => owns(wallet(game.records), 'emote', id)).slice(0, 4);
+  const pos = [[0.5, 0.15], [0.85, 0.5], [0.5, 0.85], [0.15, 0.5]];
+  w.innerHTML = '<div class="mid">EMOTE<br><small>1–4</small></div>' + list.map((id, i) => { const d = EMOTES.find(e => e.id === id); return `<button data-e="${id}" style="left:${pos[i][0] * 100}%;top:${pos[i][1] * 100}%"><kbd>${i + 1}</kbd>${d.icon}<small>${d.name}</small></button>`; }).join('');
+  w.classList.remove('hidden');
+}
+function playEmote(id) { wheelOpen(false); if (id) game.emote(id); }
+$('emoteWheel').addEventListener('click', e => { const b = e.target.closest('[data-e]'); playEmote(b ? b.dataset.e : null); });
+$('emoteWheel').addEventListener('pointerdown', e => e.stopPropagation());
+$('emoteBtn').addEventListener('pointerdown', e => { e.stopPropagation(); e.preventDefault(); wheelOpen(); });
+game.onEmoteKey = () => wheelOpen();
+addEventListener('keydown', e => {
+  if ($('emoteWheel').classList.contains('hidden')) return;
+  const n = /^Digit([1-4])$/.exec(e.code); if (!n) return;
+  const id = ((S.emotes || []).filter(x => owns(wallet(game.records), 'emote', x)))[+n[1] - 1];
+  playEmote(id);
+});
+// daily coins
+{ const got = daily(wallet(game.records)); if (got) { game.saveRecords(); setTimeout(() => { $('menuCoins').textContent = wallet(game.records).coins.toLocaleString(); }, 0); } }
 
 // test hooks
 installTrainAPI(game);

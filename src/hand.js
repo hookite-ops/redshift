@@ -35,9 +35,9 @@ export class Hand {
     this.t = 0; this.bob = 0; this.swayX = 0; this.swayY = 0;
     this.anim = null; this.leftAnim = null;
   }
-  setWeapon(w, color) {
+  setWeapon(w, color, wskin = 'std') {
     this.disc.clear();
-    this.disc.add(discModel(color, w, 0.5 * Math.min(1.1, w.scale), 0.3)); // close to the lens: much less glow
+    this.disc.add(discModel(color, w, 0.5 * Math.min(1.1, w.scale), 0.3, wskin)); // close to the lens: much less glow
   }
   resize(a) { this.camera.aspect = a; this.camera.updateProjectionMatrix(); }
   throwAnim() { this.anim = { t: 0, dur: 0.28, k: 'throw' }; }

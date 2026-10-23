@@ -5,11 +5,14 @@
 // Shared look: pearl-white ceramic shells, dark graphite cores, polished chrome edges, and the owner's
 // colour as glowing channels (they bloom with post-processing on).
 import * as THREE from 'three';
+import { WSKINS, wskinTexture } from './cosmetics.js';
 
 const TAU = Math.PI * 2;
 const _matCache = new Map();
-function mats(color, glow) {
-  const key = color + ':' + glow.toFixed(2);
+function mats(color, glow, wskin = 'std') {
+  const WS = WSKINS.find(x => x.id === wskin) || WSKINS[0];
+  if (WS.glow) color = WS.glow;
+  const key = color + ':' + glow.toFixed(2) + ':' + WS.id;
   let M = _matCache.get(key);
   if (M) return M;
   const c = new THREE.Color(color);
@@ -26,6 +29,16 @@ function mats(color, glow) {
     glass: new THREE.MeshPhysicalMaterial({ color: c.clone().lerp(new THREE.Color(0xffffff), 0.55), roughness: 0.04, metalness: 0, transparent: true, opacity: 0.38, clearcoat: 1, depthWrite: false }),
     iris: new THREE.MeshPhysicalMaterial({ color: c.clone().lerp(new THREE.Color(0xffffff), 0.72), roughness: 0.05, metalness: 0.6, iridescence: 1, iridescenceIOR: 1.6, iridescenceThicknessRange: [200, 900], clearcoat: 1, emissive: c, emissiveIntensity: glow > 1 ? 0.25 : 0.08 }),
   };
+  // weapon skin: re-finish the shell (pearl) and core (graphite)
+  if (WS.pearl) {
+    const q = WS.pearl;
+    if (q.glass) M.pearl = new THREE.MeshPhysicalMaterial({ color: q.color, roughness: q.rough, metalness: q.metal, transmission: 0, transparent: true, opacity: 0.72, clearcoat: 1, emissive: new THREE.Color(WS.glow || color), emissiveIntensity: 0.15 });
+    else {
+      M.pearl = new THREE.MeshPhysicalMaterial({ color: q.color, roughness: q.rough, metalness: q.metal, clearcoat: q.metal > 0.5 ? 0.3 : 1, clearcoatRoughness: 0.1 });
+      if (q.tex) { const t = wskinTexture(q.tex); M.pearl.map = t; if (q.emissiveTex) { M.pearl.emissiveMap = t; M.pearl.emissive = new THREE.Color(1, 1, 1); M.pearl.emissiveIntensity = glow > 1 ? 1.4 : 0.9; } }
+    }
+  }
+  if (WS.graphite) { const q = WS.graphite; M.graphite = new THREE.MeshStandardMaterial({ color: q.color, roughness: q.rough, metalness: q.metal }); }
   _matCache.set(key, M);
   if (_matCache.size > 64) _matCache.delete(_matCache.keys().next().value);
   return M;
@@ -208,9 +221,9 @@ const BUILD = {
   },
 };
 
-export function buildWeaponModel(color, w, s = 1, glowMul = 1, glowBase = 1) {
+export function buildWeaponModel(color, w, s = 1, glowMul = 1, glowBase = 1, wskin = 'std') {
   const g = new THREE.Group(), glow = Math.max(1, glowBase * glowMul);
-  const M = mats(color, glow);
+  const M = mats(color, glow, wskin);
   (BUILD[w.id] || BUILD.disc)(g, M, s);
   g.traverse(o => { if (o.isMesh) { o.castShadow = o.material !== M.glow && o.material !== M.glass; } });
   return g;
