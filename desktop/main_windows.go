@@ -146,6 +146,14 @@ func main() {
 		w.Dispatch(func() { full.set(want) })
 		return want
 	})
+	// window.rsOpenURL(url): Google sign-in (계정 연동) opens in the real browser, never inside the game window
+	w.Bind("rsOpenURL", func(u string) bool {
+		if len(u) < 8 || (u[:7] != "http://" && u[:8] != "https://") {
+			return false
+		}
+		exec.Command("rundll32", "url.dll,FileProtocolHandler", u).Start()
+		return true
+	})
 	w.SetSize(1280, 760, webview2.HintNone)
 	pShowWindow.Call(hwnd, swMaximize)
 	w.Navigate(url)

@@ -3,7 +3,7 @@ FROM node:22-alpine
 WORKDIR /app
 COPY server/package.json server/package-lock.json ./server/
 RUN cd server && npm ci --omit=dev
-COPY server/index.js ./server/index.js
+COPY server/index.js server/auth.js ./server/
 COPY public ./public
 ENV PORT=8080 NODE_ENV=production
 EXPOSE 8080

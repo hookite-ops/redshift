@@ -11,6 +11,8 @@ import { MAPS } from './maps.js';
 import { WeaponView } from './weaponview.js';
 import { WEAPONS } from './disc.js';
 import { rankState, tierOf, nextTier, applyResult } from './rank.js';
+import { Account } from './account.js';
+import { loadCustomBrain } from './neurobot.js';
 const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
 import { Touch, isTouchDevice } from './touch.js';
 import { ACTIONS, DEFAULT_BINDS, loadSettings, saveSettings, loadRecords, saveRecords, keyName } from './settings.js';
@@ -49,7 +51,7 @@ function landscape() { try { screen.orientation && screen.orientation.lock && sc
 game.saveRecords = () => saveRecords(game.records);
 
 // ---------------- screens ----------------
-const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab'];
+const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab', 'account'];
 function show(id) { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id)); }
 let returnTo = 'menu';
 
@@ -118,6 +120,7 @@ window.REDSHIFT_BACK = () => {
   if (game.state === 'play' && !game.menuOpen) { pause(); return true; }
   if (open('settings') || open('controls') || open('online')) { show(returnTo); return true; }
   if (open('ailab')) { if (!lab.busy) show('menu'); return true; }
+  if (open('account')) { show('menu'); return true; }
   if (open('pause')) { resume(); return true; }
   if (open('death')) { toMenu(); return true; }
   return false;
@@ -137,6 +140,7 @@ document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click',
   else if (a === 'settings') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; openSettings(); show('settings'); }
   else if (a === 'controls') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; buildControls(); show('controls'); }
   else if (a === 'ailab') lab.open();
+  else if (a === 'account') { returnTo = 'menu'; openAccount(); }
   else if (a === 'back') show(returnTo);
   else if (a === 'resume') resume();
   else if (a === 'restart') { forfeit(); startMode(game.ranked ? 'rank' : game.mode); }
@@ -316,7 +320,63 @@ function renderBest() {
 }
 
 // ---------------- boot ----------------
+// ---------------- 계정 연동 (Google) ----------------
+const esc = t => String(t || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const acc = new Account({
+  game, S,
+  onChange: () => renderAccount(),
+  onApplied: () => { loadCustomBrain(); applySettings(); renderDifficulty(); renderBest(); },
+});
+const pendingLink = (new URLSearchParams(location.search).get('link') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+function renderChip() {
+  const on = acc.signedIn, u = acc.user || {};
+  $('accChip').classList.toggle('on', on);
+  $('accName').textContent = on ? (u.name || '내 계정') : '구글로 로그인';
+  $('accSub').textContent = on ? (acc.lastSync ? '동기화됨 ✓' : '연결됨') : '기록·랭크를 모든 기기에서';
+  const pic = $('accPic');
+  if (on && u.picture) { pic.style.backgroundImage = `url("${u.picture}")`; pic.textContent = ''; }
+  else { pic.style.backgroundImage = ''; pic.textContent = on ? (u.name || '?').slice(0, 1) : 'G'; }
+}
+async function renderAccount() {
+  renderChip();
+  if ($('account').classList.contains('hidden')) return;
+  const body = $('accBody'), u = acc.user || {};
+  $('accMsg').textContent = acc.msg || '';
+  if (acc.status === 'linking' && acc.link) {
+    body.innerHTML = `<div class="accText">휴대폰 <b>브라우저</b>가 열려요. 거기서 구글로 로그인하면 이 앱이 자동으로 연결돼요.<br>브라우저가 안 열리면 아래 주소를 직접 열고 코드를 넣어 주세요.</div>
+      <div class="linkCode">${esc(acc.link.code)}</div><div class="linkUrl">${esc(acc.link.url)}</div>
+      <div class="row2"><button class="btn main" id="accOpen">브라우저 다시 열기</button><button class="btn" id="accCancel">취소</button></div>`;
+    $('accOpen').onclick = () => acc.openBrowser(acc.link.url); $('accCancel').onclick = () => acc.cancelLink();
+    return;
+  }
+  if (acc.signedIn) {
+    const rs = rankState(game.records), t = tierOf(rs.r);
+    body.innerHTML = `<div class="accProfile">${u.picture ? `<img src="${esc(u.picture)}" referrerpolicy="no-referrer">` : '<div class="ph"></div>'}<div><b>${esc(u.name)}</b><small>${esc(u.email)}</small></div></div>
+      <div class="accText">이 계정에 <b>랭크 · 기록 · 설정 · AI 두뇌</b>가 저장돼요. 다른 폰·패드·PC·앱에서 같은 구글 계정으로 로그인하면 그대로 이어져요.</div>
+      <div class="accList"><div><em>${esc(t.name)}</em>${rs.r} RP</div><div><em>${rs.wins}</em>랭크 승</div><div><em>${game.records.duelWin || 0}</em>1V1 승</div><div><em>${acc.lastSync ? new Date(acc.lastSync).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '—'}</em>마지막 저장</div></div>
+      ${acc.app ? '' : `<h3>앱(APK·EXE) 연결하기</h3><div class="accText" style="margin-bottom:4px">앱에 뜬 6자리 코드를 넣으면 그 앱이 이 계정으로 로그인돼요.</div><div class="accRow"><input id="accCode" maxlength="6" placeholder="ABC123" value="${esc(pendingLink)}"><button class="btn main" id="accApprove">연결</button></div>`}
+      <div class="row2" style="margin-top:10px"><button class="btn" id="accSync">지금 동기화</button><button class="btn" id="accOut">로그아웃</button></div>`;
+    $('accSync').onclick = async () => { acc.set('busy', '동기화 중…'); try { await acc.refresh(); await acc.push(true); acc.set('signed', '동기화했어요 ✓'); } catch (e) { acc.set('signed', e.message); } };
+    $('accOut').onclick = () => acc.logout();
+    if ($('accApprove')) $('accApprove').onclick = () => acc.approve($('accCode').value);
+    return;
+  }
+  const cfg = await acc.config();
+  const warn = !cfg.clientId ? `<div class="accWarn">구글 로그인 준비가 아직 안 됐어요 (서버에 구글 클라이언트 ID가 없어요). 설정이 끝나면 바로 쓸 수 있어요.</div>`
+    : cfg.storage === 'memory' ? `<div class="accWarn">서버 저장소(Firestore)가 아직 없어서, 서버가 다시 켜지면 클라우드 저장이 지워질 수 있어요.</div>` : '';
+  body.innerHTML = `${warn}<div class="accText">구글 계정으로 로그인하면 <b>랭크 · 기록 · 설정 · AI 두뇌</b>가 클라우드에 저장돼서, 폰·패드·PC·앱 어디서든 이어서 할 수 있어요.${pendingLink ? '<br><b>앱 연결 중이에요 — 로그인하면 앱이 바로 연결돼요.</b>' : ''}</div>
+    ${acc.app ? `<button class="btn main" id="accLink">구글로 로그인 (브라우저에서)</button>` : `<div id="gBtn"></div>`}`;
+  if (acc.app) $('accLink').onclick = () => acc.startLink();
+  else if (cfg.clientId && !(await acc.renderGoogleButton($('gBtn')))) $('gBtn').innerHTML = '<div class="accWarn">구글 로그인 버튼을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</div>';
+}
+function openAccount() { show('account'); renderAccount(); }
+// signed in on the site because an app asked (?link=CODE): finish the link automatically
+const _afterLogin = acc.afterLogin.bind(acc);
+acc.afterLogin = async j => { await _afterLogin(j); if (pendingLink) await acc.approve(pendingLink); };
+renderChip();
 show('menu'); renderBest();
+if (pendingLink) openAccount();
+acc.refresh().then(() => { if (pendingLink && acc.signedIn) acc.approve(pendingLink); });
 $('loading').classList.add('hidden');
 // (the offline trainer sets __trainHeadless: no drawing at all, every CPU cycle goes to the matches)
 let wvLast = 0;
@@ -343,6 +403,7 @@ const lab = installLab(game, { $, show, onSpectate: spectate });
 
 // test hooks
 installTrainAPI(game);
+window.__acc = acc;
 window.__game = {
   game, S, input, renderWeapon,
   start: m => startMode(m),

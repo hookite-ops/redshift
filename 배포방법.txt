@@ -74,3 +74,21 @@ REDSHIFT 4.3 — 웹(Cloud Run) · 안드로이드 APK · 윈도우 EXE, 셋 다
     python3 tools/train/bench.py tools/train/brains/best.json 60                   # 최강 봇 상대 실력 측정
     cp tools/train/brains/best.json src/brain.json && npm run build                # 게임에 넣기
  - 다른 게임에 붙이는 법: src/ai/README.md
+
+[G] 계정 연동 (구글 로그인) — 처음 한 번만 설정
+ 기록·랭크·설정·AI 두뇌가 구글 계정에 저장돼서 웹·APK·EXE 어디서든 이어서 할 수 있어요.
+ 1) Firestore 만들기 (저장소)
+    console.cloud.google.com → 위 검색창에 "Firestore" → [데이터베이스 만들기]
+    → 네이티브 모드 → 위치 asia-northeast3 (서울) → [만들기]
+    (만들고 나서 2분 안에 서버가 알아서 쓰기 시작해요. 그 전엔 서버 메모리에 임시 저장)
+ 2) 구글 로그인 동의 화면
+    검색창에 "Google 인증 플랫폼"(Google Auth Platform) → [시작하기]
+    → 앱 이름 REDSHIFT · 지원 이메일 → 대상 "외부" → 연락처 이메일 → [만들기]
+    → 왼쪽 [대상] → [앱 게시] (안 하면 테스트 사용자만 로그인돼요)
+ 3) 클라이언트 ID 만들기
+    왼쪽 [클라이언트] → [클라이언트 만들기] → 유형 "웹 애플리케이션"
+    → 승인된 JavaScript 원본에 게임 주소 추가 (예: https://redshift-xxxx.asia-northeast3.run.app)
+    → [만들기] → "...apps.googleusercontent.com" 으로 끝나는 클라이언트 ID 복사
+ 4) 그 클라이언트 ID를 public/auth.json 의 googleClientId 에 넣고 GitHub에 올리면 자동 배포 끝.
+    (클라이언트 ID는 비밀번호가 아니라 공개돼도 괜찮은 값이에요)
+ - APK·EXE: 앱 안에서는 구글이 로그인을 막아서, [구글로 로그인] → 휴대폰 브라우저가 열림 → 로그인 → 앱이 자동 연결.
