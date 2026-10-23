@@ -10,6 +10,7 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { WebSocketServer } from 'ws';
+import { createAuth } from './auth.js';
 
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = process.env.PUBLIC_DIR || path.resolve(__dir, '..', 'public');
@@ -45,7 +46,9 @@ function serveStatic(req, res) {
     res.writeHead(200, h); res.end(body);
   });
 }
-const server = http.createServer((req, res) => {
+const auth = createAuth({ publicDir: PUBLIC });
+const server = http.createServer(async (req, res) => {
+  if (req.url.startsWith('/api/') && await auth.handle(req, res)) return;
   if (req.url === '/health') { res.writeHead(200, { 'access-control-allow-origin': '*' }); return res.end('ok'); }
   if (req.url === '/rooms') { res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' }); return res.end(JSON.stringify(roomList())); }
   serveStatic(req, res);
