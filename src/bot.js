@@ -316,7 +316,7 @@ export class BotBrain {
     // ---- movement tech: dash → bunny hop, throw-and-blink travel ----
     if (!threat && !this.macro && this.techCd <= 0 && travel && this.travelDir) {
       const reserve = p.caution > 0.6 ? 2 : 1;
-      if (f.disc.state === 'hand' && dist > 26 && !this.anyoneClose(14) && Math.random() < S.tech * p.flair * 0.6) {
+      if (f.disc.state === 'hand' && !(f.blinkCd > 0.5) && dist > 26 && !this.anyoneClose(14) && Math.random() < S.tech * p.flair * 0.6) {
         this.macro = { type: 'blinktravel', t: 0, thrown: false, dir: this.travelDir.clone() };
       } else if (B.grounded && B.dashCharges >= reserve && Math.random() < S.tech) {
         this.macro = { type: 'dashhop', t: 0, dir: this.travelDir.clone(), hold: 0.9 + Math.random() * 0.8 };

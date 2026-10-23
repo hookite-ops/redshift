@@ -21,6 +21,7 @@ import { Post } from './post.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { QUALITY, ASSIST, keyName } from './settings.js';
 
+export const BLINK_CD = 3;   // 순간이동 쿨타임 (초)
 const TICK = 1 / 120;
 export const DIFF = {
   easy: { name: '쉬움', dmg: 0.55, windup: 1.4, count: 0.75, projSpeed: 0.75, enemyHp: 0.8, speedMul: 0.8, attackers: 2, regen: 20, killHeal: 6, assist: 0.09 },
@@ -264,7 +265,7 @@ export class Game {
     me.showSelf = false; me.emote = null;
     this.disc.setWeapon(S.weapon); this.hand.setWeapon(this.disc.w, 0xff5a1f, me.wskin);
     me.skill = SKILLS[this.S.skill] ? this.S.skill : 'reflect';
-    me.skillCd = 0; me.reflectT = me.overT = me.healT = 0; P.speedMul = 1;
+    me.skillCd = 0; me.blinkCd = 0; me.reflectT = me.overT = me.healT = 0; P.speedMul = 1;
     this.state = 'play'; this.acc = 0; this.last = performance.now(); this.timeScale = 1; this.slowT = this.stopT = 0;
     Object.assign(this.camState, { dip: 0, dipV: 0, tilt: 0, fov: this.S.fov, kick: 0, trauma: 0 });
     this.buildDashPips();
@@ -885,8 +886,13 @@ export class Game {
       if (isMe) { this.audio.empty(); this.hint(`순간이동은 원반이 날아가는 동안만 — 먼저 ${keyName(this.S.binds.throw[0])}로 던지세요`, 'blinkEmpty'); }
       return false;
     }
+    if (f.blinkCd > 0) {
+      if (isMe) { this.audio.empty(); this.hint(`순간이동 쿨타임 ${f.blinkCd.toFixed(1)}초`, 'blinkCd'); this.blinkDeny = 0.35; }
+      return false;
+    }
     const spot = d.blinkSpot(this.arena.col);
     if (!spot) { if (isMe) this.audio.empty(); return false; }
+    f.blinkCd = BLINK_CD;
     const lim = this.arena.half - 1;
     spot.x = THREE.MathUtils.clamp(spot.x, -lim, lim); spot.z = THREE.MathUtils.clamp(spot.z, -lim, lim);
     spot.y = Math.min(spot.y, this.arena.ceiling - 2);
@@ -1204,7 +1210,7 @@ export class Game {
   }
   tickSkills(dt) {
     for (const f of this.fighters) {
-      f.skillCd = Math.max(0, f.skillCd - dt);
+      f.skillCd = Math.max(0, f.skillCd - dt); f.blinkCd = Math.max(0, (f.blinkCd || 0) - dt);
       if (f.reflectT > 0) f.reflectT -= dt;
       if (f.overT > 0) { f.overT -= dt; if (f.alive) f.body.dashCharges = f.body.dashMax; if (f.overT <= 0) f.body.speedMul = 1; }
       if (f.healT > 0) { f.healT -= dt; if (f.alive) f.hp = Math.min(100, f.hp + 12 * dt); }
@@ -1379,7 +1385,7 @@ export class Game {
     const p = this.pickSpawn(f), B = f.body;
     B.reset(p, Math.atan2(p.x, p.z));
     f.hp = 100; f.alive = true; f.protT = initial ? 0.6 : 1.5; f.invulnT = 0; f.regenT = 0; f.respawnT = 0;
-    f.reflectT = f.overT = f.healT = 0; B.speedMul = 1;
+    f.reflectT = f.overT = f.healT = 0; f.blinkCd = 0; B.speedMul = 1;
     if (f.disc.state !== 'hand') f.disc.caught();
     f.disc.catchCd = 0; f.disc.trail.reset();
     if (f.brain) f.brain.reset();
@@ -1794,7 +1800,10 @@ export class Game {
     this.cls('discIcon', 'hand', st === 'hand'); this.cls('discIcon', 'out', st === 'out'); this.cls('discIcon', 'ret', st === 'return');
     const kn = a => keyName(this.S.binds[a] && this.S.binds[a][0]);
     const power = d.out ? Math.round((1 + 0.35 * d.bounces) * 100) : 100;
-    this.txt('discTxt', st === 'hand' ? `${kn('throw')} 던지기` : st === 'out' ? `${kn('throw')} 회수 · ${kn('blink')} 순간이동` : `돌아오는 중 · ${kn('blink')} 순간이동`);
+    const bcd = this.me.blinkCd || 0, bl = bcd > 0 ? `순간이동 ${bcd.toFixed(1)}s` : `${kn('blink')} 순간이동`;
+    this.txt('discTxt', st === 'hand' ? `${kn('throw')} 던지기` : st === 'out' ? `${kn('throw')} 회수 · ${bl}` : `돌아오는 중 · ${bl}`);
+    { const v = (1 - bcd / BLINK_CD).toFixed(2); if (this._bp !== v) { this._bp = v; this.el('blinkRing').style.setProperty('--p', v); } }
+    this.cls('blinkRing', 'cool', bcd > 0); this.cls('blinkRing', 'deny', (this.blinkDeny = Math.max(0, (this.blinkDeny || 0) - dt)) > 0);
     this.txt('discPow', d.out && d.bounces > 0 ? `튕김 ${d.bounces} · 피해 ${power}%` : '');
     this.cls('cross', 'out', d.out); this.cls('cross', 'hidden', !this.me.alive);
     // skill

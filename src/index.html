@@ -202,6 +202,12 @@ body.touch canvas#c,#touch{touch-action:none}
 #touch .skill{right:47vmin;bottom:5vmin;width:13vmin;height:13vmin;position:absolute}
 #touch .skill i{position:absolute;font-style:normal;font-family:'Space Grotesk';font-weight:700;font-size:4vmin}
 #touch .skill.cool{opacity:.55}#touch .skill.cool b{display:none}
+#touch .blink i{position:absolute;font-style:normal;font-family:'Space Grotesk';font-weight:700;font-size:4.4vmin;color:#fff}
+#touch .blink.cool{background:conic-gradient(rgba(255,90,31,.55) calc(var(--p,1)*360deg),rgba(22,22,26,.6) 0)}#touch .blink.cool b{display:none}
+#blinkRing{position:relative;border-radius:50%;padding:4px}
+#blinkRing.cool::before{content:'';position:absolute;inset:-2px;border-radius:50%;background:conic-gradient(var(--or) calc(var(--p,1)*360deg),rgba(22,22,26,.18) 0);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 0);mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 0)}
+#blinkRing.deny{animation:bdeny .3s}
+@keyframes bdeny{25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
 /* raised layout: every button is above the usual left-thumb height */
 body.raised #touch .throw{bottom:33vmin;right:6vmin}
 body.raised #touch .blink{bottom:40vmin;right:32vmin}
@@ -613,7 +619,7 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
   <div id="speedo"><div id="speedNum" class="num">0</div><div id="speedUnit">KM/H</div><div id="dashPips"></div></div>
   <div id="skillBox"><div class="sk"><b id="skillKey">Q</b><span id="skillName"></span><em id="skillCd"></em></div><div class="bar"><i id="skillFill"></i></div></div>
   <div id="chat"></div>
-  <div id="discBox"><div><div id="discTxt"></div><div id="discPow"></div></div><div id="discIcon" class="hand"></div></div>
+  <div id="discBox"><div><div id="discTxt"></div><div id="discPow"></div></div><div id="blinkRing"><div id="discIcon" class="hand"></div></div></div>
 </div>
 <div id="clickTo" class="hidden">클릭해서 계속</div>
 <div id="rotate">📱 휴대폰을 가로로 돌려 주세요</div>
@@ -631,7 +637,7 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
         <kbd data-key="jump">SPACE</kbd><span>점프 · 공중에서 한 번 더</span>
         <kbd data-key="dash">SHIFT</kbd><span>대시 · 대시 중엔 무적</span>
         <kbd class="o" data-key="throw">좌클릭</kbd><span><b>원반 던지기</b> · 다시 누르면 회수 (돌아오며 또 때림)</span>
-        <kbd class="o" data-key="blink">우클릭</kbd><span><b>원반 위치로 순간이동</b> · 속도 유지 + 주변 충격파</span>
+        <kbd class="o" data-key="blink">우클릭</kbd><span><b>원반 위치로 순간이동</b> · 속도 유지 + 주변 충격파 · 쿨타임 3초</span>
         <kbd class="o" data-key="skill">Q</kbd><span><b>스킬</b> · 반사막 / 오버드라이브 / 중력탄 / 재생 중 하나</span>
       </div>
       <div class="cheat touch-only"><kbd>왼쪽 엄지</kbd><span>이동 (닿은 곳에 스틱이 생겨요)</span><kbd>오른쪽 화면</kbd><span>끌어서 시점 · 던지기 버튼도 끌면 조준</span><kbd class="o">버튼</kbd><span>던지기/회수 · 순간이동 · 점프 · 대시 · 스킬</span></div>
@@ -707,7 +713,7 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.9 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 4.9.1 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">
