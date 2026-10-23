@@ -10,14 +10,14 @@ export class Touch {
     root.innerHTML = `
       <div class="joy" id="tJoy"><div class="knob"></div></div>
       <button class="tb throw" data-a="throw"><b>던지기</b></button>
-      <button class="tb blink" data-a="blink"><b>순간이동</b></button>
+      <button class="tb blink" data-a="blink"><b>순간이동</b><i></i></button>
       <button class="tb jump" data-a="jump"><b>점프</b></button>
       <button class="tb dash" data-a="dash"><b>대시</b></button>
       <button class="tb skill" data-a="skill"><b>스킬</b><i></i></button>
       <button class="tpause" id="tPause">II</button>`;
     document.body.appendChild(root);
     this.joyEl = root.querySelector('#tJoy'); this.knob = this.joyEl.querySelector('.knob');
-    this.skillEl = root.querySelector('.skill'); this.throwEl = root.querySelector('.throw');
+    this.skillEl = root.querySelector('.skill'); this.blinkEl = root.querySelector('.blink'); this.throwEl = root.querySelector('.throw');
     const opt = { passive: false };
     root.addEventListener('touchstart', e => this.start(e), opt);
     root.addEventListener('touchmove', e => this.move(e), opt);
@@ -82,6 +82,9 @@ export class Touch {
     const d = g.disc, me = g.me;
     const label = d.state === 'hand' ? '던지기' : d.state === 'out' ? '회수' : '…';
     if (this._tl !== label) { this._tl = label; this.throwEl.querySelector('b').textContent = label; }
+    const bc = me.blinkCd > 0 ? (me.blinkCd < 1 ? me.blinkCd.toFixed(1) : Math.ceil(me.blinkCd) + '') : '';
+    if (this._bc !== bc) { this._bc = bc; this.blinkEl.querySelector('i').textContent = bc; this.blinkEl.classList.toggle('cool', !!bc); }
+    this.blinkEl.style.setProperty('--p', (1 - (me.blinkCd || 0) / 3).toFixed(3));
     const cd = me.skillCd > 0 ? Math.ceil(me.skillCd) + '' : '';
     if (this._cd !== cd) { this._cd = cd; this.skillEl.querySelector('i').textContent = cd; this.skillEl.classList.toggle('cool', !!cd); }
   }

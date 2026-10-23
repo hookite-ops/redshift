@@ -24,7 +24,7 @@ export class Fighter {
     this.body.easy = true; this.body.noWall = true;
     this.disc = disc || new Disc(game, this, color, weapon);
     this.disc.owner = this;
-    this.skill = skill; this.skillCd = 0; this.reflectT = 0; this.overT = 0; this.healT = 0;
+    this.skill = skill; this.skillCd = 0; this.blinkCd = 0; this.reflectT = 0; this.overT = 0; this.healT = 0;
     this.hp = 100; this.kills = 0; this.deaths = 0; this.alive = true;
     this.respawnT = 0; this.protT = 0; this.invulnT = 0; this.regenT = 0;
     this.lastHitBy = null; this.lastHitT = -9; this.streak = 0;
