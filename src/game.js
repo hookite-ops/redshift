@@ -654,6 +654,42 @@ export class Game {
     if (best && apply) dir.copy(bestDir);
     return best;
   }
+  // results line: accuracy + how much the game helped. Unassisted accuracy is also kept as a personal best.
+  aimStats() {
+    const S = this.stats, th = S.throws || 0, acc = th ? Math.min(100, Math.round(S.hits / th * 100)) : 0;
+    const mode = this.ranked && this.S.aimAssist === 'strong' ? 'normal' : this.S.aimAssist;
+    const label = { strong: '강함 (보정 있음)', normal: '보통 (보정 약간)', guide: '가이드 · 보정 0%', off: '끔 · 보정 0%' }[mode] || mode;
+    const pure = mode === 'guide' || mode === 'off';
+    const rec = this.records; let best = '';
+    if (pure && th >= 8) { if (acc > (rec.pureAcc || 0)) { rec.pureAcc = acc; best = ' · 최고 기록!'; } }
+    return [['명중률', th ? `${acc}% (${Math.min(S.hits, th)}/${th})${best}` : '—'], ['조준 보조', label]];
+  }
+  // 가이드 mode: find who you're roughly looking at and where your disc would have to go to meet them.
+  // Nothing about the throw changes — this is information only, like a ghost line on a pool table.
+  aimGuide(origin, dir) {
+    let best = null, bestA = 0.55; const lp = this._gLp || (this._gLp = new THREE.Vector3()), out = this._gOut || (this._gOut = { t: null, p: new THREE.Vector3(), on: false, head: false });
+    for (const t of this.assistTargets()) {
+      if (t.protT > 0) continue;
+      const { c } = this.tInfo(t);
+      const dist = origin.distanceTo(c); if (dist < 1.2 || dist > 70) continue;
+      this.leadPoint(origin, t, lp);
+      _a.subVectors(lp, origin).normalize(); _b.subVectors(c, origin).divideScalar(dist);
+      const ang = Math.min(Math.acos(THREE.MathUtils.clamp(_a.dot(dir), -1, 1)), Math.acos(THREE.MathUtils.clamp(_b.dot(dir), -1, 1)));
+      if (ang < bestA && this.los(origin, lp)) { bestA = ang; best = t; out.p.copy(lp); }
+    }
+    out.t = best; out.on = false; out.head = false;
+    if (best) {
+      const dist = origin.distanceTo(out.p), w = this.disc.w;
+      _a.subVectors(out.p, origin).normalize();
+      // the disc connects if the aim line passes within (body radius + disc radius) of the lead point
+      const off = Math.sin(Math.acos(THREE.MathUtils.clamp(_a.dot(dir), -1, 1))) * dist;
+      const along = dir.dot(_b.subVectors(out.p, origin));
+      out.on = along > 0 && off < T.radius * 0.85 + w.radius;
+      // aiming above the chest line at the right lead = headshot
+      if (best instanceof Fighter) { const up = (dir.y - _a.y) * dist; out.head = out.on && up > 0.32; }
+    }
+    return out;
+  }
   // your disc bends toward the enemy it is flying at. Acquire inside a cone; once locked it keeps
   // tracking anywhere in front of it, and steers harder the closer it gets (so it finishes the job).
   discHoming(d, dt) {
@@ -1582,7 +1618,7 @@ export class Game {
     const stats = rank.map((f, i) => [`${i + 1}. ${f.name}`, `${f.kills} 킬 · ${f.deaths} 데스`]);
     if (this.ranked && this.rankLine) { const rs = rankState(rec); stats.unshift(this.rankLine); stats.push(['연승', rs.streak > 0 ? `${rs.streak}연승` : rs.streak < 0 ? `${-rs.streak}연패` : '—'], ['헤드샷', `${me.st.crits || 0}번`]); }
     else stats.push(['봇 실력', SKILL[this.botSkill].name], ['헤드샷', `${me.st.crits || 0}번`]);
-    stats.push(['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H'], ['코인', `+${coins}`]);
+    stats.push(...this.aimStats(), ['최고 속도', Math.round(this.maxSpeed * 3.6) + ' KM/H'], ['코인', `+${coins}`]);
     this.result = { title, stats, rank: myRank };
     setTimeout(() => {
       if (this.state !== 'play' || this.match !== M) return;
@@ -1825,11 +1861,22 @@ export class Game {
       const org = (this._lockO || (this._lockO = new THREE.Vector3())).copy(P.eye); org.y -= 0.15;
       lock = this.aimAssist(org, P.lookDir(this._lockD || (this._lockD = new THREE.Vector3())), false);
     } else if (d.out && d.lock && (d.lock.alive) && !d.hit.has(d.lock)) lock = d.lock;
+    // 가이드: a hollow diamond where to aim; it fills (and the ring turns red) when this throw would land
+    const Ac = this.assistCfg();
+    if (Ac.guide && this.me.alive && this.state === 'play' && d.state === 'hand') {
+      const org = (this._lockO || (this._lockO = new THREE.Vector3())).copy(P.eye); org.y -= 0.15;
+      const g = this.aimGuide(org, P.lookDir(this._lockD || (this._lockD = new THREE.Vector3())));
+      if (g.t) {
+        _a.copy(g.p).project(this.camera);
+        this.css('lead', 'transform', `translate(${((_a.x + 1) / 2 * W).toFixed(1)}px,${((1 - _a.y) / 2 * H).toFixed(1)}px)`);
+        this.cls('lead', 'show', true); this.cls('lead', 'on', g.on); this.cls('cross', 'lock', g.on); this.cls('cross', 'head', g.head);
+      } else { this.cls('lead', 'show', false); this.cls('cross', 'lock', false); this.cls('cross', 'head', false); }
+    } else this.cls('lead', 'show', false);
     if (lock) {
       _a.copy(this.tInfo(lock).c).project(this.camera);
       this.css('lock', 'transform', `translate(${((_a.x + 1) / 2 * W).toFixed(1)}px,${((1 - _a.y) / 2 * H).toFixed(1)}px)`);
       this.cls('lock', 'show', true); this.cls('cross', 'lock', d.state === 'hand');
-    } else { this.cls('lock', 'show', false); this.cls('cross', 'lock', false); }
+    } else { this.cls('lock', 'show', false); if (!Ac.guide) this.cls('cross', 'lock', false); }
     // disc marker on screen (where a blink would take you)
     const mk = this.el('discMark');
     if (d.out && this.state === 'play') {

@@ -26,6 +26,8 @@ export const QUALITY = {
 export const ASSIST = {
   strong: { snap: 0.11, homing: 1.9, cone: 0.5, range: 40, bonus: 0.32 },
   normal: { snap: 0.05, homing: 0.8, cone: 0.36, range: 30, bonus: 0.12 },
+  // 가이드: the throw goes exactly where you aim (zero correction) — it only SHOWS where to aim
+  guide: { snap: 0, homing: 0, cone: 0, range: 0, bonus: 0, guide: true },
   off: { snap: 0, homing: 0, cone: 0, range: 0, bonus: 0 },
 };
 const KEY = 'redshift4_settings', REC = 'redshift4_records';
