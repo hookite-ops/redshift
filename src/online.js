@@ -176,6 +176,7 @@ export function installOnline(Game) {
       this.banner(win ? '승리!' : me.kills === (op ? op.kills : 0) ? '무승부' : '패배', `${me.kills} : ${op ? op.kills : 0}`, 3);
       if (win) this.audio.checkpoint(true); else this.audio.wave();
       this.slowT = Math.max(this.slowT, 1.0);
+      this.feedText(`명중률 ${this.aimStats()[0][1]}`);
       return;
     }
     const rank = (m.ranking || []).map(([id, k, d]) => ({ f: this.byId.get(id), k, d })).filter(x => x.f);
@@ -185,6 +186,7 @@ export function installOnline(Game) {
     if (myRank === 1) this.audio.checkpoint(true); else this.audio.wave();
     const rec = this.records; rec.onlineGames = (rec.onlineGames || 0) + 1; if (myRank === 1) rec.onlineWins = (rec.onlineWins || 0) + 1;
     const got = this.award(40 + this.me.kills * 8 + (myRank === 1 ? 60 : 0), '온라인 대전'); if (got) this.feedText(`+${got} 코인`);
+    this.feedText(`명중률 ${this.aimStats()[0][1]}`); this.stats.throws = this.stats.hits = 0;
     this.saveRecords && this.saveRecords();
     for (const f of this.fighters) if (f.brain) this.chat(f, w && w.f === f ? 'win' : 'lose', 0.5);
   };
