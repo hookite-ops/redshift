@@ -20,6 +20,7 @@ import { MAPS, MAP_IDS } from './maps.js';
 import { Post } from './post.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { QUALITY, ASSIST, keyName } from './settings.js';
+import { customSky } from './custom.js';
 
 export const BLINK_CD = 3;   // 순간이동 쿨타임 (초)
 const TICK = 1 / 120;
@@ -149,7 +150,7 @@ export class Game {
     sc.add(new THREE.HemisphereLight(0xdfeaff, 0xcfd2d6, 0.55));
     const sun = this.sun = new THREE.DirectionalLight(0xfff4e6, 2.9);
     sun.position.set(34, 62, 18);
-    sc.add(this.sky = makeSky(sun.position, this.Q.shadows));
+    sc.add(this.sky = customSky() || makeSky(sun.position, this.Q.shadows));   // public/custom/sky.jpg
     if (this.Q.shadows) {
       sun.castShadow = true; sun.shadow.mapSize.set(this.Q.shadowSize, this.Q.shadowSize); sun.shadow.radius = 3;
       const c = sun.shadow.camera; c.left = -62; c.right = 62; c.top = 62; c.bottom = -62; c.near = 1; c.far = 200;
@@ -1747,7 +1748,7 @@ export class Game {
     this.parts.update(fxDt);
     this.rings.update(fxDt);
     this.arena.update(this.clockT, fxDt);
-    if (this.sky.material.uniforms.uTime) this.sky.material.uniforms.uTime.value = this.clockT;
+    if (this.sky.material.uniforms && this.sky.material.uniforms.uTime) this.sky.material.uniforms.uTime.value = this.clockT;
     for (const o of this.orbs) o.halo.scale.setScalar(1.7 + Math.sin(o.t * 18) * 0.25);
     this.updateLasers();
     this.updateBlinkGhost();

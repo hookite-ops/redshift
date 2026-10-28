@@ -273,6 +273,13 @@ h3 .sub{font-size:11px;letter-spacing:0;color:var(--dim);font-weight:400}
 .stat b{font-family:'Space Grotesk','Noto Sans KR'}
 #clickTo{position:fixed;left:50%;top:62%;transform:translateX(-50%);font-size:16px;letter-spacing:2px;color:#fff;background:var(--ink);padding:10px 22px;z-index:9}
 #loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--paper);z-index:30;font-family:'Space Grotesk';font-weight:700;letter-spacing:8px;font-size:22px}
+#loading[data-custom]::after{content:attr(data-custom);font-family:'Noto Sans KR';font-size:12px;letter-spacing:0;opacity:.7}
+#customPanel h3{margin:14px 0 4px}
+.cpTop{font-size:13px;line-height:1.6;margin-bottom:6px}
+.cpRow{display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+.cpRow small{display:block;font-size:11px;color:var(--dim);word-break:break-all}
+.cpRow i{font-style:normal;font-size:11px;font-weight:700;padding:2px 7px;border-radius:3px;flex:none;min-width:34px;text-align:center}
+.cpOk{background:#16a864;color:#fff}.cpOff{background:#e7e8ea;color:#666}.cpBad{background:var(--red);color:#fff}
 #loading .err{font-family:'Noto Sans KR';letter-spacing:0;font-size:16px;text-align:center;line-height:1.8}
 .credits{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:var(--dim);letter-spacing:2px}
 /* small screens (phones in landscape, small windows): compact menu */
@@ -848,6 +855,7 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
     <div class="row">화면 터치 조작 <select id="sTouchUI"><option value="auto">자동 (폰·태블릿이면 켜기)</option><option value="on">항상 켜기</option><option value="off">끄기</option></select></div>
     <div class="row">터치 버튼 위치 <select id="sTouchLayout"><option value="auto">자동 (태블릿은 위로)</option><option value="normal">아래 (폰 기본)</option><option value="raised">위로 (두 손가락 터치가 씹힐 때)</option></select></div>
     <div class="row">터치 시점 감도<input type="range" id="sTouchSens" min="0.3" max="3" step="0.05"><span class="val" id="vTouchSens"></span></div>
+    <div class="row"><span>내 파일 (모델 · UI)<br><small id="sCustomN" style="color:var(--dim);font-size:11px"></small></span><button class="btn" id="sCustom" style="padding:6px 14px">확인</button></div>
     <div class="row">조준 보조 (내 원반만) <select id="sAimAssist"><option value="strong">강함 · 예측 조준 + 유도 (추천)</option><option value="normal">보통</option><option value="guide">가이드 · 보정 없이 조준 지점만 표시</option><option value="off">끄기</option></select></div>
     <div class="row">Space 꾹 = 착지할 때마다 자동 점프 <select id="sAutoHop"><option value="1">켜기</option><option value="0">끄기</option></select></div>
     <div class="row">화면 아래 조작 안내 <select id="sKeyHints"><option value="1">켜기</option><option value="0">끄기</option></select></div>

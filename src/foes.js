@@ -1,5 +1,6 @@
 // Enemies for the white arena: TURRET (shoots slow orbs), CHASER (rolls into you), SHIELD (blocks from the front)
 import * as THREE from 'three';
+import { customFoe } from './custom.js';
 
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3();
 const _contacts = [];
@@ -61,6 +62,9 @@ export class Foe {
       this.shield.add(mesh(new THREE.BoxGeometry(1.52, 0.1, 0.16), M.red, 0, 0.6, 0));
       this.shield.add(mesh(new THREE.BoxGeometry(1.52, 0.1, 0.16), M.red, 0, -0.6, 0));
     }
+    // public/custom/foes/<type>.glb replaces the look (the hit box stays the same)
+    const cf = customFoe(type, FOE[type].h);
+    if (cf) { g.traverse(o => { if (o.isMesh) o.visible = false; }); g.add(cf); }
     // hp bar
     const bar = this.bar = new THREE.Group();
     const bg = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.1), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthTest: false }));

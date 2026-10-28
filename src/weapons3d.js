@@ -6,6 +6,7 @@
 // colour as glowing channels (they bloom with post-processing on).
 import * as THREE from 'three';
 import { WSKINS, wskinTexture } from './cosmetics.js';
+import { customWeapon } from './custom.js';
 
 const TAU = Math.PI * 2;
 const _matCache = new Map();
@@ -222,6 +223,7 @@ const BUILD = {
 };
 
 export function buildWeaponModel(color, w, s = 1, glowMul = 1, glowBase = 1, wskin = 'std') {
+  const cw = customWeapon(w.id, s); if (cw) return cw;     // public/custom/weapons/<id>.glb
   const g = new THREE.Group(), glow = Math.max(1, glowBase * glowMul);
   const M = mats(color, glow, wskin);
   (BUILD[w.id] || BUILD.disc)(g, M, s);

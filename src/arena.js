@@ -7,6 +7,7 @@ import { CollisionWorld, SURF } from './physics.js';
 import { uvBox, wedge } from './geom.js';
 import { floorTextures, panelTextures, floorAO, graphiteTextures, ledBoardTexture, courtLogoTexture } from './textures.js';
 import { MAPS } from './maps.js';
+import { applyCustomSurfaces, buildCustomMap } from './custom.js';
 
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(1, 1, 1);
 
@@ -60,6 +61,7 @@ export class Arena {
       paint: new THREE.MeshStandardMaterial({ color: 0xff7a45, roughness: 0.5, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
       paintDark: new THREE.MeshStandardMaterial({ color: 0x3a3e46, roughness: 0.6, transparent: true, opacity: 0.55, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }),
     };
+    applyCustomSurfaces(this.M);   // public/custom/textures/*.png
     this.aoU = { value: null };
     shade(this.M.floor, { floor: true, aoU: this.aoU, E: 70 });
     this.edgeMat = new THREE.LineBasicMaterial({ color: 0x5d636c, transparent: true, opacity: 0.18 });
@@ -71,7 +73,7 @@ export class Arena {
   // ---------------------------------------------------------------- (re)build a map
   load(id) {
     const map = MAPS[id] || MAPS.arena;
-    for (const o of this.objects) { this.scene.remove(o); o.geometry.dispose(); }
+    for (const o of this.objects) { this.scene.remove(o); if (o.geometry && !o.userData.custom) o.geometry.dispose(); }
     this.objects = [];
     this.col.clear();
     this.map = map; this.mapId = map.id;
@@ -89,9 +91,10 @@ export class Arena {
     this.redrawDecals();
     this.wallH = map.wallH || 12;
     this.ceiling = this.wallH + (map.headroom || 14);
-    this.buildShell();
+    if (map.shell !== false) this.buildShell();
+    else { const fg = new THREE.PlaneGeometry(this.half * 2 + 40, this.half * 2 + 40); fg.rotateX(-Math.PI / 2); this.add(fg, null, 'floor', { collide: false, edges: false }); }
     map.build(this);
-    this.skyline(map.seed || 42);
+    if (map.stadium !== false) this.skyline(map.seed || 42);
     // the floor's contact shadows are baked from everything that stands on it
     if (this.aoU.value) this.aoU.value.dispose();
     this.aoU.value = floorAO(this.footprints, 70);
@@ -100,6 +103,16 @@ export class Arena {
     this.spawnGround = this.spawnGround.filter(p => this.col.capsuleFree(p.x, p.y + 0.05, p.z, 0.42, 1.8));
     this.spawnHigh = this.spawnHigh.filter(p => this.col.capsuleFree(p.x, p.y + 0.05, p.z, 0.42, 1.8));
     if (!this.cover.length) this.cover.push([0, 0]);
+    // a custom map without (enough) spawn markers: find standing room on rings around the centre
+    if (this.spawnGround.length < 4) {
+      for (let i = 0; i < 48 && this.spawnGround.length < 16; i++) {
+        const a = i * 2.39996, r = 12 + (i % 4) * 9, x = Math.cos(a) * r, z = Math.sin(a) * r;
+        const h = this.col.raycast(x, this.ceiling - 0.5, z, 0, -1, 0, this.ceiling + 1);
+        const y = h ? this.ceiling - 0.5 - h.t : 0;
+        if (this.col.capsuleFree(x, y + 0.05, z, 0.42, 1.8)) this.spawnGround.push(new THREE.Vector3(x, y, z));
+      }
+      if (!this.spawnGround.length) this.spawnGround.push(new THREE.Vector3(0, 0, 0));
+    }
     return map;
   }
 
@@ -193,6 +206,7 @@ export class Arena {
       }
     }
   }
+  customMap(C) { buildCustomMap(this, C); }
   spawn(x, z, y = 0) { this.spawnGround.push(new THREE.Vector3(x, y, z)); }
   high(x, y, z) { this.spawnHigh.push(new THREE.Vector3(x, y, z)); }
   addCover(x, z) { this.cover.push([x, z]); }

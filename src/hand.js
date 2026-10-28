@@ -1,6 +1,7 @@
 // First-person hands: right hand holds/throws the disc, left hand points when you blink
 import * as THREE from 'three';
 import { discModel, WEAPONS } from './disc.js';
+import { customHand } from './custom.js';
 
 const lerpArr = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 const easeOut = t => 1 - Math.pow(1 - t, 3);
@@ -16,7 +17,9 @@ export class Hand {
     const glove = new THREE.MeshStandardMaterial({ color: 0x222226, roughness: 0.6 });
     const orange = new THREE.MeshStandardMaterial({ color: 0xff5a1f, roughness: 0.4, emissive: 0x401000 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.4 });
-    const arm = (parent) => {
+    const arm = (parent, side = 'right') => {
+      const ch = customHand(side);                   // public/custom/hands/right.glb · left.glb
+      if (ch) { parent.add(ch); return; }
       const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.44, 12), sleeve);
       fore.rotation.x = Math.PI / 2; fore.position.set(0, -0.02, 0.27); parent.add(fore);
       const band = new THREE.Mesh(new THREE.CylinderGeometry(0.051, 0.051, 0.03, 12), orange); band.rotation.x = Math.PI / 2; band.position.set(0, -0.02, 0.08); parent.add(band);
@@ -24,7 +27,7 @@ export class Hand {
       const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.022, 0.06), glove); thumb.position.set(0.045, 0.03, -0.03); parent.add(thumb);
     };
     this.right = new THREE.Group(); this.scene.add(this.right); arm(this.right);
-    this.left = new THREE.Group(); this.scene.add(this.left); arm(this.left);
+    this.left = new THREE.Group(); this.scene.add(this.left); arm(this.left, 'left');
     // keep the viewmodel small: the arena and the disc in flight are what matter
     this.right.scale.setScalar(0.6); this.left.scale.setScalar(0.6); this.left.visible = false;
     // disc held flat in the right hand

@@ -1,0 +1,2 @@
+캐릭터 모델을 넣는 곳 — all.glb(모든 캐릭터) 또는 스킨 이름: runner jumpsuit hoodie ninja scout astro robot penguin neon golem frost champ
+정면을 보고 선 모양. 뼈대(믹사모 등)가 있으면 게임 동작을 따라 움직여요.

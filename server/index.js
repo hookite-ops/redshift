@@ -29,11 +29,32 @@ const cleanLook = l => l && typeof l === 'object' ? { skin: String(l.skin || '')
 const clean = (s, n) => String(s || '').replace(/[<>&"'`\\\u0000-\u001f]/g, '').trim().slice(0, n);
 
 // ---------------------------------------------------------------- static files
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8', '.webmanifest': 'application/manifest+json',
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif', '.glb': 'model/gltf-binary', '.gltf': 'model/gltf+json', '.bin': 'application/octet-stream',
+  '.obj': 'text/plain; charset=utf-8', '.mtl': 'text/plain; charset=utf-8', '.fbx': 'application/octet-stream', '.wasm': 'application/wasm', '.ktx2': 'image/ktx2',
+  '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.md': 'text/plain; charset=utf-8' };
+// public/custom: the player's own models / images / styles. The game asks for custom/index.json and gets the folder listing.
+const CUSTOM_DIR = path.join(PUBLIC, 'custom');
+const CUSTOM_EXT = /\.(glb|gltf|bin|fbx|obj|mtl|png|jpe?g|webp|gif|svg|css|json|woff2?|ttf|otf|ktx2)$/i;
+function customIndex() {
+  const out = [];
+  const walk = (dir, rel, depth) => {
+    let list = []; try { list = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of list) {
+      if (e.name.startsWith('.')) continue;
+      const r = rel ? rel + '/' + e.name : e.name;
+      if (e.isDirectory() && depth < 4) walk(path.join(dir, e.name), r, depth + 1);
+      else if (e.isFile() && CUSTOM_EXT.test(e.name) && r !== 'index.json') out.push(r);
+    }
+  };
+  walk(CUSTOM_DIR, '', 0);
+  return out.sort();
+}
 const cache = new Map();
 function serveStatic(req, res) {
   let p = decodeURIComponent((req.url || '/').split('?')[0]);
   if (p === '/' || p === '') p = '/index.html';
+  if (p === '/custom/index.json') { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-cache' }); return res.end(JSON.stringify({ files: customIndex() })); }
   const file = path.resolve(PUBLIC, '.' + p);
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
   fs.stat(file, (err, st) => {
@@ -43,7 +64,7 @@ function serveStatic(req, res) {
     const key = file + (gz ? ':gz' : '') + ':' + st.mtimeMs;
     let body = cache.get(key);
     if (!body) { body = fs.readFileSync(file); if (gz) body = zlib.gzipSync(body); cache.set(key, body); }
-    const h = { 'content-type': type, 'cache-control': /index\.html|game\.js|config\.js/.test(file) ? 'no-cache' : 'public, max-age=3600', 'access-control-allow-origin': '*' };
+    const h = { 'content-type': type, 'cache-control': /index\.html|game\.js|config\.js|[\\/]custom[\\/]/.test(file) ? 'no-cache' : 'public, max-age=3600', 'access-control-allow-origin': '*' };
     if (gz) h['content-encoding'] = 'gzip';
     res.writeHead(200, h); res.end(body);
   });

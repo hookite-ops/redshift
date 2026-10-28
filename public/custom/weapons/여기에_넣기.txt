@@ -1,0 +1,2 @@
+무기 모델을 넣는 곳 — disc.glb, heavy.glb, rail.glb, boomerang.glb, splitter.glb, saw.glb, seeker.glb, nova.glb, prism.glb
+바닥에 눕힌 모양(위가 Y)으로, 크기는 자동으로 맞춰져요.

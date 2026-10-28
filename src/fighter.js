@@ -56,7 +56,7 @@ export class Fighter {
     // arm band and belt glow so you can still tell who is who at a glance
     if (this.model) { this.game.scene.remove(this.model); this.model = null; }
     const A = buildAvatar(this.skinId, this.color, (this.game.Q && this.game.Q.post) ? 2.4 : 1.3);
-    const root = this.model = A.root; this.rig = A.rig; this.head = A.head; this.handDisc = A.handDisc;
+    const root = this.model = A.root; this.rig = A.rig; this.head = A.head; this.handDisc = A.handDisc; this.avatarSync = A.sync;
     this.glowMat = A.glow; this.teamMat = A.team; this.glowK = A.glowK;
     this.torso = A.rig.spine; this.arm = A.rig.sh[1];
     this.anim = { ph: 0, run: 0, air: 0, dash: 0, land: 0, wasAir: false, hipYaw: 0, dir: 1, aim: 0 };
@@ -194,6 +194,7 @@ export class Fighter {
     if (this._gk !== gk) { this._gk = gk; this.glowMat.color.set(this.color).multiplyScalar(this.glowK * gk); }
     if (this.bubbleT > 0) { this.bubbleT -= dt; if (this.bubbleT <= 0) this.bubble.visible = false; }
     this.handDisc.rotation.z += dt * 2;
+    if (this.avatarSync) this.avatarSync();
     this.drawTag();
     // keep the tag a readable size at distance
     const d = Math.max(4, root.position.distanceTo(this.game.camera.position));

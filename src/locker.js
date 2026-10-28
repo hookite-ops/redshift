@@ -64,6 +64,7 @@ class AvatarView {
       R.chest.rotation.x = Math.sin(this.t * 1.8) * 0.02; R.head.rotation.y = Math.sin(this.t * 0.6) * 0.25;
       R.sh[1].rotation.set(0.7, 0, -0.3); R.el[1].rotation.x = 1.4; R.sh[0].rotation.z = 0.1 + Math.sin(this.t * 1.8) * 0.02;
     }
+    if (this.A.sync) this.A.sync();
     if (this.drag === null) this.yaw += dt * 0.25;
     this.pivot.rotation.y = this.yaw + (root.userData.spin || 0);
     if (this.big) { this.big.rotation.z += dt * 1.4; this.big.position.y = 1.25 + Math.sin(this.t * 1.6) * 0.04; }

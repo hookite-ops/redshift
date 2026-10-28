@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { byId, skinTexture } from './cosmetics.js';
+import { attachCharacter } from './custom.js';
 
 export function buildAvatar(skinId, color, glowK = 1.3) {
     const SK = byId('skin', skinId), P = SK.p;
@@ -61,7 +62,10 @@ export function buildAvatar(skinId, color, glowK = 1.3) {
     root.scale.setScalar(0.93);
     const hd = new THREE.Group(); hd.position.set(0.02, -0.06, -0.08); hd.rotation.set(0, Math.PI / 2, 0);
     R.hand[1].add(hd);
-    return { root, rig: R, head, handDisc: hd, glow, team, glowK };
+    const A = { root, rig: R, head, handDisc: hd, glow, team, glowK, sync: null };
+    const C = attachCharacter(A, skinId);              // public/custom/characters/<skin>.glb
+    if (C) A.sync = C.sync;
+    return A;
 }
 
 // ---------------------------------------------------------------- emotes

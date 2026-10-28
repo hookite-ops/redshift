@@ -1,0 +1,1 @@
+맵 표면 그림 — floor.png wall.png block.png top.png ramp.png dark.png (한 장 = 8m, 이어붙여도 티 안 나는 그림)
