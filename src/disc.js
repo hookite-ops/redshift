@@ -210,6 +210,13 @@ export class Disc {
     this.holder.position.copy(this.pos);
     // lie roughly flat in the plane of travel and spin
     const d = v1.copy(this.vel).normalize();
+    if (this.w.id === 'seeker') {
+      // the missiles fly nose-first and roll (model nose = +Y → the holder's +Z, which looks along the flight)
+      if (this.vel.lengthSq() > 0.01) this.holder.lookAt(v2.copy(this.pos).add(this.vel));
+      this.roll = (this.roll || 0) + dt * 14;
+      this.spinner.rotation.set(Math.PI / 2, this.roll, 0);
+      return;
+    }
     this.holder.rotation.set(-Math.PI / 2 + d.y * 0.6, 0, 0);
     this.spinner.rotation.z += dt * (this.w.id === 'heavy' ? 16 : this.stuckT > 0 ? 55 : 30);
   }

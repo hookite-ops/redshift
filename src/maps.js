@@ -10,6 +10,14 @@ import * as THREE from 'three';
 const rng = seed => { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); };
 const Q4 = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 
+// lobby stations (portals), clockwise from straight ahead of the spawn
+export const LOBBY_R = 25;
+export const LOBBY = [
+  ['rank', '랭크전', '사람끼리 1V1', 0xf2b01e], ['duel', '봇 1V1', '5킬 먼저', 0xff5a1f], ['ffa', '봇 FFA', '봇 5명과 난타전', 0xff3f7f],
+  ['arena', '아레나', '웨이브 생존', 0xe8202f], ['practice', '연습장', '조작 익히기', 0x16a864], ['ailab', 'AI 훈련소', '학습 AI 관전·훈련', 0x8a4dff],
+  ['locker', '보관함', '스킨·이모트', 0x12a9b8], ['loadout', '무기고', '무기·스킬 고르기', 0x2f6bff], ['online', '온라인', '방 만들기·참가', 0x3a86ff],
+].map(([id, name, sub, color], i, all) => ({ id, name, sub, color, a: Math.PI + i * Math.PI * 2 / all.length }));
+
 export const MAPS = {
   arena: {
     id: 'arena', label: 'WHITE ARENA', name: '화이트 아레나', desc: '가운데 무대 · 기둥 4개 · 모서리 고지대', accent: 0xff5a1f, seed: 42,
@@ -166,5 +174,44 @@ export const MAPS = {
       A.deco(A.ring(24.5, 24.7), 0, 0.01, 0, 'paint');
     },
   },
+  // ---- the walk-around lobby (not a match map): a round plaza with portals to every mode ----
+  lobby: {
+    id: 'lobby', label: 'REDSHIFT', name: '로비', desc: '', accent: 0xff5a1f, seed: 11, hidden: true, wallH: 10,
+    build(A) {
+      // central plaza: raised disc with the court logo, three steps down all round
+      A.cyl(0, 0, 0, 11, 0.6, 'top', { trim: true });
+      A.cyl(0, 0, 0, 12.2, 0.3, 'block');
+      A.logo(0, 0.6, 0, 15);
+      const rim = new THREE.TorusGeometry(11.02, 0.06, 6, 128); rim.rotateX(Math.PI / 2); A.deco(rim, 0, 0.6, 0, 'glow');
+      A.deco(A.ring(7.6, 7.75), 0, 0.611, 0, 'paint');
+      // the portal ring: a pad + an arch for each station
+      for (const st of LOBBY) {
+        const a = st.a, x = Math.sin(a) * LOBBY_R, z = Math.cos(a) * LOBBY_R;
+        const tx = Math.cos(a), tz = -Math.sin(a), ox = Math.sin(a), oz = Math.cos(a);    // tangent / outward
+        A.cyl(x, 0, z, 3.4, 0.22, 'dark');
+        const pr = new THREE.TorusGeometry(3.2, 0.07, 6, 72); pr.rotateX(Math.PI / 2); A.deco(pr, x, 0.24, z, 'glow');
+        A.deco(A.ring(1.1, 1.35, 48), x, 0.231, z, 'pad');
+        const ax = x + ox * 3.6, az = z + oz * 3.6;
+        for (const s of [-1, 1]) A.box(ax + tx * 3.3 * s, 0, az + tz * 3.3 * s, 0.9, 6.2, 0.9, 'block', a, { trim: true });
+        A.box(ax, 6.2, az, 7.5, 0.9, 1.1, 'top', a, { trim: true });
+        const ring = new THREE.TorusGeometry(2.55, 0.08, 8, 96); A.deco(ring, ax, 3.1, az, 'glow', a);
+        const ring2 = new THREE.TorusGeometry(2.2, 0.03, 6, 96); A.deco(ring2, ax, 3.1, az, 'glowSoft', a);
+        // a path of light from the plaza to the pad
+        const len = LOBBY_R - 3.4 - 12.2;
+        A.deco(new THREE.BoxGeometry(0.16, 0.02, len), ox * (12.2 + len / 2), 0.012, oz * (12.2 + len / 2), 'paint', a);
+      }
+      A.deco(A.ring(LOBBY_R + 6.2, LOBBY_R + 6.35), 0, 0.01, 0, 'paintDark');
+      // play things in the corners: high decks with ramps and jump pads to try your movement
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const cx = sx * 41, cz = sz * 41;
+        A.box(cx, 0, cz, 12, 4, 12, 'top', 0, { trim: true });
+        A.ramp(cx - sx * 2, cz - sz * 14, sz > 0 ? 0 : Math.PI, 4, 8, 4);
+        A.jumpPad(cx - sx * 13, 0, cz, 22);
+        A.high(cx, 4, cz);
+      }
+      for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; A.boostPad(Math.sin(a) * 36, 0, Math.cos(a) * 36, a + Math.PI / 2, 9, 3); }
+      A.spawn(0, 7, 0.6); A.spawn(-2, 7.5, 0.6); A.spawn(2, 7.5, 0.6);
+    },
+  },
 };
-export const MAP_IDS = Object.keys(MAPS);
+export const MAP_IDS = Object.keys(MAPS).filter(k => !MAPS[k].hidden);

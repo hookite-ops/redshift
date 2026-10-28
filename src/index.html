@@ -591,6 +591,64 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
   .logo{font-size:44px}
 }
 @media (max-width:640px){#menu .menuGrid{grid-template-columns:1fr}}
+
+/* ================= 5.0 LOBBY + clean pass ================= */
+#menu{display:none!important}
+#lobbyHud{position:fixed;inset:0;z-index:8;pointer-events:none;font-family:'Noto Sans KR',sans-serif}
+#lobbyHud.hidden{display:none}
+#lobbyHud button{pointer-events:auto;font:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.lhBrand{position:absolute;left:max(18px,env(safe-area-inset-left));top:14px;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.35)}
+.lhBrand b{display:block;font-family:'Space Grotesk';font-weight:700;font-size:30px;letter-spacing:-1px;line-height:1}
+.lhBrand b span{color:var(--or)}
+.lhBrand small{display:block;margin-top:4px;font-size:12px;font-weight:500;opacity:.85}
+.lhChips{position:absolute;right:max(14px,env(safe-area-inset-right));top:12px;display:flex;gap:8px;align-items:center}
+.lhChip,.lhIcon,#lobbyHud .accChip{height:40px;border:0;border-radius:20px;background:rgba(14,17,22,.62);color:#fff;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 4px 16px rgba(0,0,0,.12)}
+.lhChip{padding:0 16px;font-weight:700;font-size:15px}.lhChip b{font-family:'Space Grotesk'}
+.lhIcon{width:40px;font-size:18px;font-weight:700;padding:0}
+#lobbyHud .accChip{display:flex;align-items:center;gap:8px;padding:0 14px 0 5px;margin:0;width:auto;text-align:left}
+#lobbyHud .accChip small{display:none}
+#lobbyHud .accChip span{font-size:13px;font-weight:700;color:#fff}
+#lobbyHud .accChip i{width:30px;height:30px;border-radius:50%;flex:none}
+#lhHint{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);white-space:nowrap;font-size:13px;color:#fff;background:rgba(14,17,22,.5);padding:8px 16px;border-radius:18px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#lhHint b{color:#ffb08a}
+#lhHint.hidden{display:none}
+#lobbyCard{--lc:var(--or);position:absolute;right:max(14px,env(safe-area-inset-right));top:64px;bottom:14px;width:min(400px,44vw);display:flex;flex-direction:column;pointer-events:auto;
+  background:rgba(250,251,252,.94);border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.22);overflow:hidden;animation:lcIn .22s cubic-bezier(.2,.9,.3,1.2)}
+#lobbyCard.hidden{display:none}
+@keyframes lcIn{from{opacity:0;transform:translateX(30px) scale(.97)}to{opacity:1;transform:none}}
+.lcHead{display:flex;gap:12px;align-items:center;padding:16px 18px 12px;border-bottom:1px solid var(--line)}
+.lcHead i{width:6px;align-self:stretch;border-radius:3px;background:var(--lc)}
+.lcHead b{display:block;font-size:22px;font-weight:900;line-height:1.1}
+.lcHead small{display:block;font-size:12px;color:var(--dim);margin-top:2px}
+#lcBody{flex:1;overflow:auto;padding:4px 18px 10px;-webkit-overflow-scrolling:touch}
+#lcBody h3{margin:12px 0 6px;font-size:11px;letter-spacing:2px;color:var(--dim)}
+#lcBody .lcText{font-size:14px;line-height:1.6;color:var(--ink2);margin-top:12px}
+#lcBody .lo{display:grid;gap:6px}
+#lcBody .lo button{border-radius:10px;padding:8px 6px;font-size:13px}
+#lcBody .lo.five{grid-template-columns:repeat(3,1fr)}
+#lcBody .wview{margin:0}
+#lcGo{margin:0 18px 16px;width:auto;border-radius:12px;text-align:center;font-size:17px;padding:13px;background:var(--lc);border-color:var(--lc);display:flex;justify-content:center;align-items:center;gap:10px}
+#lcGo kbd{font:700 11px 'Space Grotesk';border:1.5px solid rgba(255,255,255,.7);border-radius:4px;padding:1px 6px}
+#lcGo kbd:empty{display:none}
+#lcGo.hidden{display:none}
+/* in the lobby: no combat HUD, no fight buttons */
+#hud.lobby>*:not(#emoteBtn):not(#emoteWheel):not(#banner):not(#hint){display:none!important}
+body.inlobby #touch .throw,body.inlobby #touch .blink,body.inlobby #touch .skill{display:none}
+body.inlobby #touch .tpause{display:none}
+@media (max-height:460px){
+  .lhBrand b{font-size:22px}.lhChip,.lhIcon,#lobbyHud .accChip{height:34px}.lhIcon{width:34px}
+  #lobbyHud .accChip span{display:none}#lobbyHud .accChip{padding:0 3px}
+  #lobbyCard{top:54px;bottom:10px;width:min(360px,46vw)}.lcHead{padding:10px 14px 8px}.lcHead b{font-size:18px}
+  #lcBody{padding:2px 14px 8px}#lcGo{margin:0 14px 10px;padding:10px;font-size:15px}
+  #lcBody .wview canvas{height:90px}
+  #lcBody .lo button{padding:5px 4px;font-size:12px}#lcBody .lo button small{font-size:10px}
+  #lcBody h3{margin:8px 0 4px}
+}
+body.touch #lhHint{bottom:auto;top:14px;font-size:12px;padding:7px 14px}
+/* clean pass: softer, rounder, quieter */
+.panel{border-radius:18px}
+.btn{border-radius:12px}
+.screen.clear{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
 </style>
 </head>
 <body>
@@ -628,6 +686,21 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
   <div id="discBox"><div><div id="discTxt"></div><div id="discPow"></div></div><div id="blinkRing"><div id="discIcon" class="hand"></div></div></div>
 </div>
 <div id="clickTo" class="hidden">클릭해서 계속</div>
+<div id="lobbyHud" class="hidden">
+  <div class="lhBrand"><b>RED<span>/</span>SHIFT</b><small id="lhRank"></small></div>
+  <div class="lhChips" id="lhChips">
+    <button class="lhChip coin" data-act="locker">🪙 <b id="lhCoins">0</b></button>
+    <button class="lhIcon" data-act="controls" aria-label="조작법">?</button>
+    <button class="lhIcon" data-act="settings" aria-label="설정">⚙</button>
+  </div>
+  <div id="lhHint"></div>
+  <div id="lobbyCard" class="hidden">
+    <div class="lcHead"><i></i><div><b id="lcTitle"></b><small id="lcSub"></small></div></div>
+    <div id="lcBody"></div>
+    <button id="lcGo" class="btn main"></button>
+  </div>
+</div>
+<div id="lobbyStore" hidden></div>
 <div id="rotate">📱 휴대폰을 가로로 돌려 주세요</div>
 
 <div id="menu" class="screen hidden">
@@ -683,7 +756,7 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
         <button data-mp="orbit">궤도<small>둥근 트랙</small></button>
       </div>
       <h3>무기</h3>
-      <div class="wview">
+      <div class="wview" id="wviewBox">
         <canvas id="wCanvas"></canvas>
         <div class="wstats">
           <div id="wName" class="wname"></div><div id="wDesc" class="wdesc"></div>
@@ -719,7 +792,7 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 4.9.2 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 5.0 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">
