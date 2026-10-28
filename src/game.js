@@ -5,6 +5,7 @@ import { Arena } from './arena.js';
 import { Player, T } from './player.js';
 import { Foe, FOE } from './foes.js';
 import { Disc, DISC, WEAPONS } from './disc.js';
+import { shardStar } from './weapons3d.js';
 import { SKILLS, CHAT, pick } from './skills.js';
 import { Hand } from './hand.js';
 import { Particles, Rings, SpeedLines, Ribbon } from './fx.js';
@@ -241,17 +242,18 @@ export class Game {
   start(mode, opts = {}) {
     this.ranked = !!opts.ranked && mode === 'duel';
     if (this.me) this.me.brain = null; // (AI 관전 / lab matches put a brain in your slot — a new game gives it back)
-    this.mode = ['practice', 'duel', 'ffa', 'online'].includes(mode) ? mode : 'arena';
+    this.mode = ['practice', 'duel', 'ffa', 'online', 'lobby'].includes(mode) ? mode : 'arena';
     this.versus = this.mode === 'duel' || this.mode === 'ffa' || this.mode === 'online';
     if (this.mode !== 'online') { if (this.online) this.leaveOnline(); this.online = false; }
     this.D = DIFF[this.S.difficulty] || DIFF.easy;
     this.clear(); this.resetRun();
     // map: practice always uses the white arena (its dummies are placed for it); online uses the room's map
-    let mapId = this.mode === 'practice' ? 'arena' : this.mode === 'online' ? (this.netMap || 'arena') : this.S.map;
-    if (!MAPS[mapId]) mapId = MAP_IDS[(Math.random() * MAP_IDS.length) | 0];
+    let mapId = this.mode === 'lobby' ? 'lobby' : this.mode === 'practice' ? 'arena' : this.mode === 'online' ? (this.netMap || 'arena') : this.S.map;
+    if (!MAPS[mapId] || (MAPS[mapId].hidden && this.mode !== 'lobby')) mapId = MAP_IDS[(Math.random() * MAP_IDS.length) | 0];
     this.loadMap(mapId);
     const P = this.player; P.easy = true; P.noWall = true;
-    if (this.mode === 'practice') P.reset(SPAWN.clone(), 0);
+    if (this.mode === 'lobby') P.reset(new THREE.Vector3(0, 0.62, 7.5), 0);   // on the plaza, facing the 랭크전 portal
+    else if (this.mode === 'practice') P.reset(SPAWN.clone(), 0);
     else { const sp = this.pickSpawn(this.me); P.reset(sp, Math.atan2(sp.x, sp.z)); }
     const me = this.me;
     me.st = { throws: 0, hits: 0, blinks: 0, slams: 0, dodges: 0, bank: 0, ret: 0 };
@@ -269,7 +271,8 @@ export class Game {
     this.state = 'play'; this.acc = 0; this.last = performance.now(); this.timeScale = 1; this.slowT = this.stopT = 0;
     Object.assign(this.camState, { dip: 0, dipV: 0, tilt: 0, fov: this.S.fov, kick: 0, trauma: 0 });
     this.buildDashPips();
-    if (this.mode === 'practice') { this.setupPractice(); this.banner('연습장', '체크리스트를 따라 해보세요 · 맞아도 안 죽어요', 2.6); }
+    if (this.mode === 'lobby') { /* the lobby: just walk around (lobby stations live in lobby.js) */ }
+    else if (this.mode === 'practice') { this.setupPractice(); this.banner('연습장', '체크리스트를 따라 해보세요 · 맞아도 안 죽어요', 2.6); }
     else if (this.versus && this.mode !== 'online') this.setupVersus();
     else { this.banner('아레나', `${this.mapName} · 원반 하나로 끝까지 버티기`, 2.4); }
     this.cls('deathMsg', 'show', false); this.cls('board', 'hidden', !this.versus); this._boardT = 0;
@@ -470,7 +473,7 @@ export class Game {
     if (me.brain) inp = me.brain.tick(dt); // autopilot (used by the automated tests)
     if (inp.emotePressed && this.onEmoteKey) this.onEmoteKey();
     if (me.emote && (inp.fwd || inp.right || inp.jumpPressed || inp.dashPressed || inp.throwPressed || inp.blinkPressed || inp.skillPressed || !me.alive)) { me.emote = null; }
-    me.showSelf = !!me.emote;
+    me.showSelf = !!me.emote || this.mode === 'lobby';
     // party emotes throw confetti
     this.confT = (this.confT || 0) - dt;
     if (this.confT <= 0) { this.confT = 0.12; for (const f of this.fighters) if (f.emote && f.emote.def.confetti && f.alive) this.confetti(f.body.pos, 5, 2.4); }
@@ -480,7 +483,7 @@ export class Game {
       this.clampBounds(P);
       this.maxSpeed = Math.max(this.maxSpeed, P.hSpeed);
       // ---------- the disc ----------
-      if (!me.brain) {
+      if (!me.brain && this.mode !== 'lobby') {
         this.throwBuf -= dt;
         if (inp.throwPressed) {
           if (d.state === 'hand') { if (d.catchCd > 0) this.throwBuf = 0.4; else this.throwDisc(); }
@@ -501,6 +504,7 @@ export class Game {
     }
     for (const f of this.fighters) if (!f.remote) f.disc.tick(dt);
     this.tickSkills(dt); this.tickShards(dt);
+    if (this.mode === 'lobby') { for (const f of this.fighters) f.invulnT -= dt; if (this.onLobbyTick) this.onLobbyTick(dt); return; }
 
     // ---------- vitals ----------
     for (const f of this.fighters) {
@@ -811,10 +815,11 @@ export class Game {
     d.recall();
   }
   spawnShard(owner, color, p, v, dmg, visual) {
-    if (!this.shardGeo) { this.shardGeo = new THREE.BoxGeometry(0.07, 0.07, 0.7); this.shardMats = new Map(); }
-    let mat = this.shardMats.get(color);
-    if (!mat) { mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(Disc.glow > 1 ? 5 : 1) }); this.shardMats.set(color, mat); }
-    const m = new THREE.Mesh(this.shardGeo, mat); m.position.copy(p); this.scene.add(m);
+    // 분열 파편: small spinning six-point stars (one template per colour, cloned)
+    if (!this.shardTpl) this.shardTpl = new Map();
+    let tpl = this.shardTpl.get(color);
+    if (!tpl) { tpl = shardStar(color, Disc.glow || 1); this.shardTpl.set(color, tpl); }
+    const m = tpl.clone(); m.position.copy(p); this.scene.add(m);
     this.shards.push({ m, pos: p.clone(), vel: v.clone(), owner, dmg, visual: visual || (owner && owner.remote), life: 0.7, hit: new Set() });
   }
   tickShards(dt) {
@@ -846,7 +851,7 @@ export class Game {
     }
   }
   renderShards() {
-    for (const s of this.shards) { s.m.position.copy(s.pos); s.m.lookAt(_d.copy(s.pos).add(s.vel)); }
+    for (const s of this.shards) { s.m.position.copy(s.pos); s.m.lookAt(_d.copy(s.pos).add(s.vel)); s.m.children[0].rotation.z = (s.life || 0) * 30; }
   }
   onDiscCatch(d) {
     if (d.state === 'hand') return;
@@ -1699,6 +1704,19 @@ export class Game {
       if (this.camera.position.distanceTo(_d) > 6) this.camera.position.copy(_d); else this.camera.position.lerp(_d, Math.min(1, rawDt * 6));
       this.camera.lookAt(B.pos.x, B.pos.y + 1.05, B.pos.z);
       this.camera.fov = 58; this.camera.updateProjectionMatrix();
+    } else if (inGame && this.mode === 'lobby') {
+      // lobby: third person, behind and above your runner; pulled in when a wall is behind you
+      const B = this.me.body, alpha = THREE.MathUtils.clamp(this.acc / TICK, 0, 1);
+      const tx = B.prevPos.x + (B.pos.x - B.prevPos.x) * alpha, ty = B.prevPos.y + (B.pos.y - B.prevPos.y) * alpha + 1.55, tz = B.prevPos.z + (B.pos.z - B.prevPos.z) * alpha;
+      const pitch = THREE.MathUtils.clamp(P.pitch, -0.75, 0.9), cp = Math.cos(pitch);
+      _a.set(-Math.sin(P.yaw) * cp, Math.sin(pitch), -Math.cos(P.yaw) * cp);   // where you look
+      let dist = this.lobbyDist || 4.6;
+      const h = this.arena.col.raycast(tx, ty, tz, -_a.x, -_a.y, -_a.z, dist + 0.4);
+      if (h) dist = Math.max(1.2, h.t - 0.35);
+      _d.set(tx - _a.x * dist + Math.cos(P.yaw) * 0.55, Math.max(0.4, ty - _a.y * dist), tz - _a.z * dist - Math.sin(P.yaw) * 0.55);
+      this.camera.position.lerp(_d, this.camera.position.distanceTo(_d) > 8 ? 1 : Math.min(1, rawDt * 14));
+      this.camera.lookAt(tx + _a.x * 6 + Math.cos(P.yaw) * 0.55, ty + _a.y * 6, tz + _a.z * 6 - Math.sin(P.yaw) * 0.55);
+      this.camera.fov = 64; this.camera.updateProjectionMatrix();
     } else if (!inGame) {
       // menu: slow orbit over the arena
       const a = this.clockT * 0.06;
@@ -1761,8 +1779,9 @@ export class Game {
 
     if (inGame) this.updateHud(rawDt);
     this.cls('hud', 'emoting', !!(this.me.emote && inGame));
+    this.cls('hud', 'lobby', inGame && this.mode === 'lobby');
 
-    const r = this.renderer, hands = (this.state === 'play' || this.state === 'paused') && this.me.alive && !this.me.emote;
+    const r = this.renderer, hands = (this.state === 'play' || this.state === 'paused') && this.me.alive && !this.me.emote && this.mode !== 'lobby';
     this.sky.position.copy(this.camera.position);
     if (this.post) {
       const sp = this.state === 'play' && this.me.alive ? THREE.MathUtils.clamp((P.speed - 20) / 26, 0, 1) * (this.S.fovFx > 0 ? 1 : 0.5) : 0;

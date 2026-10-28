@@ -14,6 +14,7 @@ import { rankState, tierOf, nextTier, applyResult } from './rank.js';
 import { Account } from './account.js';
 import { emblemSVG } from './emblem.js';
 import { installLocker } from './locker.js';
+import { installLobby } from './lobby.js';
 import { wallet, owns, EMOTES, daily } from './cosmetics.js';
 import { loadCustomBrain } from './neurobot.js';
 const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
@@ -37,7 +38,7 @@ game.records = loadRecords();
 const touchMode = S.touchUI === 'on' || (S.touchUI !== 'off' && isTouchDevice());
 input.touch = touchMode;
 document.body.classList.toggle('touch', touchMode);
-if (touchMode) game.touchUI = new Touch(input, S, { onPause: () => pause() });
+if (touchMode) game.touchUI = new Touch(input, S, { onPause: () => { if (game.mode === 'lobby' && game.state === 'play') doAct('settings'); else pause(); } });
 // fullscreen: the APK is always fullscreen; the EXE asks its own window to go borderless
 const APP = window.REDSHIFT_APP || '';
 function goFull(after) {
@@ -55,8 +56,29 @@ game.saveRecords = () => saveRecords(game.records);
 
 // ---------------- screens ----------------
 const SCREENS = ['menu', 'pause', 'settings', 'controls', 'death', 'online', 'ailab', 'account', 'ranked', 'locker'];
-function show(id) { SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id)); }
+// 'menu' is the walk-around lobby now: showing it means going (back) to the lobby
+function show(id) {
+  if (id === 'menu') { SCREENS.forEach(s => $(s).classList.add('hidden')); enterLobby(); return; }
+  SCREENS.forEach(s => $(s).classList.toggle('hidden', s !== id));
+  if (id && inLobby()) {   // a screen opened over the lobby: freeze the runner, free the mouse
+    game.menuOpen = true; lobby && lobby.show(false); $('hud').classList.add('hidden'); $('clickTo').classList.add('hidden');
+    input.unlock(); if (touchMode) game.touchUI.show(false);
+  }
+}
+const inLobby = () => game.mode === 'lobby' && game.state === 'play';
 let returnTo = 'menu';
+let lobby = null;
+function enterLobby() {
+  if (game.online) game.leaveOnline();
+  if (!inLobby()) game.start('lobby');
+  game.menuOpen = false;
+  document.body.classList.add('playing', 'inlobby');
+  $('hud').classList.remove('hidden');
+  if (lobby) lobby.show(true);
+  renderBest();
+  if (touchMode) { input.locked = true; game.touchUI.show(true); }
+  else if (!input.locked) { $('clickTo').textContent = '클릭해서 둘러보기'; $('clickTo').classList.remove('hidden'); }
+}
 
 function startMode(mode) {
   if (mode === 'rank') { openRanked(); return; }   // ranked is players-only now (online matchmaking)
@@ -64,7 +86,8 @@ function startMode(mode) {
   enterGame();
 }
 function enterGame() {
-  document.body.classList.add('playing');
+  document.body.classList.add('playing'); document.body.classList.remove('inlobby');
+  if (lobby) lobby.show(false); $('clickTo').textContent = '클릭해서 계속';
   document.body.classList.toggle('show-online', !!game.online); document.body.classList.toggle('hide-online', !game.online);
   show(null);
   $('hud').classList.remove('hidden');
@@ -82,6 +105,7 @@ function enterGame() {
 // online games never stop: the pause menu just opens over the running match
 function pause() {
   if (game.state !== 'play' || game.menuOpen) return;
+  if (game.mode === 'lobby') { if (!touchMode) $('clickTo').classList.toggle('hidden', !$('lobbyCard').classList.contains('hidden')); return; }
   if (game.online) game.menuOpen = true; else game.state = 'paused';
   if (touchMode) game.touchUI.show(false);
   document.body.classList.toggle('show-online', !!game.online); document.body.classList.toggle('hide-online', !game.online);
@@ -90,12 +114,10 @@ function pause() {
 function resume() { game.menuOpen = false; show(null); if (!input.touch) { $('clickTo').classList.remove('hidden'); input.lock(); } else { if (game.state === 'paused') game.state = 'play'; game.touchUI.show(true); } }
 function toMenu() {
   if (game.online) game.leaveOnline();
-  game.menuOpen = false; if (touchMode) game.touchUI.show(false);
-  document.body.classList.remove('playing');
-  game.state = 'menu'; game.clear(); show('menu'); $('hud').classList.add('hidden'); $('clickTo').classList.add('hidden');
+  game.menuOpen = false;
   input.unlock();
-  leaveFull();
-  renderBest();
+  game.state = 'menu'; game.clear();
+  show('menu');   // → the lobby
 }
 game.onEnd = (title, stats) => {
   game.state = 'dead'; if (touchMode) game.touchUI.show(false);
@@ -120,6 +142,7 @@ input.onKey = e => {
 // Android back button (the APK calls this; returns false at the main menu so the app can close)
 window.REDSHIFT_BACK = () => {
   const open = id => !$(id).classList.contains('hidden');
+  if (inLobby() && !game.menuOpen) return false;   // in the lobby with nothing open: let the app close
   if (game.state === 'play' && !game.menuOpen) { pause(); return true; }
   if (open('settings') || open('controls') || open('online')) { show(returnTo); return true; }
   if (open('ailab')) { if (!lab.busy) show('menu'); return true; }
@@ -131,15 +154,15 @@ window.REDSHIFT_BACK = () => {
   return false;
 };
 // app sent to the background / tab hidden: open the pause menu (touch has no pointer-lock loss to do it)
-window.REDSHIFT_BACKGROUND = () => { if (game.state === 'play' && !game.menuOpen) { input.unlock(); pause(); } };
+window.REDSHIFT_BACKGROUND = () => { if (game.state === 'play' && !game.menuOpen && game.mode !== 'lobby') { input.unlock(); pause(); } };
 document.addEventListener('visibilitychange', () => { if (document.hidden && touchMode) window.REDSHIFT_BACKGROUND(); });
 canvas.addEventListener('mousedown', () => { if (!touchMode && (game.state === 'play' || game.state === 'paused') && !input.locked && $('pause').classList.contains('hidden')) input.lock(); });
 $('clickTo').addEventListener('mousedown', () => input.lock());
-addEventListener('beforeunload', e => { if (game.state === 'play') { e.preventDefault(); e.returnValue = ''; } });
+addEventListener('beforeunload', e => { if (game.state === 'play' && game.mode !== 'lobby') { e.preventDefault(); e.returnValue = ''; } });
 
-document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
+document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => doAct(b.dataset.act)));
+function doAct(a) {
   game.audio.init(); game.audio.setVolumes(S.sfx, S.music); game.audio.ui();
-  const a = b.dataset.act;
   if (a === 'arena' || a === 'practice' || a === 'duel' || a === 'ffa' || a === 'rank') startMode(a);
   else if (a === 'online') { returnTo = 'menu'; openOnline(); show('online'); }
   else if (a === 'settings') { returnTo = game.state === 'paused' || game.menuOpen ? 'pause' : 'menu'; openSettings(); show('settings'); }
@@ -151,7 +174,7 @@ document.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click',
   else if (a === 'resume') resume();
   else if (a === 'restart') { forfeit(); startMode(game.ranked ? 'rank' : game.mode); }
   else if (a === 'quit') { forfeit(); toMenu(); }
-}));
+}
 
 // ---------------- online ----------------
 function oStatus(text, cls = '') { const e = $('oStatus'); e.textContent = text; e.className = cls; }
@@ -387,6 +410,8 @@ function myLook() {
 function renderBest() {
   renderRank();
   $('menuCoins').textContent = wallet(game.records).coins.toLocaleString();
+  $('lhCoins').textContent = wallet(game.records).coins.toLocaleString();
+  $('lhRank').textContent = `${S.name} · ${$('rankBadge').textContent}`;
   const r = game.records;
   const parts = [];
   if (r.score) parts.push(`최고 ${r.score.toLocaleString()}점 · WAVE ${r.wave}`);
@@ -452,7 +477,14 @@ function openAccount() { show('account'); renderAccount(); }
 const _afterLogin = acc.afterLogin.bind(acc);
 acc.afterLogin = async j => { await _afterLogin(j); if (pendingLink) await acc.approve(pendingLink); };
 renderChip();
-show('menu'); renderBest();
+// the lobby: portals to every mode
+lobby = installLobby({ game, $, S, act: doAct, startMode, touch: touchMode, onCard: (st, needsMouse) => {
+  $('lhHint').classList.toggle('hidden', !!st);
+  if (st && needsMouse && !touchMode) { input.unlock(); $('clickTo').classList.add('hidden'); }
+} });
+$('lhChips').prepend($('accChip'));
+$('lhHint').innerHTML = touchMode ? '왼쪽 엄지로 이동 · 오른쪽을 끌어 둘러보기 · <b>포털 위에 서면 시작</b>' : 'WASD 이동 · 마우스로 둘러보기 · <b>포털 위에 서면 시작</b>';
+show('menu');
 if (pendingLink) openAccount();
 acc.refresh().then(() => { if (pendingLink && acc.signedIn) acc.approve(pendingLink); });
 $('loading').classList.add('hidden');
@@ -461,8 +493,9 @@ let wvLast = 0;
 function loop(now) {
   if (window.__trainHeadless) return;
   requestAnimationFrame(loop); game.frame(now); locker.frame(now);
-  // weapon preview: only while the main menu is showing, ~30 fps
-  if (wview && now - wvLast > 33 && !$('menu').classList.contains('hidden')) { wview.frame(Math.min(0.1, (now - wvLast) / 1000)); wvLast = now; }
+  lobby.frame(Math.min(0.05, (now - (loop.t || now)) / 1000), now / 1000); loop.t = now;
+  // weapon preview: only while the 무기고 card shows it, ~30 fps
+  if (wview && now - wvLast > 33 && $('wviewBox').parentElement === $('lcBody') && !$('lobbyCard').classList.contains('hidden')) { wview.frame(Math.min(0.1, (now - wvLast) / 1000)); wvLast = now; }
 }
 requestAnimationFrame(loop);
 

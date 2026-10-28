@@ -5,6 +5,7 @@
 // Shared look: pearl-white ceramic shells, dark graphite cores, polished chrome edges, and the owner's
 // colour as glowing channels (they bloom with post-processing on).
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { WSKINS, wskinTexture } from './cosmetics.js';
 
 const TAU = Math.PI * 2;
@@ -67,89 +68,84 @@ const polar = (r, a) => [Math.cos(a) * r, Math.sin(a) * r];
 
 // ---------- the designs ----------
 const BUILD = {
-  // 원반 — the classic: bevelled ceramic ring, graphite dish, a glowing channel and three swept fins
+  // 원반 — (그림) 두툼한 테두리의 둥근 원반, 가운데 작은 점
   disc(g, M, s) {
-    g.add(mesh(spun([[0.0, 0.03], [0.16, 0.03], [0.25, 0.02], [0.3, 0.045], [0.38, 0.04], [0.42, 0.012], [0.42, -0.012], [0.38, -0.04], [0.3, -0.045], [0.25, -0.02], [0.16, -0.03], [0, -0.03]].map(([r, z]) => [r * s, z * s])), M.pearl));
-    g.add(mesh(new THREE.CylinderGeometry(0.245 * s, 0.245 * s, 0.05 * s, 48).rotateX(Math.PI / 2), M.graphite));
-    for (const z of [0.047, -0.047]) g.add(mesh(ring(0.34 * s, 0.009 * s), M.glow, 0, 0, z * s));
-    g.add(mesh(ring(0.425 * s, 0.012 * s, 96), M.chrome));
-    for (let i = 0; i < 3; i++) {
-      const sh = new THREE.Shape(), a = i / 3 * TAU;
-      sh.moveTo(...polar(0.4 * s, a)); sh.quadraticCurveTo(...polar(0.56 * s, a + 0.35), ...polar(0.47 * s, a + 0.75));
-      sh.quadraticCurveTo(...polar(0.45 * s, a + 0.35), ...polar(0.4 * s, a + 0.18));
-      g.add(mesh(extrude(sh, 0.035 * s, 0.25), M.pearl));
-    }
-    g.add(mesh(spun([[0, 0.05], [0.07, 0.045], [0.1, 0.02], [0.1, -0.02], [0.07, -0.045], [0, -0.05]].map(([r, z]) => [r * s, z * s]), 32), M.chrome));
-    for (const z of [0.052, -0.052]) g.add(mesh(new THREE.CircleGeometry(0.045 * s, 24), M.glow, 0, 0, z * s));
+    g.add(mesh(spun([[0, 0.05], [0.2, 0.045], [0.33, 0.035], [0.36, 0.03], [0.36, -0.03], [0.33, -0.035], [0.2, -0.045], [0, -0.05]].map(([r, z]) => [r * s, z * s])), M.pearl));
+    g.add(mesh(ring(0.385 * s, 0.045 * s, 96), M.graphite));                  // the thick rim
+    g.add(mesh(ring(0.385 * s, 0.012 * s, 96), M.glow, 0, 0, 0.046 * s));     // light line on the rim, both faces
+    g.add(mesh(ring(0.385 * s, 0.012 * s, 96), M.glow, 0, 0, -0.046 * s));
+    for (const z of [0.05, -0.05]) g.add(mesh(new THREE.SphereGeometry(0.028 * s, 16, 10), M.glow, 0, 0, z * s));   // centre dot
+    g.add(mesh(ring(0.12 * s, 0.006 * s), M.chrome, 0, 0, 0.047 * s)); g.add(mesh(ring(0.12 * s, 0.006 * s), M.chrome, 0, 0, -0.047 * s));
   },
-  // 해머 — heavy armour: a thick graphite drum wrapped in six ceramic plates with glowing seams and a hex hub
+  // 해머 — (그림) 둥근 망치 머리 + 양 끝 띠, 손잡이, 끝에 고리
   heavy(g, M, s) {
-    g.add(mesh(new THREE.CylinderGeometry(0.34 * s, 0.34 * s, 0.13 * s, 48).rotateX(Math.PI / 2), M.graphite));
-    for (let i = 0; i < 6; i++) {
-      const a0 = i / 6 * TAU + 0.05, a1 = (i + 1) / 6 * TAU - 0.05;
-      g.add(mesh(extrude(annulus(0.3 * s, 0.46 * s, a0, a1), 0.16 * s, 0.18), M.pearl));
-      const [x, y] = polar(0.38 * s, (a0 + a1) / 2);
-      g.add(mesh(new THREE.BoxGeometry(0.06 * s, 0.1 * s, 0.25 * s), M.gun, x, y, 0, (a0 + a1) / 2));
-      const sa = (i + 1) / 6 * TAU, [sx, sy] = polar(0.38 * s, sa);
-      for (const z of [0.112, -0.112]) g.add(mesh(new THREE.BoxGeometry(0.16 * s, 0.018 * s, 0.01 * s), M.glow, sx, sy, z * s, sa));
+    const h = new THREE.Group(); g.add(h); h.position.y = 0.09 * s;          // balance point near the head
+    h.add(mesh(new RoundedBoxGeometry(0.66 * s, 0.34 * s, 0.32 * s, 3, 0.07 * s), M.pearl, 0, 0.2 * s));
+    for (const x of [-0.25, 0.25]) {
+      h.add(mesh(new RoundedBoxGeometry(0.07 * s, 0.37 * s, 0.35 * s, 2, 0.02 * s), M.graphite, x * s, 0.2 * s));
+      h.add(mesh(new THREE.BoxGeometry(0.02 * s, 0.375 * s, 0.355 * s), M.glow, x * s * 1.18, 0.2 * s));
     }
-    for (const z of [0.09, -0.09]) g.add(mesh(ring(0.3 * s, 0.012 * s), M.glow, 0, 0, z * s));
-    g.add(mesh(new THREE.CylinderGeometry(0.15 * s, 0.15 * s, 0.2 * s, 6).rotateX(Math.PI / 2), M.chrome));
-    for (const z of [0.102, -0.102]) g.add(mesh(new THREE.CircleGeometry(0.08 * s, 6), M.glow, 0, 0, z * s));
+    h.add(mesh(new THREE.CylinderGeometry(0.05 * s, 0.05 * s, 0.42 * s, 20), M.graphite, 0, -0.18 * s));
+    for (const y of [-0.1, -0.2, -0.3]) h.add(mesh(new THREE.CylinderGeometry(0.056 * s, 0.056 * s, 0.025 * s, 20), M.glowSoft, 0, y * s));
+    h.add(mesh(new THREE.CylinderGeometry(0.075 * s, 0.06 * s, 0.05 * s, 20), M.chrome, 0, 0.01 * s));
+    h.add(mesh(ring(0.075 * s, 0.026 * s, 32), M.pearl, 0, -0.47 * s));       // pommel ring
+    h.add(mesh(ring(0.075 * s, 0.009 * s, 32), M.glow, 0, -0.47 * s, 0.026 * s));
+    h.add(mesh(new THREE.SphereGeometry(0.028 * s, 12, 8), M.glow, 0, -0.47 * s));
   },
-  // 레일 — a slim lens-shaped blade with a glowing spine and twin chrome edges: built for speed
+  // 레일 — (그림) 위아래 두 줄 레일, 사이로 빛줄기, 뒤쪽 고리, 비스듬한 손잡이
   rail(g, M, s) {
-    const L = 0.62 * s, W = 0.17 * s, lens = new THREE.Shape();
-    lens.moveTo(-L, 0); lens.quadraticCurveTo(0, W * 2, L, 0); lens.quadraticCurveTo(0, -W * 2, -L, 0);
-    g.add(mesh(extrude(lens, 0.04 * s, 0.35, 24), M.pearl));
-    const core = new THREE.Shape(); core.moveTo(-L * 0.7, 0); core.quadraticCurveTo(0, W * 1.1, L * 0.7, 0); core.quadraticCurveTo(0, -W * 1.1, -L * 0.7, 0);
-    g.add(mesh(extrude(core, 0.06 * s, 0.2, 24), M.graphite));
-    g.add(mesh(new THREE.BoxGeometry(L * 1.25, 0.012 * s, 0.07 * s), M.glow));
-    for (const sy of [1, -1]) {
-      const e = new THREE.Shape(); e.moveTo(-L, 0); e.quadraticCurveTo(0, sy * W * 2.02, L, 0); e.quadraticCurveTo(0, sy * W * 1.8, -L, 0);
-      g.add(mesh(extrude(e, 0.05 * s, 0, 24), M.chrome));
-    }
-    g.add(mesh(new THREE.CylinderGeometry(0.07 * s, 0.07 * s, 0.09 * s, 24).rotateX(Math.PI / 2), M.chrome));
-    for (const z of [0.047, -0.047]) g.add(mesh(new THREE.CircleGeometry(0.035 * s, 20), M.glow, 0, 0, z * s));
+    const r = new THREE.Group(); g.add(r); r.position.set(0.08 * s, 0.05 * s, 0);
+    r.add(mesh(new RoundedBoxGeometry(0.86 * s, 0.06 * s, 0.1 * s, 2, 0.02 * s), M.pearl, -0.08 * s, 0.11 * s));    // top rail (longer)
+    r.add(mesh(new RoundedBoxGeometry(0.66 * s, 0.05 * s, 0.09 * s, 2, 0.02 * s), M.pearl, 0.02 * s, -0.02 * s));    // lower rail
+    r.add(mesh(new THREE.BoxGeometry(1.0 * s, 0.018 * s, 0.03 * s), M.glow, -0.16 * s, 0.045 * s));                   // the beam between them
+    r.add(mesh(new THREE.BoxGeometry(0.66 * s, 0.07 * s, 0.05 * s), M.graphite, 0.02 * s, 0.045 * s));
+    r.add(mesh(new RoundedBoxGeometry(0.06 * s, 0.2 * s, 0.11 * s, 2, 0.02 * s), M.graphite, 0.36 * s, 0.045 * s));   // rear block
+    const loop = mesh(ring(0.085 * s, 0.024 * s, 40), M.chrome, 0.24 * s, 0.0); loop.scale.set(1.35, 1, 1); r.add(loop);     // the ring
+    const lg = mesh(ring(0.085 * s, 0.008 * s, 40), M.glow, 0.24 * s, 0, 0.025 * s); lg.scale.set(1.35, 1, 1); r.add(lg);
+    const grip = new THREE.Group(); grip.position.set(0.36 * s, 0.0); grip.rotation.z = 0.42; r.add(grip);
+    grip.add(mesh(new RoundedBoxGeometry(0.075 * s, 0.4 * s, 0.1 * s, 2, 0.025 * s), M.graphite, 0, -0.2 * s));
+    grip.add(mesh(new THREE.BoxGeometry(0.08 * s, 0.015 * s, 0.105 * s), M.glowSoft, 0, -0.12 * s));
+    grip.add(mesh(new THREE.BoxGeometry(0.08 * s, 0.015 * s, 0.105 * s), M.glowSoft, 0, -0.26 * s));
   },
-  // 부메랑 — two swept wings with glowing leading edges around a chrome pivot
+  // 부메랑 — (그림) 뾰족한 두 날이 가운데서 비틀려 S자로 이어짐
   boomerang(g, M, s) {
-    const wing = new THREE.Shape();
-    wing.moveTo(0.02 * s, 0.1 * s);
-    wing.bezierCurveTo(0.25 * s, 0.22 * s, 0.5 * s, 0.25 * s, 0.66 * s, 0.1 * s);
-    wing.quadraticCurveTo(0.7 * s, 0.04 * s, 0.62 * s, 0.03 * s);
-    wing.bezierCurveTo(0.45 * s, 0.1 * s, 0.25 * s, 0.05 * s, 0.08 * s, -0.08 * s);
-    wing.lineTo(0.02 * s, 0.1 * s);
+    const leaf = new THREE.Shape();
+    leaf.moveTo(0, 0);
+    leaf.quadraticCurveTo(0.1 * s, 0.36 * s, 0.44 * s, 0.4 * s);       // the curved outer edge up to the tip
+    leaf.quadraticCurveTo(0.2 * s, 0.17 * s, 0.13 * s, -0.02 * s);    // back along the inner edge
+    leaf.quadraticCurveTo(0.06 * s, -0.04 * s, 0, 0);
+    const edge = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.1 * s, 0.36 * s, 0), new THREE.Vector3(0.44 * s, 0.4 * s, 0));
     for (const k of [0, 1]) {
-      const w = mesh(extrude(wing, 0.05 * s, 0.25, 16), M.pearl); w.rotation.z = k * Math.PI; g.add(w);
-      const lead = new THREE.Shape(); lead.moveTo(0.05 * s, 0.13 * s);
-      lead.bezierCurveTo(0.26 * s, 0.24 * s, 0.5 * s, 0.27 * s, 0.67 * s, 0.11 * s); lead.lineTo(0.64 * s, 0.09 * s);
-      lead.bezierCurveTo(0.48 * s, 0.22 * s, 0.26 * s, 0.2 * s, 0.06 * s, 0.1 * s);
-      const l = mesh(extrude(lead, 0.062 * s, 0, 16), M.glow); l.rotation.z = k * Math.PI; g.add(l);
-      const inset = new THREE.Shape(); inset.moveTo(0.2 * s, 0.08 * s); inset.quadraticCurveTo(0.38 * s, 0.14 * s, 0.52 * s, 0.1 * s); inset.quadraticCurveTo(0.38 * s, 0.08 * s, 0.2 * s, 0.03 * s);
-      const n = mesh(extrude(inset, 0.064 * s, 0, 12), M.graphite); n.rotation.z = k * Math.PI; g.add(n);
+      const b = new THREE.Group(); b.rotation.z = k * Math.PI; g.add(b);
+      const t = new THREE.Group(); b.add(t);
+      t.rotation.set(0.3, -0.3, 0);                                   // the twist in the middle
+      t.add(mesh(extrude(leaf, 0.045 * s, 0.35, 16), M.pearl));
+      t.add(mesh(new THREE.TubeGeometry(edge, 24, 0.012 * s, 6), M.glow, 0, 0, 0.028 * s));
+      t.add(mesh(new THREE.TubeGeometry(edge, 24, 0.012 * s, 6), M.glow, 0, 0, -0.028 * s));
     }
-    g.add(mesh(spun([[0, 0.06], [0.08, 0.05], [0.13, 0.02], [0.13, -0.02], [0.08, -0.05], [0, -0.06]].map(([r, z]) => [r * s, z * s]), 32), M.chrome));
-    g.add(mesh(ring(0.13 * s, 0.012 * s), M.glow));
+    g.add(mesh(new THREE.CylinderGeometry(0.07 * s, 0.07 * s, 0.09 * s, 24).rotateX(Math.PI / 2), M.graphite));
+    g.add(mesh(ring(0.07 * s, 0.01 * s, 24), M.chrome, 0, 0, 0.045 * s)); g.add(mesh(ring(0.07 * s, 0.01 * s, 24), M.chrome, 0, 0, -0.045 * s));
+    for (const z of [0.05, -0.05]) g.add(mesh(new THREE.SphereGeometry(0.025 * s, 12, 8), M.glow, 0, 0, z * s));
   },
-  // 분열 — three separate petals held together by light: you can see where it will split
+  // 분열 — (그림) 세 조각으로 갈라진 삼각형: 벽에 맞으면 이 세 조각이 별 파편이 되어 흩어짐
   splitter(g, M, s) {
+    const R = 0.47 * s, gap = 0.03 * s;
+    const P = [0, 1, 2].map(i => new THREE.Vector2(...polar(R, Math.PI / 2 + i * TAU / 3)));
+    const mid = (a, b) => a.clone().add(b).multiplyScalar(0.5);
     for (let i = 0; i < 3; i++) {
-      const a0 = i / 3 * TAU + 0.09, a1 = (i + 1) / 3 * TAU - 0.09;
-      const p = new THREE.Shape();
-      p.moveTo(...polar(0.08 * s, (a0 + a1) / 2));
-      p.lineTo(...polar(0.16 * s, a0)); p.absarc(0, 0, 0.44 * s, a0, a1, false); p.lineTo(...polar(0.16 * s, a1)); p.closePath();
-      g.add(mesh(extrude(p, 0.05 * s, 0.25, 16), M.pearl));
-      const tip = new THREE.Shape(); tip.absarc(0, 0, 0.455 * s, a0 + 0.12, a1 - 0.12, false); tip.absarc(0, 0, 0.41 * s, a1 - 0.12, a0 + 0.12, true);
-      g.add(mesh(extrude(tip, 0.06 * s, 0, 16), M.gun));
-      const [x, y] = polar(0.29 * s, (a0 + a1) / 2);
-      g.add(mesh(new THREE.CylinderGeometry(0.045 * s, 0.045 * s, 0.11 * s, 16).rotateX(Math.PI / 2), M.graphite, x, y));
-      for (const z of [0.057, -0.057]) g.add(mesh(new THREE.CircleGeometry(0.025 * s, 16), M.glow, x, y, z * s));
-      // the glowing seam between this petal and the next
-      const sa = (i + 1) / 3 * TAU, [sx, sy] = polar(0.29 * s, sa);
-      g.add(mesh(new THREE.BoxGeometry(0.3 * s, 0.025 * s, 0.035 * s), M.glow, sx, sy, 0, sa));
+      const c = P[i], m1 = mid(P[i], P[(i + 1) % 3]), m2 = mid(P[i], P[(i + 2) % 3]);
+      const pts = [c, m1, new THREE.Vector2(0, 0), m2];
+      const dir = c.clone().normalize().multiplyScalar(gap);          // pull each piece toward its corner: the cracks show
+      const sh = new THREE.Shape(pts.map(p => p.clone().multiplyScalar(0.94).add(dir)));
+      g.add(mesh(extrude(sh, 0.07 * s, 0.25, 4), M.pearl));
+      const tip = c.clone().multiplyScalar(0.8);
+      g.add(mesh(new THREE.SphereGeometry(0.022 * s, 10, 8), M.glow, tip.x, tip.y, 0.045 * s));
+      g.add(mesh(new THREE.SphereGeometry(0.022 * s, 10, 8), M.glow, tip.x, tip.y, -0.045 * s));
+      // glowing crack from the centre to the side's middle
+      const mm = mid(P[(i + 1) % 3], P[(i + 2) % 3]).multiplyScalar(0.94), len = mm.length();
+      g.add(mesh(new THREE.BoxGeometry(0.03 * s, len, 0.1 * s), M.glow, mm.x / 2, mm.y / 2, 0, Math.atan2(mm.y, mm.x) - Math.PI / 2));
     }
-    g.add(mesh(new THREE.CylinderGeometry(0.09 * s, 0.09 * s, 0.075 * s, 3).rotateX(Math.PI / 2), M.chrome));
+    g.add(mesh(new THREE.CylinderGeometry(0.06 * s, 0.06 * s, 0.085 * s, 6).rotateX(Math.PI / 2), M.graphite));
   },
   // 톱날 — a polished circular saw: hooked chrome teeth, graphite body, a ring of vents and a glowing core
   saw(g, M, s) {
@@ -171,23 +167,28 @@ const BUILD = {
     g.add(mesh(new THREE.CylinderGeometry(0.12 * s, 0.12 * s, 0.07 * s, 32).rotateX(Math.PI / 2), M.pearl));
     for (const z of [0.037, -0.037]) g.add(mesh(new THREE.CircleGeometry(0.06 * s, 24), M.glow, 0, 0, z * s));
   },
-  // 추적 — the hunter: a slim ring with a glass dome "eye", a glowing iris and three steering fins
+  // 추적 — (그림) 큰 삼각 날개의 미사일 ×3 묶음. 날아갈 땐 앞을 보고 빙글 돌아요 (disc.js)
   seeker(g, M, s) {
-    g.add(mesh(spun([[0.2, 0.025], [0.36, 0.03], [0.42, 0.01], [0.42, -0.01], [0.36, -0.03], [0.2, -0.025]].map(([r, z]) => [r * s, z * s])), M.pearl));
-    g.add(mesh(new THREE.CylinderGeometry(0.21 * s, 0.21 * s, 0.05 * s, 40).rotateX(Math.PI / 2), M.graphite));
-    for (const sz of [1, -1]) {
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(0.16 * s, 32, 16, 0, TAU, 0, Math.PI / 2), M.glass);
-      dome.rotation.x = sz > 0 ? Math.PI / 2 : -Math.PI / 2; dome.scale.set(1, 0.55, 1); dome.position.z = sz * 0.02 * s; g.add(dome);
-      g.add(mesh(ring(0.08 * s, 0.014 * s, 40), M.glow, 0, 0, sz * 0.045 * s));
-      g.add(mesh(new THREE.CircleGeometry(0.035 * s, 24), M.white, 0, 0, sz * 0.05 * s));
-    }
-    for (let i = 0; i < 3; i++) {
-      const a = i / 3 * TAU + Math.PI / 6, fin = new THREE.Shape();
-      fin.moveTo(...polar(0.4 * s, a - 0.2)); fin.lineTo(...polar(0.55 * s, a)); fin.lineTo(...polar(0.4 * s, a + 0.2)); fin.closePath();
-      g.add(mesh(extrude(fin, 0.03 * s, 0.3), M.tint));
-    }
-    g.add(mesh(ring(0.3 * s, 0.008 * s), M.glowSoft, 0, 0, 0.03 * s));
-    g.add(mesh(ring(0.3 * s, 0.008 * s), M.glowSoft, 0, 0, -0.03 * s));
+    const one = (x, z) => {
+      const m = new THREE.Group(); m.position.set(x, 0, z);
+      m.add(mesh(new THREE.CylinderGeometry(0.038 * s, 0.038 * s, 0.56 * s, 16), M.pearl, 0, 0.02 * s));
+      m.add(mesh(new THREE.ConeGeometry(0.038 * s, 0.16 * s, 16), M.graphite, 0, 0.38 * s));
+      m.add(mesh(new THREE.SphereGeometry(0.016 * s, 8, 6), M.glow, 0, 0.465 * s));
+      m.add(mesh(new THREE.CylinderGeometry(0.041 * s, 0.041 * s, 0.02 * s, 16), M.glow, 0, 0.2 * s));
+      m.add(mesh(new THREE.CylinderGeometry(0.03 * s, 0.045 * s, 0.05 * s, 16), M.graphite, 0, -0.28 * s));
+      m.add(mesh(new THREE.CylinderGeometry(0.022 * s, 0.022 * s, 0.012 * s, 12), M.glow, 0, -0.31 * s));
+      const fin = new THREE.Shape(); fin.moveTo(0, 0.04 * s); fin.lineTo(0.17 * s, -0.24 * s); fin.lineTo(0, -0.16 * s); fin.closePath();
+      for (let k = 0; k < 3; k++) {
+        const f = new THREE.Group(); f.rotation.y = k * TAU / 3 + Math.atan2(x, z); m.add(f);
+        f.add(mesh(extrude(fin, 0.012 * s, 0.2, 2), M.graphite, 0.035 * s, -0.12 * s));
+      }
+      return m;
+    };
+    const B = new THREE.Group(); g.add(B);
+    for (let k = 0; k < 3; k++) { const [x, z] = polar(0.06 * s, k * TAU / 3 + Math.PI / 2); B.add(one(x, z)); }
+    for (const y of [0.1, -0.15]) B.add(mesh(new THREE.CylinderGeometry(0.11 * s, 0.11 * s, 0.03 * s, 24), M.graphite, 0, y * s));
+    B.add(mesh(new THREE.TorusGeometry(0.112 * s, 0.008 * s, 6, 32).rotateX(Math.PI / 2), M.glow, 0, 0.1 * s));
+    B.add(mesh(new THREE.TorusGeometry(0.112 * s, 0.008 * s, 6, 32).rotateX(Math.PI / 2), M.glow, 0, -0.15 * s));
   },
   // 충격탄 — a caged star: a hot core inside a glass shell, held by three crossing graphite rings
   nova(g, M, s) {
@@ -201,25 +202,40 @@ const BUILD = {
     g.add(mesh(spun([[0.34, 0.02], [0.42, 0.012], [0.42, -0.012], [0.34, -0.02]].map(([r, z]) => [r * s, z * s])), M.pearl));
     for (let i = 0; i < 4; i++) { const [x, y] = polar(0.42 * s, i / 4 * TAU); g.add(mesh(new THREE.SphereGeometry(0.03 * s, 12, 8), M.glow, x, y)); }
   },
-  // 프리즘 — a cut crystal: an iridescent faceted hexagon with a glowing gem and six mirror facets
+  // 프리즘 — (그림) 정이십면체: 무지개빛 면, 빛나는 모서리
   prism(g, M, s) {
-    const hex = new THREE.Shape();
-    for (let i = 0; i < 6; i++) { const p = polar(0.4 * s, i / 6 * TAU + Math.PI / 6); i ? hex.lineTo(...p) : hex.moveTo(...p); }
-    hex.closePath();
-    g.add(mesh(extrude(hex, 0.05 * s, 0.4, 1), M.iris));
-    const inner = new THREE.Shape();
-    for (let i = 0; i < 6; i++) { const p = polar(0.24 * s, i / 6 * TAU); i ? inner.lineTo(...p) : inner.moveTo(...p); }
-    inner.closePath();
-    g.add(mesh(extrude(inner, 0.13 * s, 0.15, 1), M.graphite));
-    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.15 * s), M.glow); gem.scale.z = 0.75; g.add(gem);
-    for (let i = 0; i < 6; i++) {
-      const a = i / 6 * TAU + Math.PI / 6, [x, y] = polar(0.4 * s, a);
-      g.add(mesh(new THREE.OctahedronGeometry(0.045 * s), M.chrome, x, y));
-      const [mx, my] = polar(0.31 * s, a + Math.PI / 6);
-      g.add(mesh(new THREE.BoxGeometry(0.12 * s, 0.012 * s, 0.09 * s), M.glowSoft, mx, my, 0, a + Math.PI / 6 + Math.PI / 2));
+    const R = 0.36 * s;
+    const ico = new THREE.IcosahedronGeometry(R, 0);
+    const shell = new THREE.Mesh(ico, M.iris); shell.material = M.iris; g.add(shell);
+    g.add(mesh(new THREE.IcosahedronGeometry(R * 0.42, 0), M.glow));
+    // edges as thin chrome bars, vertices as glowing beads
+    const p = ico.attributes.position, seen = new Set(), V = [];
+    for (let i = 0; i < p.count; i++) { const v = new THREE.Vector3().fromBufferAttribute(p, i); const k = v.toArray().map(x => x.toFixed(3)).join(); if (!seen.has(k)) { seen.add(k); V.push(v); } }
+    const L = V[0].distanceTo(V.reduce((b, v) => (v !== V[0] && (!b || v.distanceTo(V[0]) < b.distanceTo(V[0])) ? v : b), null));
+    const up = new THREE.Vector3(0, 1, 0);
+    for (let a = 0; a < V.length; a++) for (let b = a + 1; b < V.length; b++) {
+      if (Math.abs(V[a].distanceTo(V[b]) - L) > L * 0.05) continue;
+      const e = new THREE.Mesh(new THREE.CylinderGeometry(0.009 * s, 0.009 * s, L, 6), M.chrome);
+      e.position.copy(V[a]).add(V[b]).multiplyScalar(0.5);
+      e.quaternion.setFromUnitVectors(up, V[b].clone().sub(V[a]).normalize());
+      g.add(e);
     }
+    for (const v of V) g.add(mesh(new THREE.SphereGeometry(0.02 * s, 8, 6), M.glow, v.x, v.y, v.z));
   },
 };
+
+// 분열 파편 — (그림) 육각별 안에 뾰족한 별. Game shards use this (lying flat, spinning).
+export function shardStar(color, glow = 1) {
+  const g = new THREE.Group();
+  const M = mats(color, Math.max(1, glow));
+  const star = (R, r, n, a0 = 0) => { const sh = new THREE.Shape(); for (let i = 0; i < n * 2; i++) { const p = polar(i % 2 ? r : R, a0 + i * Math.PI / n); i ? sh.lineTo(...p) : sh.moveTo(...p); } sh.closePath(); return sh; };
+  const outer = extrude(star(0.2, 0.115, 6, Math.PI / 2), 0.03, 0.2, 2);
+  g.add(new THREE.Mesh(outer, M.glow));
+  const inner = new THREE.Mesh(extrude(star(0.11, 0.05, 6, Math.PI / 2 + Math.PI / 6), 0.05, 0.2, 2), M.white);
+  g.add(inner);
+  g.rotation.x = Math.PI / 2;                    // lie in the plane of travel
+  const w = new THREE.Group(); w.add(g); return w;
+}
 
 export function buildWeaponModel(color, w, s = 1, glowMul = 1, glowBase = 1, wskin = 'std') {
   const g = new THREE.Group(), glow = Math.max(1, glowBase * glowMul);
