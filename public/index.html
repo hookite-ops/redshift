@@ -2,15 +2,15 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="theme-color" content="#f3f3f1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>REDSHIFT — 원반 아레나</title>
-<link rel="icon" href="icon.png"><link rel="apple-touch-icon" href="icon.png"><meta name="theme-color" content="#16161a">
+<link rel="icon" href="icon.png"><link rel="apple-touch-icon" href="icon.png"><meta name="theme-color" content="#0e1116"><meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
 :root{--ink:#16161a;--ink2:#3a3a40;--dim:#8b8b86;--line:#d9d9d4;--paper:#f3f3f1;--card:rgba(255,255,255,.9);--or:#ff5a1f;--red:#e8202f}
-*{box-sizing:border-box;margin:0;padding:0;user-select:none;-webkit-user-select:none}
+*{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--paper);color:var(--ink);font-family:'Noto Sans KR',sans-serif}
 canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block}
 .hidden{display:none!important}
@@ -28,7 +28,7 @@ b{font-weight:700}
 
 /* crosshair: ring = disc in hand, dot only = disc is out */
 #cross{position:absolute;left:50%;top:50%;width:0;height:0}
-#cross .ring{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;border:2px solid var(--ink);transition:all .12s}
+#cross .ring{position:absolute;left:-11px;top:-11px;width:22px;height:22px;border-radius:50%;border:2px solid var(--ink);transition:transform .12s var(--ease-out),border-color .12s,opacity .12s}
 #cross .dot{position:absolute;left:-2px;top:-2px;width:4px;height:4px;border-radius:50%;background:var(--or);box-shadow:0 0 0 1.5px #fff}
 #cross.out .ring{transform:scale(.55);border-color:var(--or);border-style:dashed;opacity:.8}
 #hit{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px;transform:rotate(45deg);opacity:0}
@@ -47,7 +47,7 @@ b{font-weight:700}
 #discMark::before{content:'';position:absolute;left:-13px;top:-13px;width:26px;height:26px;border-radius:50%;border:2.5px solid var(--or);box-shadow:0 0 0 2px rgba(255,255,255,.8)}
 #discMark::after{content:'';position:absolute;left:-3px;top:-3px;width:6px;height:6px;border-radius:50%;background:var(--or)}
 #discMark.edge::before{border-style:dashed}
-#slamCue{position:absolute;left:18px;top:-30px;white-space:nowrap;font-size:18px;font-weight:900;color:#fff;background:var(--red);padding:2px 8px;opacity:0;transform:scale(.7);transition:all .06s}
+#slamCue{position:absolute;left:18px;top:-30px;white-space:nowrap;font-size:18px;font-weight:900;color:#fff;background:var(--red);padding:2px 8px;opacity:0;transform:scale(.7);transition:transform .06s var(--ease-out),opacity .06s}
 #discMark.cue #slamCue{opacity:1;transform:scale(1)}
 #discMark.cue::before{border-color:var(--red);transform:scale(1.35)}
 #lock{position:absolute;left:0;top:0;width:0;height:0;opacity:0;transition:opacity .08s}
@@ -61,7 +61,7 @@ b{font-weight:700}
 #cross.head .ring{border-color:var(--red);box-shadow:0 0 0 2px #fff,0 -6px 0 -3px var(--red)}
 #lead{position:absolute;left:0;top:0;width:0;height:0;opacity:0;transition:opacity .1s}
 #lead.show{opacity:1}
-#lead::before{content:'';position:absolute;left:-8px;top:-8px;width:12px;height:12px;transform:rotate(45deg);border:2.5px solid var(--or);box-shadow:0 0 0 1.5px rgba(255,255,255,.85);transition:all .08s}
+#lead::before{content:'';position:absolute;left:-8px;top:-8px;width:12px;height:12px;transform:rotate(45deg);border:2.5px solid var(--or);box-shadow:0 0 0 1.5px rgba(255,255,255,.85);transition:transform .08s var(--ease-out),background-color .08s,border-color .08s}
 #lead.on::before{background:var(--red);border-color:var(--red);transform:rotate(45deg) scale(1.2)}
 #dnums{position:absolute;inset:0;overflow:hidden}
 .dn{position:absolute;left:0;top:0;font-family:'Space Grotesk';font-weight:700;font-size:20px;color:var(--ink);text-shadow:0 0 3px #fff,0 0 3px #fff;white-space:nowrap}
@@ -136,7 +136,7 @@ b{font-weight:700}
 #discBox{position:absolute;right:28px;bottom:28px;display:flex;align-items:center;gap:12px;text-align:right}
 #discTxt{font-size:14px;font-weight:700}
 #discPow{font-size:12px;color:var(--or);font-weight:700;min-height:16px}
-#discIcon{width:46px;height:46px;border-radius:50%;border:5px solid var(--or);background:var(--ink);position:relative;transition:all .12s}
+#discIcon{width:46px;height:46px;border-radius:50%;border:5px solid var(--or);background:var(--ink);position:relative;transition:transform .12s var(--ease-out),opacity .12s,background-color .12s}
 #discIcon::after{content:'';position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px;border-radius:50%;background:var(--or)}
 #discIcon.out{background:transparent;border-style:dashed;opacity:.6;transform:scale(.85)}
 #discIcon.ret{background:transparent;border-style:dashed;animation:ret .4s linear infinite}
@@ -161,18 +161,18 @@ b{font-weight:700}
 /* ================= screens ================= */
 .screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;background:rgba(243,243,241,.45)}
 .screen.clear{background:rgba(243,243,241,.82);backdrop-filter:blur(6px)}
-.panel{background:var(--card);border:1px solid var(--line);padding:30px 34px;width:min(460px,94vw);max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.08)}
+.panel{background:var(--card);border:1px solid var(--line);padding:30px 34px;width:min(460px,94vw);max-height:92vh;max-height:92dvh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.08)}
 .panel h2{font-family:'Space Grotesk';font-size:30px;letter-spacing:2px;margin-bottom:16px}
 .panel h3{font-size:12px;letter-spacing:3px;color:var(--dim);margin:18px 0 8px}
-.btn{display:block;width:100%;text-align:left;font:inherit;font-size:18px;font-weight:700;padding:13px 16px;margin-bottom:8px;background:#fff;color:var(--ink);border:1.5px solid var(--ink);cursor:pointer;transition:all .1s}
+.btn{display:block;width:100%;text-align:left;font:inherit;font-size:18px;font-weight:700;padding:13px 16px;margin-bottom:8px;background:#fff;color:var(--ink);border:1.5px solid var(--ink);cursor:pointer;transition:transform .12s var(--ease-out),background-color .12s,border-color .12s,color .12s,box-shadow .16s}
 .btn small{display:block;font-size:12px;font-weight:400;color:var(--dim);margin-top:2px}
-.btn:hover{background:var(--ink);color:#fff}.btn:hover small{color:#bbb}
+@media (hover:hover) and (pointer:fine){.btn:hover{background:var(--ink);color:#fff}}@media (hover:hover) and (pointer:fine){.btn:hover small{color:#bbb}}
 .btn.main{background:var(--or);border-color:var(--or);color:#fff}.btn.main small{color:rgba(255,255,255,.85)}
-.btn.main:hover{background:var(--ink);border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){.btn.main:hover{background:var(--ink);border-color:var(--ink)}}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 .btn.online{background:var(--ink);border-color:var(--ink);color:#fff}.btn.online small{color:#bbb}
-.btn.online:hover{background:var(--or);border-color:var(--or)}
+@media (hover:hover) and (pointer:fine){.btn.online:hover{background:var(--or);border-color:var(--or)}}
 /* online screen */
 .oform{display:grid;grid-template-columns:90px 1fr;gap:8px 12px;align-items:center;font-size:14px;margin-bottom:10px}
 .oform input,.oform select,.codebox input{font:inherit;font-size:15px;padding:8px 10px;border:1.5px solid var(--line);background:#fff;width:100%}
@@ -182,7 +182,7 @@ b{font-weight:700}
 .codebox input{text-transform:uppercase;text-align:center;font-family:'Space Grotesk';font-weight:700;letter-spacing:3px}
 #oRooms{display:flex;flex-direction:column;gap:6px;max-height:190px;overflow:auto}
 #oRooms .room{display:flex;justify-content:space-between;align-items:center;border:1.5px solid var(--line);padding:8px 12px;font-size:14px;cursor:pointer;background:#fff}
-#oRooms .room:hover{border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){#oRooms .room:hover{border-color:var(--ink)}}
 #oRooms .room b{font-family:'Space Grotesk'}
 #oRooms .empty{font-size:13px;color:var(--dim)}
 #oCreateOpts{border:1.5px solid var(--line);padding:12px;margin:4px 0 10px}
@@ -243,7 +243,7 @@ body.touch #bannerBig{font-size:44px}
 .lo.weapons button,.lo.six button{padding:6px 4px;font-size:14px}
 h3 .sub{font-size:11px;letter-spacing:0;color:var(--dim);font-weight:400}
 .btn.vs{border-color:var(--ink);background:#fff}
-.btn.vs:hover{background:var(--ink)}
+@media (hover:hover) and (pointer:fine){.btn.vs:hover{background:var(--ink)}}
 .menuGrid{display:grid;grid-template-columns:1.1fr 1fr;gap:34px;width:min(1000px,96vw);padding:30px 38px}
 .menuGrid .btn{padding:10px 14px;margin-bottom:7px;font-size:17px}
 .menuGrid h3{margin:12px 0 6px}
@@ -277,13 +277,13 @@ h3 .sub{font-size:11px;letter-spacing:0;color:var(--dim);font-weight:400}
 .credits{position:absolute;bottom:14px;left:0;right:0;text-align:center;font-size:11px;color:var(--dim);letter-spacing:2px}
 /* small screens (phones in landscape, small windows): compact menu */
 @media (max-width:900px),(max-height:560px){
-  .menuGrid{gap:18px;padding:14px 18px;max-height:96vh;overflow:auto;width:min(1000px,98vw)}
+  .menuGrid{gap:18px;padding:14px 18px;max-height:96vh;max-height:96dvh;overflow:auto;width:min(1000px,98vw)}
   .logo{font-size:40px}.tag{font-size:14px;margin-top:6px}.tag2{display:none}
   .cheat{margin-top:8px;font-size:12px;gap:4px 10px}
   .menuGrid .btn{padding:7px 12px;font-size:15px;margin-bottom:5px}.btn small{font-size:11px}
   .menuGrid h3{margin:8px 0 4px}
   .lo button{font-size:13px;padding:5px 4px}.lo button small{font-size:10px}
-  .panel{padding:16px 18px;max-height:96vh}
+  .panel{padding:16px 18px;max-height:96vh;max-height:96dvh}
   .credits{display:none}
 }
 @media (max-width:640px){ .menuGrid{grid-template-columns:1fr} }
@@ -390,15 +390,15 @@ body.touch #speedNum{font-size:26px}
 .panel h2{font-size:28px;letter-spacing:4px;text-transform:uppercase}
 .panel h3{font-family:'Space Grotesk','Noto Sans KR';font-weight:700;font-size:11px;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
 .btn{border:1px solid var(--line);border-radius:3px;background:#fff;font-size:17px;box-shadow:0 1px 0 rgba(14,17,22,.04);position:relative}
-.btn:hover{background:var(--ink);border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){.btn:hover{background:var(--ink);border-color:var(--ink)}}
 .btn.main{background:var(--or);border-color:var(--or)}
 .btn.main::after,.btn.online::after,.btn.vs::after{content:'→';position:absolute;right:14px;top:50%;transform:translateY(-50%);font-family:'Space Grotesk';font-weight:700;opacity:.6}
 .btn.online{background:var(--ink);border-color:var(--ink)}
 .btn.vs{border-color:var(--line);background:#fff}
-.btn:disabled:hover{background:#fff;color:var(--ink)}
+@media (hover:hover) and (pointer:fine){.btn:disabled:hover{background:#fff;color:var(--ink)}}
 .lo{gap:5px}
 .lo button{border:1px solid var(--line);border-radius:3px;background:#fff;transition:background .1s,color .1s}
-.lo button:hover{border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){.lo button:hover{border-color:var(--ink)}}
 .lo button.on{background:var(--ink);border-color:var(--ink);color:#fff}
 .lo button.on small{color:var(--or)}
 #botskill button.ai{border-color:var(--or)}
@@ -407,7 +407,7 @@ body.touch #speedNum{font-size:26px}
 #menu{background:linear-gradient(100deg,rgba(238,241,244,.96) 0%,rgba(238,241,244,.86) 38%,rgba(238,241,244,.2) 70%,rgba(238,241,244,0) 100%)}
 #menu .menuGrid{background:transparent;box-shadow:none;padding:0;width:min(1120px,96vw);grid-template-columns:1fr 470px;align-items:center}
 #menu .menuGrid::before{display:none}
-#menu .menuGrid>div:last-child{background:rgba(255,255,255,.92);border-radius:4px;padding:22px 24px;box-shadow:0 24px 70px rgba(14,17,22,.16);max-height:92vh;overflow:auto;position:relative}
+#menu .menuGrid>div:last-child{background:rgba(255,255,255,.92);border-radius:4px;padding:22px 24px;box-shadow:0 24px 70px rgba(14,17,22,.16);max-height:92vh;max-height:92dvh;overflow:auto;position:relative}
 #menu .menuGrid>div:last-child::before{content:'';position:absolute;left:0;top:0;width:72px;height:4px;background:var(--or)}
 .logo{font-size:96px;letter-spacing:-3px;line-height:.82}
 .logo span{display:inline-block;transform:skewX(var(--sk))}
@@ -463,7 +463,7 @@ body.touch #feed{top:62px}
 .btn.rank{background:linear-gradient(110deg,var(--or) 0%,#ff7a2e 60%,#ffb02e 140%);border-color:var(--or);color:#fff}
 .btn.rank small{color:rgba(255,255,255,.92)}
 .btn.rank::after{content:'→';position:absolute;right:14px;top:50%;transform:translateY(-50%);font-family:'Space Grotesk';font-weight:700;opacity:.7}
-.btn.rank:hover{background:var(--ink);border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){.btn.rank:hover{background:var(--ink);border-color:var(--ink)}}
 #rankBadge{display:inline-block;margin-left:8px;font-size:11px;font-weight:900;letter-spacing:1px;padding:2px 8px;background:#fff;color:var(--ink);transform:skewX(var(--sk));vertical-align:2px}
 .row4{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .row4 .btn{margin-bottom:0;padding:9px 10px!important;font-size:14.5px!important}
@@ -472,7 +472,7 @@ body.touch #feed{top:62px}
 .accChip span{font-weight:700;font-size:14px;line-height:1.2}
 .accChip small{font-size:11px;color:rgba(255,255,255,.6)}
 .accChip.on small{color:#7ee2a8}
-.accChip:hover{background:var(--or)}
+@media (hover:hover) and (pointer:fine){.accChip:hover{background:var(--or)}}
 .accProfile{display:flex;gap:14px;align-items:center;margin-bottom:14px}
 .accProfile img,.accProfile .ph{width:56px;height:56px;border-radius:50%;background:#e8ebef;object-fit:cover}
 .accProfile b{display:block;font-size:18px}.accProfile small{color:var(--dim);font-size:12.5px}
@@ -543,13 +543,13 @@ body.touch #feed{top:62px}
 #loading{flex-direction:column;gap:14px}
 #banner.show #bannerBig{animation:bbig .5s cubic-bezier(.2,.9,.25,1)}
 @keyframes bbig{from{letter-spacing:22px;opacity:0}to{letter-spacing:4px;opacity:1}}
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
 .chipRow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:14px}
 .chipRow .accChip{margin-top:0}
 .lockChip{display:inline-flex;align-items:center;gap:10px;height:48px;padding:0 10px 0 16px;border-radius:40px;border:0;background:var(--or);color:#fff;font:inherit;font-weight:900;font-size:15px;cursor:pointer;box-shadow:0 6px 18px rgba(255,79,20,.3)}
 .lockChip .coinPill{background:rgba(0,0,0,.22);color:#fff}
 .coinPill{display:inline-flex;align-items:center;gap:4px;background:#fff4dc;color:#7a5200;border-radius:20px;padding:4px 10px;font-size:13px;font-weight:900;font-family:'Space Grotesk','Noto Sans KR'}
-.lkPanel{width:min(980px,96vw);max-height:94vh}
+.lkPanel{width:min(980px,96vw);max-height:94vh;max-height:94dvh}
 .lkHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.lkHead h2{margin:0}
 .lkHead .coinPill{font-size:16px;padding:6px 14px}
 .lkBody{display:grid;grid-template-columns:minmax(220px,0.9fr) 1.4fr;gap:16px}
@@ -560,7 +560,7 @@ body.touch #feed{top:62px}
 .lkTabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-bottom:8px}
 .lkTabs button{font:inherit;font-weight:900;font-size:14px;padding:9px 4px;border:0;background:#eceff3;color:var(--ink2);cursor:pointer;border-radius:3px}
 .lkTabs button.on{background:var(--ink);color:#fff}
-.lkGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:7px;max-height:44vh;overflow:auto;padding:2px}
+.lkGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:7px;max-height:44vh;max-height:44dvh;overflow:auto;padding:2px}
 .lkItem{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px 8px;border:1px solid var(--line);border-radius:4px;background:linear-gradient(180deg,#fff,#f4f6f8);font:inherit;cursor:pointer;overflow:hidden}
 .lkItem::after{content:'';position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--rc)}
 .lkItem b{font-size:12.5px}.lkItem small{font-size:11px;color:var(--dim)}
@@ -573,7 +573,7 @@ body.touch #feed{top:62px}
 .em{font-style:normal;font-size:38px;line-height:56px;height:56px}
 .lkSlots{display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:12px;color:var(--dim)}
 .lkSlots i{font-style:normal;width:38px;height:38px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px}
-@media (max-width:760px),(max-height:560px){.lkBody{grid-template-columns:0.8fr 1.2fr;gap:10px}#lkCanvas{height:190px}.lkGrid{max-height:52vh;grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}.pix,.sw,.em{width:42px;height:42px;line-height:42px;font-size:28px}}
+@media (max-width:760px),(max-height:560px){.lkBody{grid-template-columns:0.8fr 1.2fr;gap:10px}#lkCanvas{height:190px}.lkGrid{max-height:52vh;max-height:52dvh;grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}.pix,.sw,.em{width:42px;height:42px;line-height:42px;font-size:28px}}
 /* emotes in a match */
 #hud.emoting #cross,#hud.emoting #lock,#hud.emoting #discMark{display:none}
 .emoteBtn{position:absolute;right:24px;top:96px;width:44px;height:44px;border-radius:50%;border:0;background:var(--dg);color:#fff;font-size:22px;pointer-events:auto;cursor:pointer;backdrop-filter:blur(6px)}
@@ -583,11 +583,12 @@ body.touch .emoteBtn{right:auto;left:50%;top:auto;bottom:4vmin;margin-left:-26vm
 .emoteWheel button{position:absolute;width:76px;height:76px;margin:-38px;border-radius:50%;border:2px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;font:inherit;font-size:30px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .emoteWheel button small{font-size:10px;font-weight:700;margin-top:-2px}
 .emoteWheel button kbd{position:absolute;top:2px;right:8px;font-size:10px;font-family:'Space Grotesk';opacity:.7}
-.emoteWheel button:hover,.emoteWheel button:active{background:var(--or);border-color:#fff}
+.emoteWheel button:active{background:var(--or);border-color:#fff}
+@media (hover:hover) and (pointer:fine){.emoteWheel button:hover{background:var(--or);border-color:#fff}}
 .emoteWheel .mid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#fff;font-size:11px;letter-spacing:2px;font-weight:900;text-align:center}
 @media (max-width:900px),(max-height:560px){
   #menu .menuGrid{grid-template-columns:1fr 1.25fr;gap:14px;width:98vw}
-  #menu .menuGrid>div:last-child{padding:12px 14px;max-height:94vh}
+  #menu .menuGrid>div:last-child{padding:12px 14px;max-height:94vh;max-height:94dvh}
   .logo{font-size:44px}
 }
 @media (max-width:640px){#menu .menuGrid{grid-template-columns:1fr}}
@@ -649,6 +650,56 @@ body.touch #lhHint{bottom:auto;top:14px;font-size:12px;padding:7px 14px}
 .panel{border-radius:18px}
 .btn{border-radius:12px}
 .screen.clear{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+
+/* ================= 5.1 feel pass: motion tokens, press feedback, native touch ================= */
+:root{--ease-out:cubic-bezier(.23,1,.32,1);--ease-in-out:cubic-bezier(.77,0,.175,1);--ease-drawer:cubic-bezier(.32,.72,0,1)}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;overscroll-behavior:none}
+body{overscroll-behavior:none}
+/* controls: no text selection / long-press callout, no double-tap wait; content text stays selectable */
+button,.btn,.tb,.lo button,.lkItem,.chip,.lhChip,.lhIcon,.accChip,.room,kbd,#hud,#touch,canvas,.emoteWheel,#lobbyHud .lhBrand{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+button,.btn,.lo button,.lkItem,.room,[data-act]{touch-action:manipulation}
+input,textarea{-webkit-user-select:text;user-select:text}
+@media (pointer:coarse){input,select,textarea{font-size:16px!important}}
+/* inner scrollers bounce on their own and never drag the page */
+.panel,#lcBody,.lkGrid,#oRooms,.menuGrid>div{overscroll-behavior:contain}
+/* safe areas: HUD and touch controls stay clear of the notch and the home bar */
+#hud,#touch{inset:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+#lobbyCard{bottom:max(14px,env(safe-area-inset-bottom,0px))}
+#lhHint{bottom:max(22px,calc(env(safe-area-inset-bottom,0px) + 10px))}
+/* press feedback on every pressable thing, on press (not on release) */
+.btn,.lo button,.lkItem,.lhChip,.lhIcon,#lobbyHud .accChip,.room,.emoteBtn,.emoteWheel button,.key{transition:transform .14s var(--ease-out),background-color .14s,border-color .14s,color .14s,box-shadow .18s}
+.btn:active,.lo button:active,.lkItem:active,.lhChip:active,.lhIcon:active,#lobbyHud .accChip:active,.room:active,.key:active{transform:scale(.97)}
+#lcGo:active{transform:scale(.98)}
+.emoteBtn:active{transform:scale(.92)}
+#touch .tb{transition:transform .1s var(--ease-out),background-color .1s}
+#touch .tb.on{transform:scale(.92)}
+#touch .joy .knob{transition:transform 0s}
+@media (hover:hover) and (pointer:fine){.lhChip:hover,.lhIcon:hover,#lobbyHud .accChip:hover{background:rgba(14,17,22,.78)}}
+/* panels open quick and settle (no overshoot); the lobby card is a drawer from the right */
+.screen:not(.hidden) .panel{animation:pin .24s var(--ease-out) both}
+@keyframes pin{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+#lobbyCard{animation:lcIn .28s var(--ease-drawer) both}
+@keyframes lcIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+#lcBody>*{animation:lcItem .26s var(--ease-out) both}
+#lcBody>*:nth-child(2){animation-delay:30ms}#lcBody>*:nth-child(3){animation-delay:60ms}#lcBody>*:nth-child(4){animation-delay:90ms}#lcBody>*:nth-child(5){animation-delay:120ms}
+#lcGo{animation:lcItem .26s var(--ease-out) .1s both}
+@keyframes lcItem{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.emoteWheel:not(.hidden){animation:wheelIn .18s var(--ease-out) both}
+@keyframes wheelIn{from{opacity:0;transform:scale(.94)}}
+.lkItem.sel{transition:transform .14s var(--ease-out),box-shadow .2s}
+/* calmer chrome: one radius scale, softer shadows */
+.lo button{border-radius:10px}
+.lkItem{border-radius:12px}
+.oform input,.oform select,.codebox input,.row select,.accRow input{border-radius:8px}
+/* reduced motion: keep fades (they explain), drop movement */
+@media (prefers-reduced-motion:reduce){
+  @keyframes pin{from{opacity:0}to{opacity:1}}
+  @keyframes lcIn{from{opacity:0}to{opacity:1}}
+  @keyframes lcItem{from{opacity:0}to{opacity:1}}
+  @keyframes wheelIn{from{opacity:0}}
+  .btn:active,.lo button:active,.lkItem:active,.lhChip:active,.lhIcon:active,.room:active,#touch .tb.on,#lcGo:active{transform:none}
+  .btn.rank::before,.rkEmblem,.logo span,.rkRadar i{animation:none}
+}
 </style>
 </head>
 <body>
@@ -792,21 +843,21 @@ body.touch #lhHint{bottom:auto;top:14px;font-size:12px;padding:7px 14px}
       </div>
     </div>
   </div>
-  <div class="credits">REDSHIFT 5.0 · 오리지널 웹게임 · three.js</div>
+  <div class="credits">REDSHIFT 5.1 · 오리지널 웹게임 · three.js</div>
 </div>
 
 <div id="online" class="screen clear hidden">
   <div class="panel" style="width:min(700px,94vw)">
     <h2>ONLINE</h2>
     <div class="oform">
-      <span>이름</span><input id="oName" maxlength="12" autocomplete="off">
-      <span>서버 주소</span><input id="oServer" placeholder="https://redshift-xxxx.run.app" autocomplete="off" spellcheck="false">
+      <span>이름</span><input id="oName" maxlength="12" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
+      <span>서버 주소</span><input id="oServer" type="url" inputmode="url" placeholder="https://redshift-xxxx.run.app" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="go">
     </div>
     <div id="oStatus">연결 전</div>
     <button class="btn main" id="oQuick">빠른 참가<small>사람끼리 하는 방에 바로 들어가요 · 없으면 새 방</small></button>
     <div class="row2">
       <button class="btn" id="oCreateBtn">방 만들기<small>코드로 친구 초대 · 봇 수 조절</small></button>
-      <div><div class="codebox"><input id="oCode" maxlength="4" placeholder="ABCD" autocomplete="off"><button class="btn" id="oJoin" style="margin:0">코드로 참가</button></div></div>
+      <div><div class="codebox"><input id="oCode" maxlength="4" placeholder="ABCD" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go"><button class="btn" id="oJoin" style="margin:0">코드로 참가</button></div></div>
     </div>
     <div id="oCreateOpts" class="hidden">
       <div class="oform">
