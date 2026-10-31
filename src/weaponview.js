@@ -1,3 +1,4 @@
+import { modelsReady } from './models.js';
 // Menu weapon showcase: the selected weapon slowly turning on a little stage, with its stats.
 // Own small renderer (transparent canvas), only drawn while the menu is open.
 import * as THREE from 'three';
@@ -35,7 +36,7 @@ export class WeaponView {
     this.r.setSize(w, h, false); this.cam.aspect = w / h; this.cam.updateProjectionMatrix();
   }
   set(id) {
-    if (id === this.id) return; this.id = id;
+    if (id + modelsReady() === this.id) return; this.id = id + modelsReady();
     this.pivot.clear();
     const w = WEAPONS[id] || WEAPONS.disc;
     this.model = buildWeaponModel(this.color, w, 0.82, 1, 1);
