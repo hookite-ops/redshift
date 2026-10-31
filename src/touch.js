@@ -45,7 +45,8 @@ export class Touch {
       if (t.target.id === 'tPause') continue;
       if (t.clientX < innerWidth * 0.42 && !this.joy) {
         this.joy = { id: t.identifier, x: t.clientX, y: t.clientY };
-        this.joyEl.style.left = t.clientX + 'px'; this.joyEl.style.top = t.clientY + 'px';
+        const R = this.joyEl.parentElement.getBoundingClientRect();   // the layer is inset by the safe areas
+        this.joyEl.style.left = (t.clientX - R.left) + 'px'; this.joyEl.style.top = (t.clientY - R.top) + 'px';
         this.joyEl.classList.add('on'); this.knob.style.transform = 'translate(-50%,-50%)';
       } else this.look.set(t.identifier, { x: t.clientX, y: t.clientY });
     }
