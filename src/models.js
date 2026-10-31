@@ -16,6 +16,12 @@ export function loadModels(base = 'models/') {
   const L = new GLTFLoader();
   const one = (key, url) => L.loadAsync(base + url).then(g => {
     const s = g.scene; s.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+    // weapons: normalise so the farthest point in the spin plane sits at the standard radius (0.45)
+    if (key.startsWith('w:')) {
+      s.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(s), r = Math.max(-b.min.x, b.max.x, -b.min.y, b.max.y);
+      s.userData.norm = r > 0.05 ? 0.45 / r : 1;
+    }
     scenes.set(key, s);
   }).catch(e => console.warn('[models]', key, e && e.message));
   return Promise.all([...WEAPON_IDS.map(id => one('w:' + id, `weapons/${id}.glb`)), one('athlete', 'athlete.glb')])
@@ -33,7 +39,7 @@ export function weaponFromGLB(id, M, s) {
     const k = MAP[name]; if (k && M[k]) o.material = M[k];
     o.castShadow = k !== 'glow' && k !== 'glass' && k !== 'glowSoft';
   });
-  const w = new THREE.Group(); w.add(g); w.scale.setScalar(s);
+  const w = new THREE.Group(); w.add(g); w.scale.setScalar(s * (src.userData.norm || 1));
   return w;
 }
 
