@@ -15,6 +15,7 @@ import { Account } from './account.js';
 import { emblemSVG } from './emblem.js';
 import { installLocker } from './locker.js';
 import { installLobby } from './lobby.js';
+import { loadModels, onModelsReady } from './models.js';
 import { wallet, owns, EMOTES, daily } from './cosmetics.js';
 import { loadCustomBrain } from './neurobot.js';
 const MAP_NAME = Object.fromEntries(Object.values(MAPS).map(m => [m.id, m.name]));
@@ -34,6 +35,9 @@ try {
   throw err;
 }
 game.records = loadRecords();
+// Blender-made weapons + 프로 선수 (public/models): load in the background, then swap them in everywhere
+loadModels();
+onModelsReady(() => { game.refreshModels(); if (wview) wview.set(S.weapon); if (locker) locker.render(); });
 // phones & tablets: on-screen controls instead of mouse + keyboard
 const touchMode = S.touchUI === 'on' || (S.touchUI !== 'off' && isTouchDevice());
 input.touch = touchMode;

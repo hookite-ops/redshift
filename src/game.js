@@ -248,7 +248,7 @@ export class Game {
     this.D = DIFF[this.S.difficulty] || DIFF.easy;
     this.clear(); this.resetRun();
     // map: practice always uses the white arena (its dummies are placed for it); online uses the room's map
-    let mapId = this.mode === 'lobby' ? 'lobby' : this.mode === 'practice' ? 'arena' : this.mode === 'online' ? (this.netMap || 'arena') : this.S.map;
+    let mapId = this.mode === 'lobby' ? 'lobby' : this.mode === 'practice' ? 'classic' : this.mode === 'online' ? (this.netMap || 'arena') : this.S.map;
     if (!MAPS[mapId] || (MAPS[mapId].hidden && this.mode !== 'lobby')) mapId = MAP_IDS[(Math.random() * MAP_IDS.length) | 0];
     this.loadMap(mapId);
     const P = this.player; P.easy = true; P.noWall = true;
@@ -572,6 +572,15 @@ export class Game {
     return got;
   }
 
+  // the Blender models arrived: rebuild everything that shows a weapon or a 프로 선수 body
+  refreshModels() {
+    for (const f of this.fighters) {
+      f.disc.setWeapon(f.disc.w.id);
+      if (f.skinId === 'athlete') { const vis = f.model && f.model.visible; f.buildModel(); if (f.model) f.model.visible = !!vis; }
+      else f.setHandDisc();
+    }
+    this.hand.setWeapon(this.disc.w, 0xff5a1f, this.me.wskin);
+  }
   // ======================= the disc =======================
   throwDisc() {
     const P = this.player, A = this.assistCfg();

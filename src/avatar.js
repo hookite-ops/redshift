@@ -4,10 +4,20 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { byId, skinTexture } from './cosmetics.js';
+import { athleteRig } from './models.js';
 
 export function buildAvatar(skinId, color, glowK = 1.3) {
     const SK = byId('skin', skinId), P = SK.p;
     const glow = new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(glowK) });
+    if (SK.look === 'athlete') {                       // 프로 선수: the Blender model, same joints as the blocky runner
+      const team0 = new THREE.MeshStandardMaterial({ color, roughness: 0.32, metalness: 0.2, emissive: new THREE.Color(color).multiplyScalar(0.25) });
+      const A = athleteRig(team0, glow);
+      if (A) {
+        A.root.scale.setScalar(0.93);
+        if (A.handDisc) A.handDisc.rotation.set(0, Math.PI / 2, 0);
+        return { root: A.root, rig: A.rig, head: A.head, handDisc: A.handDisc || A.rig.hand[1], glow, team: team0, glowK };
+      }
+    }
     const accent = new THREE.MeshBasicMaterial({ color: new THREE.Color(P.glow).multiplyScalar(glowK * 0.9) });
     const team = new THREE.MeshStandardMaterial({ color, roughness: 0.4, emissive: new THREE.Color(color).multiplyScalar(0.3) });
     const shiny = SK.look === 'robot' || SK.look === 'champ' || SK.look === 'frost' || SK.look === 'astro';

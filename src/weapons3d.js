@@ -5,6 +5,7 @@
 // Shared look: pearl-white ceramic shells, dark graphite cores, polished chrome edges, and the owner's
 // colour as glowing channels (they bloom with post-processing on).
 import * as THREE from 'three';
+import { weaponFromGLB } from './models.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { WSKINS, wskinTexture } from './cosmetics.js';
 
@@ -240,6 +241,8 @@ export function shardStar(color, glow = 1) {
 export function buildWeaponModel(color, w, s = 1, glowMul = 1, glowBase = 1, wskin = 'std') {
   const g = new THREE.Group(), glow = Math.max(1, glowBase * glowMul);
   const M = mats(color, glow, wskin);
+  const glb = weaponFromGLB(w.id, M, s);           // Blender model (public/models/weapons) once it has loaded
+  if (glb) return glb;
   (BUILD[w.id] || BUILD.disc)(g, M, s);
   g.traverse(o => { if (o.isMesh) { o.castShadow = o.material !== M.glow && o.material !== M.glass; } });
   return g;

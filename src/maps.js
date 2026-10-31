@@ -6,9 +6,33 @@
 //   forest   기둥 숲        — a grid of round and square columns: bank shots everywhere, short sight lines
 //   orbit    궤도           — a raised ring track with speed strips around a bowl and a central column
 import * as THREE from 'three';
+import ARENA2 from './mapdata/arena.json' with { type: 'json' };
+import PATCHES from './mapdata/patches.json' with { type: 'json' };
 
 const rng = seed => { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); };
 const Q4 = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
+
+
+// ---- maps designed as data (map-designer JSON: solids / pads / spawns), built with the arena API ----
+const KEY = { '중앙 무대': 'top', '모서리 고지대': 'top', '고지대': 'top', '단상': 'top' };
+export function buildFromData(A, J, { trims = true } = {}) {
+  for (const s of J.solids || []) {
+    const y = s.y || 0, key = s.key || KEY[s.tag] || 'block', trim = trims && s.type !== 'ramp' && s.h > 0.6;
+    if (s.type === 'box') A.box(s.x, y, s.z, s.w, s.h, s.d, key, s.ry || 0, { trim });
+    else if (s.type === 'cyl') A.cyl(s.x, y, s.z, s.r, s.h, key, { trim });
+    else if (s.type === 'ramp') A.ramp(s.x, s.z, s.ry || 0, s.width, s.len, s.h, y);
+  }
+  for (const p of J.pads || []) A.jumpPad(p.x, p.y || 0, p.z, Math.round(Math.sqrt(60 * Math.max(2, p.to_height + 1.2))), Math.max(1.2, p.r || 1.6));
+  for (const p of J.spawns || []) A.spawn(p.x, p.z, p.y || 0);
+  for (const z of J.zones || []) if (z.high) A.high(z.x, z.y, z.z);
+  for (const c of J.cover || []) A.addCover(c[0], c[1]);
+}
+// fixes found by the map checker, applied on top of a hand-built map: extra solids, and (optionally) new spawns
+export function applyPatch(A, P) {
+  if (!P) return;
+  if (P.spawns) A.spawnGround.length = 0;
+  buildFromData(A, P);
+}
 
 // lobby stations (portals), clockwise from straight ahead of the spawn
 export const LOBBY_R = 25;
@@ -19,8 +43,22 @@ export const LOBBY = [
 ].map(([id, name, sub, color], i, all) => ({ id, name, sub, color, a: Math.PI + i * Math.PI * 2 / all.length }));
 
 export const MAPS = {
+  // 화이트 아레나 2 — redesigned with the map checker: exposure 64% → 35%, spawns in sheltered pockets,
+  // reflect walls angled to bank discs toward the stage, corner decks with rails, gates that break long sight lines
   arena: {
-    id: 'arena', label: 'WHITE ARENA', name: '화이트 아레나', desc: '가운데 무대 · 기둥 4개 · 모서리 고지대', accent: 0xff5a1f, seed: 42,
+    id: 'arena', label: 'WHITE ARENA', name: '화이트 아레나', desc: '중앙 무대 · 반사 벽 고리 · 고지대 · 관문', accent: 0xff5a1f, seed: 42,
+    build(A) {
+      buildFromData(A, ARENA2);
+      A.logo(0, 1, 0, 11.6);
+      const rim = new THREE.TorusGeometry(6.52, 0.06, 6, 96); rim.rotateX(Math.PI / 2); A.deco(rim, 0, 1.0, 0, 'glow');
+      A.deco(A.ring(13.3, 13.4), 0, 0.01, 0, 'paint');
+      A.deco(A.ring(30, 30.1), 0, 0.01, 0, 'paintDark');
+      for (const c of [[0, 0], [16, 16], [-16, 16], [16, -16], [-16, -16], [0, 21], [21, 0], [0, -21], [-21, 0]]) A.addCover(...c);
+    },
+  },
+  // the original white arena: kept for 연습장 (its practice targets are placed for this layout)
+  classic: {
+    id: 'classic', label: 'WHITE ARENA', name: '화이트 아레나 (연습)', desc: '', accent: 0xff5a1f, seed: 42, hidden: true,
     build(A) {
       A.cyl(0, 0, 0, 7, 1, 'top');
       A.logo(0, 1, 0, 12.6);
@@ -214,4 +252,6 @@ export const MAPS = {
     },
   },
 };
+// checker fixes on top of the hand-built maps: sheltered spawn pockets, low cover in open ground, sight-line pillars
+for (const id of Object.keys(PATCHES)) { const b = MAPS[id].build; MAPS[id].build = A => { b(A); applyPatch(A, PATCHES[id]); }; }
 export const MAP_IDS = Object.keys(MAPS).filter(k => !MAPS[k].hidden);

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { LOBBY, LOBBY_R } from './maps.js';
 import { WEAPONS } from './disc.js';
 import { buildWeaponModel } from './weapons3d.js';
+import { modelsReady } from './models.js';
 
 const PAD_R = 3.4;
 
@@ -44,7 +45,7 @@ export function installLobby({ game, $, S, act, startMode, touch, onCard }) {
   const holo = new THREE.Group(); holo.position.set(0, 6.2, 0); group.add(holo);
   let holoW = '';
   const setHolo = () => {
-    if (holoW === S.weapon) return; holoW = S.weapon;
+    const hk = S.weapon + modelsReady(); if (holoW === hk) return; holoW = hk;
     holo.clear();
     const w = WEAPONS[S.weapon] || WEAPONS.disc;
     const m = buildWeaponModel(0xff5a1f, w, 4.2 / Math.max(0.8, w.scale), 1.6, 1.4, game.me.wskin || 'std');

@@ -23,6 +23,7 @@ export const SKINS = [
   { id: 'neon', name: '네온 펑크', rarity: 'epic', look: 'neon', p: { skin: '#e8b48d', hair: '#ff2fa0', top: '#121419', top2: '#19e6ff', bottom: '#121419', shoe: '#ff2fa0', glow: '#ff2fa0' } },
   { id: 'golem', name: '용암 골렘', rarity: 'legendary', look: 'golem', p: { skin: '#3a3533', hair: '#2a2624', top: '#3a3533', top2: '#ff6a1a', bottom: '#2f2a28', shoe: '#221f1d', glow: '#ff6a1a' } },
   { id: 'frost', name: '얼음 기사', rarity: 'legendary', look: 'frost', p: { skin: '#cfe9ff', hair: '#e9f6ff', top: '#bfe3ff', top2: '#5ab8ff', bottom: '#9fd0f5', shoe: '#e9f6ff', glow: '#7fd4ff' } },
+  { id: 'athlete', name: '프로 선수', rarity: 'legendary', look: 'athlete', p: { skin: '#2b2f38', hair: '#f4f4f1', top: '#f4f4f1', top2: '#ff4f14', bottom: '#2b2f38', shoe: '#e9edf3', glow: '#ff4f14' } },
   { id: 'champ', name: '골드 챔피언', rarity: 'legendary', look: 'champ', p: { skin: '#f1c9a5', hair: '#3a2a12', top: '#f2c230', top2: '#fff1b0', bottom: '#2a2e36', shoe: '#f2c230', glow: '#ffd84a' } },
 ];
 

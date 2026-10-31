@@ -6,6 +6,7 @@ import { buildAvatar, emotePose } from './avatar.js';
 import { discModel, WEAPONS } from './disc.js';
 import { SKINS, WSKINS, EMOTES, KILLFX, RARITY, byId, priceOf, wallet, owns, buy, skinTexture } from './cosmetics.js';
 import { buildWeaponModel } from './weapons3d.js';
+import { modelsReady } from './models.js';
 
 const TABS = [['skin', '캐릭터', SKINS], ['wskin', '무기 스킨', WSKINS], ['emote', '이모트', EMOTES], ['killfx', '처치 효과', KILLFX]];
 const FX_ICON = { cubes: '🧊', confetti: '🎉', pixel: '🟧', bolt: '⚡', hole: '🕳️' };
@@ -31,7 +32,7 @@ class AvatarView {
     canvas.addEventListener('pointerup', () => { this.drag = null; });
   }
   set(skin, wskin, weapon) {
-    const key = skin + wskin + weapon; if (key === this.key) return; this.key = key;
+    const key = skin + wskin + weapon + modelsReady(); if (key === this.key) return; this.key = key;
     this.pivot.clear();
     const A = this.A = buildAvatar(skin, 0xff4f14, 1.6);
     A.handDisc.add(discModel(0xff4f14, WEAPONS[weapon] || WEAPONS.disc, 0.5 * Math.min(1.4, (WEAPONS[weapon] || WEAPONS.disc).scale), 1, wskin));
